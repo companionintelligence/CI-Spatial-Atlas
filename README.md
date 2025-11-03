@@ -1,4 +1,4 @@
-# 🌍 Babylon.js Earth Explorer
+# 🌍 Babylon.js Earth Explorer (Vite Edition)
 
 A Google Earth-style 3D world explorer built with Babylon.js, featuring real-time 3D tiles, terrain rendering, atmospheric effects, and intuitive navigation controls.
 
@@ -185,4 +185,4 @@ Q4:
 - Analytics & performance telemetry overlay
 
 ---
-Built with Babylon.js • Next.js • TypeScript
+Built with Babylon.js • Vite • React • TypeScript
