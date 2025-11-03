@@ -4,12 +4,12 @@
 
 A Google Earth-style 3D world explorer built with Babylon.js, featuring real-time 3D tiles, terrain rendering, atmospheric effects, and intuitive navigation controls.
 
-## 🚧 Feature Planss
+## 🚧 Feature Plans
 
 - PBR Earth globe with albedo + normal maps and environment reflections
 - Dynamic day/night cycle updating sun direction & sky scattering
 - Atmospheric sky with adjustable Rayleigh/Mie parameters
-- Procedural starfield that appears at high altitude or when atmosphere disabled
+- Procedural starfield with smooth altitude-based fade (space transition)
 - Multi-patch procedural terrain using layered trigonometric noise (placeholder for heightmaps)
 - Toggleable layers (Terrain, Buildings placeholder, Atmosphere, Globe, Stars)
 - Environment cube texture for realistic reflections

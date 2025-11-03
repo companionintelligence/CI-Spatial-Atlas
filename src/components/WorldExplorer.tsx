@@ -143,13 +143,20 @@ export default function WorldExplorer({
         const mat = earthRef.current.material as StandardMaterial;
         const nightTex: Texture | null = earthRef.current.metadata?.nightTex || null;
         if (nightTex) {
-          // Estimate day factor using light direction vs up vector (simple)
-          const lightDir = lighting.directionalLight.direction.normalize();
-          const dayFactor = Math.max(0, -lightDir.y); // crude heuristic
-          const nightFactor = 1 - dayFactor;
-          if (nightFactor > 0.02) {
+          // Compute sun elevation based on directional light inverse (since light points opposite sun)
+          const sunDir = lighting.directionalLight.direction.scale(-1).normalize();
+          // Local 'up' vector at sub-solar point approximated as camera up (0,1,0) because Earth at origin.
+          const elevation = sunDir.y; // -1..1 (1 = noon overhead at equator)
+          // Day factor: clamp cosine of zenith angle
+          const dayFactor = clamp01(elevation * 0.5 + 0.5); // map -1..1 to 0..1
+          // Twilight softening: apply smootherstep for dusk/dawn transitions
+          const smoothDay = dayFactor * dayFactor * (3 - 2 * dayFactor);
+          const nightFactor = 1 - smoothDay;
+          if (nightFactor > 0.03) {
             mat.emissiveTexture = nightTex;
-            mat.emissiveColor = new Color3(nightFactor * 0.8, nightFactor * 0.8, nightFactor * 0.8);
+            // Physically inspired falloff: emphasize lights more at full night (gamma curve)
+            const intensity = Math.pow(nightFactor, 1.4) * 0.9; // scale to <1
+            mat.emissiveColor = new Color3(intensity, intensity, intensity);
           } else {
             mat.emissiveTexture = null;
             mat.emissiveColor = Color3.Black();
@@ -327,19 +334,65 @@ export default function WorldExplorer({
   }
 
   function toggleSpace(scene: Scene, sky: Mesh, stars: Mesh, camera: UniversalCamera, atmosphereEnabled: boolean) {
-    const altitude = camera.position.length();
+    // Previous implementation used raw radial distance which is always > threshold near Earth surface.
+    // Compute altitude above Earth's surface so we can fade stars and atmosphere smoothly.
+    const earthRadius = 6_378_137; // meters (WGS84 a)
+    const radialDistance = camera.position.length();
+    const altitudeAboveSurface = Math.max(0, radialDistance - earthRadius);
+
+    const starMaterial = stars.material as StandardMaterial | null;
+    const skyMaterial = sky.material as SkyMaterial | null;
+
+    // If atmosphere disabled: force stars visible, fade sky out quickly.
     if (!atmosphereEnabled) {
-      sky.isVisible = false;
+      sky.isVisible = true; // keep for possible re-enable but alpha -> 0
+      if (skyMaterial) skyMaterial.luminance = smoothDamp(skyMaterial.luminance, 0, 0.15);
       stars.isVisible = true;
+      if (starMaterial) starMaterial.alpha = smoothDamp(starMaterial.alpha ?? 1, 1, 0.15);
       return;
     }
-    if (altitude > 300000) {
-      sky.isVisible = false;
-      stars.isVisible = true;
-    } else {
-      sky.isVisible = true;
-      stars.isVisible = false;
+
+    // Define transition ranges (approx):
+    // Atmosphere fully opaque at 0km, begins thinning ~70km, near zero by 120km.
+    // Starfield begins appearing ~60km, fully visible by 160km.
+    const atmStartThin = 70_000;
+    const atmEndThin = 120_000;
+    const starFadeInStart = 60_000;
+    const starFadeInEnd = 160_000;
+
+    // Compute normalized factors 0..1
+    const starT = clamp01((altitudeAboveSurface - starFadeInStart) / (starFadeInEnd - starFadeInStart));
+    const atmT = clamp01((altitudeAboveSurface - atmStartThin) / (atmEndThin - atmStartThin));
+    const atmosphereAlpha = 1 - starT; // tie atmosphere visibility inversely to star visibility for now
+
+    // Apply star fade (use alpha rather than visibility toggle for smoothness)
+    stars.isVisible = true; // keep mesh active so alpha works
+    if (starMaterial) {
+      starMaterial.alpha = smoothDamp(starMaterial.alpha ?? 0, starT, 0.12);
     }
+
+    // Apply atmosphere luminance fade (optionally adjust Rayleigh/Mie for thinner look)
+    sky.isVisible = true;
+    if (skyMaterial) {
+      const targetLuminance = lerp(0.9, 0.05, atmT);
+      skyMaterial.luminance = smoothDamp(skyMaterial.luminance, targetLuminance, 0.18);
+      // Optional: reduce turbidity slightly with altitude for crisper space horizon
+      const targetTurbidity = lerp(10, 2.5, atmT);
+      skyMaterial.turbidity = smoothDamp(skyMaterial.turbidity, targetTurbidity, 0.25);
+    }
+
+    // Hide meshes if their contribution becomes negligible (optimization)
+    if (starMaterial && starMaterial.alpha < 0.01) stars.isVisible = false;
+    if (skyMaterial && skyMaterial.luminance < 0.02) sky.isVisible = false;
+  }
+
+  // Utility functions for smooth fading
+  function clamp01(v: number) { return Math.min(1, Math.max(0, v)); }
+  function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+  function smoothDamp(current: number, target: number, halfLife: number, dt = 1/60) {
+    // Exponential decay towards target per frame (independent of frame rate approximation)
+    const lambda = Math.log(2) / Math.max(1e-5, halfLife);
+    return current + (target - current) * (1 - Math.exp(-lambda * dt));
   }
 
   function updateSunAndAtmosphere(scene: Scene, sunLight: DirectionalLight, sky: Mesh) {
@@ -433,19 +486,28 @@ export default function WorldExplorer({
   }
 
   function projectGroundToSphere(patch: Mesh, sphereDiameter: number) {
-    const radius = sphereDiameter / 2;
+    // Improved projection: map each vertex to the sphere surface based on its world X/Z.
+    const radius = sphereDiameter * 0.5;
     const positions = patch.getVerticesData("position");
     if (!positions) return;
+    // Precompute patch world center for local radial vector approximation.
+    const cx = patch.position.x;
+    const cz = patch.position.z;
     for (let i = 0; i < positions.length; i += 3) {
-      const x = positions[i] + patch.position.x;
-      const z = positions[i + 2] + patch.position.z;
-      // Treat ground plane as tangent at origin; approximate sphere elevation difference
-      const dist = Math.sqrt(x * x + z * z);
-      // If near origin flatten, otherwise adjust y downwards so edges fall along sphere
-      const sphereY = Math.sqrt(Math.max(0, radius * radius - dist * dist)) - radius;
-      positions[i + 1] += sphereY; // subtracting radius so center near 0
+      // Local vertex world coordinates (assuming patch y near surface)
+      const vx = positions[i] + cx;
+      const vz = positions[i + 2] + cz;
+      const distXZ = Math.sqrt(vx * vx + vz * vz);
+      if (distXZ > radius) {
+        // Outside sphere projection bounds; skip (leave as-is)
+        continue;
+      }
+      // Height above tangent plane at patch center: solve sphere equation y = sqrt(r^2 - x^2 - z^2)
+      const surfaceY = Math.sqrt(radius * radius - distXZ * distXZ);
+      // Shift so sea level roughly near 0 at origin (subtract radius)
+      positions[i + 1] = positions[i + 1] + (surfaceY - radius);
     }
-    patch.setVerticesData("position", positions);
+    patch.setVerticesData("position", positions, true);
     patch.createNormals(true);
   }
 
@@ -602,8 +664,31 @@ export default function WorldExplorer({
             // Placeholder: future building tile streaming integration
           }} />
           <LayerToggle label="Atmosphere" checked={showAtmosphere} onChange={(v) => {
+            // Smooth fade of atmosphere when toggled
+            const prev = showAtmosphere;
             setShowAtmosphere(v);
-            if (skyRef.current) skyRef.current.isVisible = v;
+            if (skyRef.current) {
+              const skyMaterial = skyRef.current.material as SkyMaterial;
+              // Initiate fade over ~0.6s using requestAnimationFrame
+              const start = performance.now();
+              const duration = 600;
+              const initialLuminance = skyMaterial.luminance;
+              const targetLuminance = v ? 0.9 : 0.0;
+              const animate = (time: number) => {
+                const t = Math.min(1, (time - start) / duration);
+                const ease = t * t * (3 - 2 * t); // smoothstep easing
+                skyMaterial.luminance = initialLuminance + (targetLuminance - initialLuminance) * ease;
+                if (v) {
+                  skyRef.current!.isVisible = true; // ensure visible while fading in
+                }
+                if (t < 1) {
+                  requestAnimationFrame(animate);
+                } else {
+                  if (!v) skyRef.current!.isVisible = false; // hide after fade out complete
+                }
+              };
+              requestAnimationFrame(animate);
+            }
           }} />
           <LayerToggle label="Earth Globe" checked={!!earthRef.current?.isVisible} onChange={(v) => {
             if (earthRef.current) earthRef.current.isVisible = v;
