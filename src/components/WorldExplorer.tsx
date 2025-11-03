@@ -48,6 +48,7 @@ import { GeoJSONEditor, GeoJSONFeature } from "./GeoJSONEditor";
 import { Timeline } from "./Timeline";
 import { PointerEventTypes } from "@babylonjs/core/Events/pointerEvents";
 import "@babylonjs/core/Culling/ray";
+import { cartesianToGeo, geoToCartesian } from "../utils/geodesy";
 
 interface WorldExplorerProps {
   initialPosition?: Vector3;
@@ -621,17 +622,8 @@ export default function WorldExplorer({
       const clickPosition = pickResult.pickedPoint;
       if (!clickPosition) return;
 
-      // Convert world coordinates to lat/lon
-      const earthRadius = 6_378_137; // WGS84 Earth radius in meters
-      const x = clickPosition.x;
-      const y = clickPosition.y;
-      const z = clickPosition.z;
-
-      // Calculate geodetic coordinates
-      const distance = Math.sqrt(x * x + y * y + z * z);
-      const lat = Math.asin(y / distance) * (180 / Math.PI);
-      const lon = Math.atan2(x, z) * (180 / Math.PI);
-      const alt = distance - earthRadius;
+      // Convert world coordinates to geodetic coordinates using proper WGS84 conversion
+      const geoCoord = cartesianToGeo(clickPosition);
 
       // Create a new GeoJSON feature
       const newFeature: GeoJSONFeature = {
@@ -639,12 +631,12 @@ export default function WorldExplorer({
         type: "Feature",
         geometry: {
           type: "Point",
-          coordinates: [lon, lat, alt]
+          coordinates: [geoCoord.lon, geoCoord.lat, geoCoord.alt]
         },
         properties: {
           name: `Point ${geoJSONFeatures.length + 1}`,
           timestamp: Date.now(),
-          altitude: alt
+          altitude: geoCoord.alt
         }
       };
 
@@ -654,18 +646,23 @@ export default function WorldExplorer({
       // Create a visual marker at the click position
       createMarker(scene, clickPosition, newFeature.id);
       
-      console.info(`Point added: Lat ${lat.toFixed(6)}, Lon ${lon.toFixed(6)}, Alt ${alt.toFixed(1)}m`);
+      console.info(`Point added: Lat ${geoCoord.lat.toFixed(6)}, Lon ${geoCoord.lon.toFixed(6)}, Alt ${geoCoord.alt.toFixed(1)}m`);
     }
   }
 
   function createMarker(scene: Scene, position: Vector3, featureId: string) {
+    // Constants for marker appearance
+    const MARKER_DIAMETER = 50000; // 50km marker size
+    const MARKER_SEGMENTS = 8; // marker detail level
+    const MARKER_OFFSET = 10000; // 10km above surface
+    
     // Create a small sphere marker
-    const marker = MeshBuilder.CreateSphere(`marker_${featureId}`, { diameter: 50000, segments: 8 }, scene);
+    const marker = MeshBuilder.CreateSphere(`marker_${featureId}`, { diameter: MARKER_DIAMETER, segments: MARKER_SEGMENTS }, scene);
     marker.position = position.clone();
     
     // Slightly offset the marker above the surface
     const normal = position.normalize();
-    marker.position = marker.position.add(normal.scale(10000));
+    marker.position = marker.position.add(normal.scale(MARKER_OFFSET));
 
     // Create marker material
     const material = new StandardMaterial(`markerMat_${featureId}`, scene);
@@ -713,6 +710,7 @@ export default function WorldExplorer({
     
     // Highlight the selected marker
     markerMeshesRef.current.forEach((marker, id) => {
+      if (!marker.material) return;
       const material = marker.material as StandardMaterial;
       if (id === feature?.id) {
         material.emissiveColor = new Color3(0.3, 0.7, 1);
@@ -728,23 +726,15 @@ export default function WorldExplorer({
       const [lon, lat, alt] = feature.geometry.coordinates as number[];
       const camera = sceneRef.current.activeCamera as UniversalCamera;
       if (camera && geodeticControllerRef.current) {
-        // Calculate position from lat/lon/alt
-        const earthRadius = 6_378_137;
-        const latRad = lat * Math.PI / 180;
-        const lonRad = lon * Math.PI / 180;
-        const distance = earthRadius + (alt || 0);
+        // Use proper geodetic to Cartesian conversion
+        const CAMERA_ALTITUDE_OFFSET = 50000; // 50km above the point
+        const CAMERA_TRANSITION_FACTOR = 0.3;
         
-        const x = distance * Math.sin(lonRad) * Math.cos(latRad);
-        const y = distance * Math.sin(latRad);
-        const z = distance * Math.cos(lonRad) * Math.cos(latRad);
-        
-        // Move camera to a position above the point
-        const targetPos = new Vector3(x, y, z);
-        const normal = targetPos.normalize();
-        const cameraPos = targetPos.add(normal.scale(50000)); // 50km above
+        const targetPos = geoToCartesian({ lat, lon, alt: alt || 0 });
+        const cameraAltPos = geoToCartesian({ lat, lon, alt: (alt || 0) + CAMERA_ALTITUDE_OFFSET });
         
         // Smooth transition (simplified - could use animation)
-        camera.position = camera.position.add(cameraPos.subtract(camera.position).scale(0.3));
+        camera.position = camera.position.add(cameraAltPos.subtract(camera.position).scale(CAMERA_TRANSITION_FACTOR));
       }
     }
   };
