@@ -1,181 +1,113 @@
-# 🌍 CI Earth Explorer 
+# CI Map Testbed
 
- Babylon.js Cesium JS Vite REACT 
+React + Cesium web app to visualize and edit time-dynamic geospatial tracks (timeline) plus a 3D Tileset.
 
-A Google Earth-style 3D world explorer built with Babylon.js, featuring real-time 3D tiles, terrain rendering, atmospheric effects, and intuitive navigation controls.
+## Quick Start
 
-## 🚧 Feature Plans
+1. Create an `.env` file with:
 
-- PBR Earth globe with albedo + normal maps and environment reflections
-- Dynamic day/night cycle updating sun direction & sky scattering
-- Atmospheric sky with adjustable Rayleigh/Mie parameters
-- Procedural starfield with smooth altitude-based fade (space transition)
-- Multi-patch procedural terrain using layered trigonometric noise (placeholder for heightmaps)
-- Toggleable layers (Terrain, Buildings placeholder, Atmosphere, Globe, Stars)
-- Environment cube texture for realistic reflections
-- Per-frame altitude-based transition between atmosphere and space view
+```bash
+echo "VITE_CESIUM_ION_ACCESS_TOKEN=YOUR_TOKEN_HERE" > .env
+```
 
-Planned next steps (high priority):
+1. Install dependencies:
 
-- Stream real Cesium / 3D Tiles & terrain imagery
-- Proper geospatial projection utilities (EPSG:4326 + WebMercator conversions)
-- Heightmap & satellite imagery ingestion pipeline
-- GPU-based noise / heightmap generation for terrain LOD
+```bash
+npm install
+```
 
-## ✨ Features
-
-### 🌐 Google Earth-Style Navigation
-
-- **Smooth Camera Controls**: WASD movement with mouse look, intuitive zoom
-- **Earth-Scale Movement**: Automatic speed adjustment based on altitude
-- **Geographic Coordinates**: Real latitude/longitude positioning system
-- **Smooth Transitions**: Cinematic fly-to animations between locations
-
-### 🗺️ Advanced Mapping Features
-
-- **3D Tiles Integration (stub)**: CesiumJS-inspired tile loading system with procedural placeholder tiles
-- **Procedural Terrain**: Multi-octave noise generation for realistic landscapes
-- **Dynamic Level of Detail**: Automatic tile resolution based on zoom level
-- **Layer Management**: Toggle terrain, buildings, satellite imagery, and labels
-
-### 🎨 Atmospheric Rendering
-
-- **Realistic Sky**: Atmospheric scattering with dynamic sun positioning & day-night cycle
-- **Volumetric Lighting**: Directional sunlight with ambient sky illumination
-- **Dynamic Shadows**: Real-time shadow generation with soft shadows
-
-### 🏢 3D World Content
-
-- **Procedural Buildings (placeholder)**: Automatic generation of sample structures; ready for replacement with real 3D Tiles
-- **Landmark Rendering**: Famous world landmarks with accurate positioning
-- **Terrain Features**: Hills, valleys, and geographic formations
-
-## 🚀 Getting Started
-
-First, run the development server:
+1. Run the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open the printed local URL. You should see the Cesium globe, timeline and a loading overlay that disappears when assets load.
 
-You should see:
-
-1. A PBR Earth globe centered at origin.
-2. Atmospheric sky with moving sun (full day in ~60s).
-3. Terrain patches around origin (toggleable) sculpted by pseudo noise.
-4. Starfield when you fly far out (>300k units) or disable atmosphere.
-5. Layer panel (top-right) for enabling/disabling features.
-
-Main scene code lives in `src/components/WorldExplorer.tsx`. `app/page.tsx` now simply mounts the explorer component.
-
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
-
-## ℹ️ Geospatial & Rendering Notes
-
-Current coordinate system is simplistic (world units ≈ meters). Geographic conversion inside camera controller is placeholder. For real Earth-scale accuracy integrate an ellipsoid model and WebMercator / EPSG:4326 conversions.
-
-Terrain & building tiles are procedural. Replace with Cesium or other 3D Tiles source by swapping out the service in `src/services/CesiumIntegration.ts`.
-
-Sky parameters you can tune in `createSkyDome()` inside `WorldExplorer.tsx`:
-
-```ts
-skyMaterial.turbidity = 10;
-skyMaterial.rayleigh = 3;
-skyMaterial.mieCoefficient = 0.004;
-skyMaterial.mieDirectionalG = 0.8;
-```
- 
-Lower turbidity for clearer skies; adjust rayleigh for intensity of blue.
-
-Day-night cycle length (demo): 60s in function `updateSunAndAtmosphere()`.
-
-Starfield texture located at Babylon playground URL; replace with custom HDRI for deep space realism.
-
-Environment reflections use prefiltered environment cube (`environment.env`). Replace with higher resolution environment for better specular highlights.
-
-Performance tips:
-
-- Reduce patch subdivisions for low-end devices.
-- Increase shadow map size only if needed (currently 2048).
-- Avoid unnecessary dynamic disposal/recreation of terrain patches; implement paging.
-
-## ✅ Layer Panel Behavior
-
-| Layer | Effect |
-|-------|--------|
-| Terrain | Adds procedural ground patches around origin |
-| 3D Buildings | (Placeholder) Ready for streamed tiles |
-| Atmosphere | Toggles sky scattering & sun updates |
-| Earth Globe | Shows/hides PBR planet sphere |
-| Stars | Force show/hide starfield independent of altitude |
-
-## 📦 Key Files
-
-- `src/components/WorldExplorer.tsx`: Main explorer logic & layer toggles
-- `src/services/CesiumIntegration.ts`: Procedural 3D tiles (placeholder) + terrain stub
-- `src/services/CesiumImageryManager.ts`: Progressive Cesium Ion imagery mosaic builder
-- `src/controllers/GeodeticCameraController.ts`: Altitude-adaptive geodetic camera controls (with proper disposal)
-- `src/utils/geodesy.ts`: WGS84 conversion helpers
-- `src/app/page.tsx`: Thin wrapper mounting world explorer
-
-## 🧪 Quality Gates
-
-Run TypeScript checks and linting (if configured) to ensure build passes:
+## Building
 
 ```bash
 npm run build
-npm run lint
+npm run preview
 ```
 
-TypeScript version warning: Current TS (5.8.x) exceeds supported range for `@typescript-eslint` (>=4.3.5 <5.4.0). Downgrade to 5.3.x for full parser support or upgrade ESLint ecosystem when compatibility lands.
+## Adding & Editing Time-Dynamic Tracks
 
-## 🗺️ Next Steps
+Use the left-hand Track Editor panel in the running app to:
 
-- Integrate real elevation & imagery
-- Replace procedural buildings with streaming 3D Tiles
-- Add label rendering & UI for search/geocoding
-- Implement frustum-based tile loading & caching
-- Add fog/atmospheric depth and night city lights
-- Curved terrain refinement (current spherical projection is approximate)
-- Accurate lat/long/alt HUD (present HUD shows lon/dist/lat; distance is radial magnitude not geodetic altitude)
-- Proper Earth ellipsoid model (WGS84) and vertical exaggeration controls
-- LayerManager integration for opacity and stacking order instead of ad-hoc state
+* Add / remove tracks
+* Add / edit / delete samples (time + lon + lat + optional height)
+* Change track color & id
+* Import / export GeoJSON
 
-## ⚠️ Known Issues
+Edits are persisted automatically to `localStorage` (`tracksGeoJSON`).
 
-| Issue | Description | Planned Fix |
-|-------|-------------|-------------|
-| Approx spherical terrain | Terrain patches bent downwards; not geodetically accurate | Replace with ellipsoid-projected tiles or real heightmaps |
-| Buildings placeholder | Procedural boxes only, no real 3D Tiles | Integrate Cesium Ion / open tiles source |
-| Lat/Long math coarse | Initial coarse method improved; now uses WGS84 conversions but HUD ordering lon/alt/lat is unconventional | Refine HUD & add geoid/ellipsoid altitude separation |
-| TypeScript lint warning | Using TS 5.8 outside eslint supported range | Downgrade or await ecosystem update |
-| Starfield scaling | Hard-coded altitude threshold; abrupt switch | Fade transition based on altitude & atmosphere density |
-| Single-threaded noise | CPU terrain sculpt may stutter | Move to Web Worker or GPU shader |
-| No tile cache persistence | Tiles regenerated every session | Add cache & eviction strategy |
+Example programmatic track snippet (in `src/data/points.ts` default seeds):
 
-## 🛣️ Roadmap 
+```ts
+export const tracks: TimedPointTrack[] = [
+  {
+    id: 'vehicle-42',
+    color: Cesium.Color.LIME,
+    samples: [
+      { time: '2025-11-02T18:00:00Z', lon: -122.4, lat: 37.77 },
+      { time: '2025-11-02T18:02:00Z', lon: -122.398, lat: 37.771 },
+      { time: '2025-11-02T18:04:00Z', lon: -122.397, lat: 37.772 }
+    ]
+  }
+];
+```
 
-- Real elevation + imagery integration (replace procedural terrain/buildings)
-- Stable building tiles streaming (3D Tiles from Cesium or open sources)
-- Enhanced geospatial search UI & fly-to with smooth easing
+Rules:
 
-- Dynamic LOD + frustum culling system
-- Atmospheric depth / fog, twilight color grading
-- Label/POI system with clustering
+* ISO timestamps should be ascending (editor re-sorts after changes).
+* Provide lon/lat in WGS84 degrees, optional height meters.
+* Color stored as CSS hex.
+* Clock automatically spans earliest start -> latest stop across all tracks.
 
-- Weather layers (cloud cover, precipitation heatmap)
-- Night lights emissive maps & time-based city illumination
-- Offline prefetch & caching strategy
+To load external JSON dynamically outside the editor, replace the static import with a fetch:
 
-- VR/AR exploration mode
-- Photorealistic water materials (oceans, lakes)
-- Analytics & performance telemetry overlay
+```ts
+const response = await fetch('/data/tracks.json');
+const tracks = await response.json();
+```
+
+## GeoJSON Schema
+
+Exported file is a FeatureCollection where each Feature represents a track:
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "MultiPoint", "coordinates": [[lon, lat, height], ...] },
+      "properties": {
+        "id": "alpha",
+        "times": ["2025-11-02T18:00:00Z", "2025-11-02T18:01:00Z", "..."],
+        "color": "#00ffcc",
+        "meta": { }
+      }
+    }
+  ]
+}
+```
+
+The order of `coordinates` aligns 1:1 with `times`.
+
+Conversion utilities live in `src/lib/geojson.ts` (`tracksToGeoJSON` / `geoJSONToTracks`).
+
+## Environment Token
+
+The prior variable `CESIUM_ION_ACCESS_TOKEN` has been renamed for Vite consumption to `VITE_CESIUM_ION_ACCESS_TOKEN`. Rotate tokens periodically. Do not commit real tokens to public repositories.
+
+## Future Enhancements
+
+* Validation UI for overlapping / duplicate timestamps
+* Performance: dynamic import Cesium submodules to shrink bundle
+* Drag timeline scrubber integration with custom playback controls
+* Export as animated video or frame sequence
+* Server sync (REST or WebSocket) for collaborative editing
+
 
