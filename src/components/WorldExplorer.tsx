@@ -44,6 +44,10 @@ import "@babylonjs/core/Materials/standardMaterial";
 import "@babylonjs/core/Materials/Textures/texture";
 import "@babylonjs/core/Meshes/groundMesh";
 import "@babylonjs/materials/sky";
+import { GeoJSONEditor, GeoJSONFeature } from "./GeoJSONEditor";
+import { Timeline } from "./Timeline";
+import { PointerEventTypes } from "@babylonjs/core/Events/pointerEvents";
+import "@babylonjs/core/Culling/ray";
 
 interface WorldExplorerProps {
   initialPosition?: Vector3;
@@ -76,6 +80,11 @@ export default function WorldExplorer({
   const geodeticControllerRef = useRef<GeodeticCameraController | null>(null);
   const frameCounterRef = useRef<number>(0);
   const [debugStats, setDebugStats] = useState({ meshes: 0, cameraDist: 0 });
+  
+  // GeoJSON editor state
+  const [geoJSONFeatures, setGeoJSONFeatures] = useState<GeoJSONFeature[]>([]);
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
+  const markerMeshesRef = useRef<Map<string, Mesh>>(new Map());
 
   // Intentionally defined outside useEffect and not a dependency; world setup should only occur once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -584,13 +593,13 @@ export default function WorldExplorer({
   }
 
   async function setupEarthControls(camera: UniversalCamera, scene: Scene) {
-    // Enhanced camera controls for Earth exploration
+    // Enhanced camera controls for Earth exploration with map click handling
     scene.onPointerObservable.add((pointerInfo) => {
       switch (pointerInfo.type) {
-        case 4: // POINTERDOWN
-          // You can add custom interaction logic here
+        case PointerEventTypes.POINTERDOWN:
+          handleMapClick(pointerInfo, scene, camera);
           break;
-        case 8: // POINTERWHEEL
+        case PointerEventTypes.POINTERWHEEL:
           // Custom zoom behavior for Earth scale
           break;
       }
@@ -602,6 +611,71 @@ export default function WorldExplorer({
     if (!scene.meshes.find(m => m.name === '__debugAxesCenter')) {
       createDebugAxes(scene, 1_000_000);
     }
+  }
+
+  function handleMapClick(pointerInfo: any, scene: Scene, camera: UniversalCamera) {
+    // Check if the click hit the Earth mesh
+    const pickResult = scene.pick(scene.pointerX, scene.pointerY);
+    
+    if (pickResult?.hit && pickResult.pickedMesh === earthRef.current) {
+      const clickPosition = pickResult.pickedPoint;
+      if (!clickPosition) return;
+
+      // Convert world coordinates to lat/lon
+      const earthRadius = 6_378_137; // WGS84 Earth radius in meters
+      const x = clickPosition.x;
+      const y = clickPosition.y;
+      const z = clickPosition.z;
+
+      // Calculate geodetic coordinates
+      const distance = Math.sqrt(x * x + y * y + z * z);
+      const lat = Math.asin(y / distance) * (180 / Math.PI);
+      const lon = Math.atan2(x, z) * (180 / Math.PI);
+      const alt = distance - earthRadius;
+
+      // Create a new GeoJSON feature
+      const newFeature: GeoJSONFeature = {
+        id: `point-${Date.now()}`,
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [lon, lat, alt]
+        },
+        properties: {
+          name: `Point ${geoJSONFeatures.length + 1}`,
+          timestamp: Date.now(),
+          altitude: alt
+        }
+      };
+
+      // Add the feature to the list
+      setGeoJSONFeatures(prev => [...prev, newFeature]);
+
+      // Create a visual marker at the click position
+      createMarker(scene, clickPosition, newFeature.id);
+      
+      console.info(`Point added: Lat ${lat.toFixed(6)}, Lon ${lon.toFixed(6)}, Alt ${alt.toFixed(1)}m`);
+    }
+  }
+
+  function createMarker(scene: Scene, position: Vector3, featureId: string) {
+    // Create a small sphere marker
+    const marker = MeshBuilder.CreateSphere(`marker_${featureId}`, { diameter: 50000, segments: 8 }, scene);
+    marker.position = position.clone();
+    
+    // Slightly offset the marker above the surface
+    const normal = position.normalize();
+    marker.position = marker.position.add(normal.scale(10000));
+
+    // Create marker material
+    const material = new StandardMaterial(`markerMat_${featureId}`, scene);
+    material.emissiveColor = new Color3(1, 0.3, 0.3);
+    material.diffuseColor = new Color3(1, 0.5, 0.5);
+    material.disableLighting = false;
+    marker.material = material;
+
+    // Store the marker for later reference
+    markerMeshesRef.current.set(featureId, marker);
   }
 
   function createDebugAxes(scene: Scene, size: number) {
@@ -619,6 +693,65 @@ export default function WorldExplorer({
     const cmat = new StandardMaterial('__debugAxesCenterMat', scene); cmat.emissiveColor = new Color3(1,1,1); cmat.disableLighting = true; center.material = cmat;
     center.isPickable = false;
   }
+
+  // GeoJSON feature handlers
+  const handleFeaturesChange = (features: GeoJSONFeature[]) => {
+    // Remove markers for deleted features
+    const newFeatureIds = new Set(features.map(f => f.id));
+    markerMeshesRef.current.forEach((marker, id) => {
+      if (!newFeatureIds.has(id)) {
+        marker.dispose();
+        markerMeshesRef.current.delete(id);
+      }
+    });
+    
+    setGeoJSONFeatures(features);
+  };
+
+  const handleFeatureSelect = (feature: GeoJSONFeature | null) => {
+    setSelectedFeatureId(feature?.id || null);
+    
+    // Highlight the selected marker
+    markerMeshesRef.current.forEach((marker, id) => {
+      const material = marker.material as StandardMaterial;
+      if (id === feature?.id) {
+        material.emissiveColor = new Color3(0.3, 0.7, 1);
+        material.diffuseColor = new Color3(0.5, 0.8, 1);
+      } else {
+        material.emissiveColor = new Color3(1, 0.3, 0.3);
+        material.diffuseColor = new Color3(1, 0.5, 0.5);
+      }
+    });
+
+    // Optionally fly to the feature
+    if (feature && feature.geometry.type === "Point" && sceneRef.current) {
+      const [lon, lat, alt] = feature.geometry.coordinates as number[];
+      const camera = sceneRef.current.activeCamera as UniversalCamera;
+      if (camera && geodeticControllerRef.current) {
+        // Calculate position from lat/lon/alt
+        const earthRadius = 6_378_137;
+        const latRad = lat * Math.PI / 180;
+        const lonRad = lon * Math.PI / 180;
+        const distance = earthRadius + (alt || 0);
+        
+        const x = distance * Math.sin(lonRad) * Math.cos(latRad);
+        const y = distance * Math.sin(latRad);
+        const z = distance * Math.cos(lonRad) * Math.cos(latRad);
+        
+        // Move camera to a position above the point
+        const targetPos = new Vector3(x, y, z);
+        const normal = targetPos.normalize();
+        const cameraPos = targetPos.add(normal.scale(50000)); // 50km above
+        
+        // Smooth transition (simplified - could use animation)
+        camera.position = camera.position.add(cameraPos.subtract(camera.position).scale(0.3));
+      }
+    }
+  };
+
+  const handleFeatureDelete = (featureId: string) => {
+    handleFeaturesChange(geoJSONFeatures.filter(f => f.id !== featureId));
+  };
 
   return (
     <div className="relative w-full h-full">
@@ -699,6 +832,22 @@ export default function WorldExplorer({
           }} />
         </div>
       </div>
+
+      {/* Timeline Component */}
+      <Timeline
+        features={geoJSONFeatures}
+        onFeatureSelect={handleFeatureSelect}
+        onFeatureDelete={handleFeatureDelete}
+        selectedFeatureId={selectedFeatureId}
+      />
+
+      {/* GeoJSON Editor Component */}
+      <GeoJSONEditor
+        features={geoJSONFeatures}
+        onFeaturesChange={handleFeaturesChange}
+        onFeatureSelect={handleFeatureSelect}
+        selectedFeatureId={selectedFeatureId}
+      />
     </div>
   );
 }
