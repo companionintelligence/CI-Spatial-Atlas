@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN as string | undefined;
 
 function App() {
-  const [tracks, setTracks] = useState<TimedPointTrack[]>([]);
+  const [tracks, setTracks] = useState<TimedPointTrack[]>(defaultTracks);
 
   // Load from localStorage or default
   useEffect(() => {
@@ -18,17 +18,29 @@ function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setTracks(geoJSONToTracks(parsed));
+        const loadedTracks = geoJSONToTracks(parsed);
+        console.log('Loaded tracks from localStorage:', loadedTracks.length);
+        setTracks(loadedTracks);
         return;
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to load tracks from localStorage:', e);
+      }
     }
+    console.log('Using default tracks:', defaultTracks.length);
     setTracks(defaultTracks);
   }, []);
 
   // Persist
   useEffect(() => {
-    const fc = tracksToGeoJSON(tracks);
-    localStorage.setItem('tracksGeoJSON', JSON.stringify(fc));
+    if (tracks.length > 0) {
+      try {
+        const fc = tracksToGeoJSON(tracks);
+        localStorage.setItem('tracksGeoJSON', JSON.stringify(fc));
+        console.log('Saved tracks to localStorage:', tracks.length);
+      } catch (e) {
+        console.warn('Failed to save tracks to localStorage:', e);
+      }
+    }
   }, [tracks]);
 
   const handleImport = (fc: any) => {
