@@ -1,10 +1,11 @@
-# 🌍 Babylon.js Earth Explorer (Vite Edition)
+# 🌍 CI Earth Explorer 
+
+ Babylon.js Cesium JS Vite REACT 
 
 A Google Earth-style 3D world explorer built with Babylon.js, featuring real-time 3D tiles, terrain rendering, atmospheric effects, and intuitive navigation controls.
 
-## 🔄 Recent Realism Enhancements
+## 🚧 Feature Planss
 
-The project now includes:
 - PBR Earth globe with albedo + normal maps and environment reflections
 - Dynamic day/night cycle updating sun direction & sky scattering
 - Atmospheric sky with adjustable Rayleigh/Mie parameters
@@ -118,9 +119,11 @@ Performance tips:
 
 ## 📦 Key Files
 
-- `src/components/WorldExplorer.tsx`: Main explorer logic
-- `src/services/CesiumIntegration.ts`: 3D tiles & terrain stub
-- `src/controllers/EarthCameraController.ts`: Camera behavior
+- `src/components/WorldExplorer.tsx`: Main explorer logic & layer toggles
+- `src/services/CesiumIntegration.ts`: Procedural 3D tiles (placeholder) + terrain stub
+- `src/services/CesiumImageryManager.ts`: Progressive Cesium Ion imagery mosaic builder
+- `src/controllers/GeodeticCameraController.ts`: Altitude-adaptive geodetic camera controls (with proper disposal)
+- `src/utils/geodesy.ts`: WGS84 conversion helpers
 - `src/app/page.tsx`: Thin wrapper mounting world explorer
 
 ## 🧪 Quality Gates
@@ -152,37 +155,27 @@ TypeScript version warning: Current TS (5.8.x) exceeds supported range for `@typ
 |-------|-------------|-------------|
 | Approx spherical terrain | Terrain patches bent downwards; not geodetically accurate | Replace with ellipsoid-projected tiles or real heightmaps |
 | Buildings placeholder | Procedural boxes only, no real 3D Tiles | Integrate Cesium Ion / open tiles source |
-| Lat/Long math coarse | Uses simple trig on camera position; ignores Earth radius scaling & altitude separation | Implement proper conversion using radius and ellipsoid flattening |
+| Lat/Long math coarse | Initial coarse method improved; now uses WGS84 conversions but HUD ordering lon/alt/lat is unconventional | Refine HUD & add geoid/ellipsoid altitude separation |
 | TypeScript lint warning | Using TS 5.8 outside eslint supported range | Downgrade or await ecosystem update |
 | Starfield scaling | Hard-coded altitude threshold; abrupt switch | Fade transition based on altitude & atmosphere density |
 | Single-threaded noise | CPU terrain sculpt may stutter | Move to Web Worker or GPU shader |
 | No tile cache persistence | Tiles regenerated every session | Add cache & eviction strategy |
 
-## 🛣️ Roadmap (Quartered)
+## 🛣️ Roadmap 
 
-Q1:
-
-- Real elevation + imagery integration
-- Stable building tiles streaming
-- Geospatial conversion & search UI
-
-Q2:
+- Real elevation + imagery integration (replace procedural terrain/buildings)
+- Stable building tiles streaming (3D Tiles from Cesium or open sources)
+- Enhanced geospatial search UI & fly-to with smooth easing
 
 - Dynamic LOD + frustum culling system
 - Atmospheric depth / fog, twilight color grading
 - Label/POI system with clustering
 
-Q3:
-
 - Weather layers (cloud cover, precipitation heatmap)
 - Night lights emissive maps & time-based city illumination
 - Offline prefetch & caching strategy
-
-Q4:
 
 - VR/AR exploration mode
 - Photorealistic water materials (oceans, lakes)
 - Analytics & performance telemetry overlay
 
----
-Built with Babylon.js • Vite • React • TypeScript

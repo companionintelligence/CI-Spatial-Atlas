@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Scene } from "@babylonjs/core/scene";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { UniversalCamera } from "@babylonjs/core/Cameras/universalCamera";
@@ -237,12 +238,23 @@ export default function WorldExplorer({
 
     return () => {
   clearInterval(statsInterval);
+  geodeticControllerRef.current?.dispose();
+  if (sceneRef.current && (sceneRef.current as any)._shadowGen) {
+    try { (sceneRef.current as any)._shadowGen.dispose(); } catch {}
+  }
   scene.dispose();
       engine.dispose();
       window.removeEventListener("resize", handleResize);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reactive Cesium imagery initialization if user toggles after load.
+  useEffect(() => {
+    if (useCesiumImagery && earthRef.current && sceneRef.current && !earthRef.current.metadata?.cesiumApplied) {
+      initializeProgressiveImagery(sceneRef.current, earthRef.current);
+    }
+  }, [useCesiumImagery]);
 
   // initializeWorld moved above for dependency tracking
 
@@ -342,14 +354,16 @@ export default function WorldExplorer({
     skyMaterial.sunPosition = sunDir.scale(100);
     // Adjust intensity for dusk/dawn
     const elevation = sunDir.y;
-    sunLight.intensity = Math.max(0.05, elevation > 0 ? 1.1 * elevation : 0.15);
+  sunLight.intensity = Math.max(0.05, elevation > 0 ? 0.9 * elevation : 0.1);
   }
 
   function createEarthSphere(scene: Scene): Mesh {
     const earth = MeshBuilder.CreateSphere("earth", { diameter: 12_756_274, segments: 128 }, scene);
+    // Use StandardMaterial for simpler diagnostics (diffuse + emissive night blending)
     const earthMat = new StandardMaterial("earthMat", scene);
-    earthMat.specularColor = new Color3(0.12,0.12,0.12);
-    earthMat.diffuseColor = Color3.White();
+    earthMat.diffuseColor = new Color3(0.15,0.25,0.35); // interim tint before texture loads
+    earthMat.specularColor = new Color3(0.05,0.05,0.05);
+    earthMat.emissiveColor = Color3.Black();
     const procedural = generateProceduralEarthTexture(scene);
     earthMat.diffuseTexture = procedural; originalEarthTextureRef.current = procedural;
     const dayMap8k = (dayMap8kRaw as any)?.src || (dayMap8kRaw as any);
@@ -358,9 +372,17 @@ export default function WorldExplorer({
     const nightMap2k = (nightMap2kRaw as any)?.src || (nightMap2kRaw as any);
     const dayUrl = (typeof dayMap8k === 'string' ? dayMap8k : '/maps/8k_earth_daymap.jpg') || (typeof dayMap2k === 'string' ? dayMap2k : '/maps/2k_earth_daymap.jpg');
     const nightUrl = (typeof nightMap8k === 'string' ? nightMap8k : '/maps/8k_earth_nightmap.jpg') || (typeof nightMap2k === 'string' ? nightMap2k : '/maps/2k_earth_nightmap.jpg');
+    console.info("Earth texture requested", { dayUrl });
     const dayTex = new Texture(dayUrl, scene, undefined, false, Texture.TRILINEAR_SAMPLINGMODE,
-      () => { earthMat.diffuseTexture = dayTex; originalEarthTextureRef.current = dayTex; console.info("Earth: high-res day map applied", dayUrl); },
-      (err) => { console.warn("Earth day map failed, keeping procedural", err); }
+      () => {
+        earthMat.diffuseTexture = dayTex;
+        earthMat.diffuseColor = Color3.White();
+        originalEarthTextureRef.current = dayTex;
+        console.info("Earth: high-res day map applied", dayUrl);
+      },
+      (err) => {
+        console.warn("Earth day map failed, retaining procedural diffuse", { dayUrl, err });
+      }
     );
     let nightTex: Texture | null = null;
     try { nightTex = new Texture(nightUrl, scene, undefined, false, Texture.TRILINEAR_SAMPLINGMODE, () => console.info("Earth: night map loaded", nightUrl)); } catch {/* ignore */}
@@ -374,9 +396,9 @@ export default function WorldExplorer({
   }
 
   function initializeProgressiveImagery(scene: Scene, earth: Mesh) {
-    const token = process.env.CESIUM_API; // Removed NEXT_PUBLIC_CESIUM_ION_TOKEN fallback
+    const token = (import.meta as any).env?.VITE_CESIUM_API || (import.meta as any).env?.CESIUM_API; // support legacy key
     if (!token) {
-      console.warn("Cesium Ion token (CESIUM_API) not set. Skipping progressive imagery initialization.");
+      console.warn("Cesium Ion token (VITE_CESIUM_API) not set. Add VITE_CESIUM_API=YOUR_TOKEN to .env.");
       return;
     }
     try {
@@ -494,9 +516,9 @@ export default function WorldExplorer({
     shadowGenerator.blurKernel = 32;
     shadowGenerator.blurScale = 2;
     shadowGenerator.depthScale = 50;
-    
-    // Add meshes to shadow casting (terrain usually doesn't cast shadows on itself)
-    // You can add other objects here that should cast shadows
+    meshes.forEach(m => shadowGenerator.addShadowCaster(m));
+    // Store on scene for later disposal if needed
+    (scene as any)._shadowGen = shadowGenerator;
   }
 
   async function setupEarthControls(camera: UniversalCamera, scene: Scene) {

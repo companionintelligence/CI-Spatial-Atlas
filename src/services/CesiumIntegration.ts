@@ -134,14 +134,26 @@ export class CesiumIntegration {
 
     // Create a parent mesh for this tile
     const tileMesh = new Mesh(`tile_${x}_${y}_${z}`, this.scene);
-    tileMesh.position = new Vector3(x * tileSize + tileSize / 2, 0, z * tileSize + tileSize / 2);
+    // Place on surface (approx) by projecting radial vector to Earth sphere (assuming origin at center)
+    // Convert planar x,z into a position over sphere of radius ~6378137 (scaled). If far outside, keep flat.
+    const earthRadius = 6_378_137; // meters
+    const worldX = x * tileSize + tileSize / 2;
+    const worldZ = z * tileSize + tileSize / 2;
+    const distSq = worldX * worldX + worldZ * worldZ;
+    let posY = 0;
+    if (distSq < earthRadius * earthRadius) {
+      posY = Math.sqrt(earthRadius * earthRadius - distSq);
+    }
+    tileMesh.position = new Vector3(worldX, posY, worldZ);
 
     // Create random buildings in this tile
     for (let i = 0; i < buildingCount; i++) {
+      const localX = Math.random() * tileSize - tileSize / 2;
+      const localZ = Math.random() * tileSize - tileSize / 2;
       const building = this.createBuilding(
-        Math.random() * tileSize - tileSize / 2,
+        localX,
         0,
-        Math.random() * tileSize - tileSize / 2,
+        localZ,
         `building_${x}_${y}_${z}_${i}`
       );
       building.parent = tileMesh;
@@ -287,11 +299,12 @@ export class CesiumIntegration {
    * Calculate appropriate tile level based on view distance
    */
   private calculateTileLevel(viewDistance: number): number {
-    if (viewDistance > 10000) return 8;
-    if (viewDistance > 5000) return 10;
-    if (viewDistance > 2000) return 12;
-    if (viewDistance > 1000) return 14;
-    return 16;
+    // Simplify scaling: lower level number for farther distances (avoid too many tiles)
+    if (viewDistance > 200000) return 6;
+    if (viewDistance > 100000) return 8;
+    if (viewDistance > 50000) return 10;
+    if (viewDistance > 25000) return 12;
+    return 14;
   }
 
   /**

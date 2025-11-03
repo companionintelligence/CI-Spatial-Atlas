@@ -13,6 +13,10 @@ export class GeodeticCameraController {
   private flyToActive = false;
   private flyCallback?: () => void;
   private keys = { forward:false, back:false, left:false, right:false, up:false, down:false };
+  private wheelListener?: (e: WheelEvent) => void;
+  private keyDownListener?: (e: KeyboardEvent) => void;
+  private keyUpListener?: (e: KeyboardEvent) => void;
+  private disposed = false;
 
   constructor(camera: UniversalCamera, scene: Scene, initial?: Partial<GeodeticState>) {
     this.camera = camera; this.scene = scene;
@@ -25,9 +29,12 @@ export class GeodeticCameraController {
   }
 
   private attachInput() {
-    window.addEventListener('keydown', e=> this.handleKey(e, true));
-    window.addEventListener('keyup', e=> this.handleKey(e, false));
-    window.addEventListener('wheel', e=> this.onWheel(e), { passive: true });
+    this.keyDownListener = e=> this.handleKey(e, true);
+    this.keyUpListener = e=> this.handleKey(e, false);
+    this.wheelListener = e=> this.onWheel(e);
+    window.addEventListener('keydown', this.keyDownListener);
+    window.addEventListener('keyup', this.keyUpListener);
+    window.addEventListener('wheel', this.wheelListener, { passive: true });
   }
   private handleKey(e: KeyboardEvent, down: boolean) {
     switch(e.key.toLowerCase()){
@@ -76,4 +83,12 @@ export class GeodeticCameraController {
   }
 
   getGeodetic(): GeodeticState { return { ...this.state }; }
+
+  dispose(){
+    if (this.disposed) return;
+    if (this.keyDownListener) window.removeEventListener('keydown', this.keyDownListener);
+    if (this.keyUpListener) window.removeEventListener('keyup', this.keyUpListener);
+    if (this.wheelListener) window.removeEventListener('wheel', this.wheelListener as any);
+    this.disposed = true;
+  }
 }
