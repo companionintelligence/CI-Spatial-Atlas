@@ -2,30 +2,46 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>CI Map Timeline</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="/src/styles.css" />
-    <link rel="stylesheet" href="/Cesium/Widgets/widgets.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Companion Earth Control Deck</title>
   </head>
   <body>
-    <div id="root" class="fullSize"></div>
-    <script>
-      // Force clear service workers and cache immediately
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for(let registration of registrations) {
-            registration.unregister();
-          }
-        });
-      }
-      if ('caches' in window) {
-        caches.keys().then(function(names) {
-          for (let name of names) {
-            caches.delete(name);
-          }
-        });
-      }
-    </script>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="layout">
+      <aside id="control-panel">
+        <h1>Companion Earth</h1>
+        <p class="sub">Declarative Vibe Coding workflow</p>
+
+        <section class="card">
+          <h2>New Account</h2>
+          <form id="account-form">
+            <label for="account-name">Account Name</label>
+            <input id="account-name" name="accountName" value="earth-operator" maxlength="48" />
+            <button type="submit">Create Account Session</button>
+          </form>
+          <p id="account-status" aria-live="polite"></p>
+        </section>
+
+        <section class="card">
+          <h2>Workflow Steps</h2>
+          <ul id="workflow-list"></ul>
+        </section>
+
+        <section class="card">
+          <h2>Spatial Scrapbook</h2>
+          <form id="scrapbook-form">
+            <label for="pin-label">Pin Label</label>
+            <input id="pin-label" name="pinLabel" value="New Memory" maxlength="64" />
+            <button type="submit">Drop Pin At Viewpoint</button>
+          </form>
+          <ul id="pin-list"></ul>
+        </section>
+      </aside>
+
+      <main id="viewport">
+        <div id="app"></div>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
