@@ -35,6 +35,36 @@
           </form>
           <ul id="pin-list"></ul>
         </section>
+
+        <section class="card">
+          <h2>Pin Details</h2>
+          <form id="pin-detail-form">
+            <label for="pin-detail-label">Label</label>
+            <input id="pin-detail-label" name="pinDetailLabel" maxlength="64" />
+
+            <label for="pin-detail-notes">Notes</label>
+            <textarea id="pin-detail-notes" name="pinDetailNotes" rows="3"></textarea>
+
+            <label for="pin-detail-media-url">Media URL</label>
+            <input id="pin-detail-media-url" name="pinDetailMediaUrl" placeholder="https://..." />
+
+            <button type="submit">Save Metadata</button>
+          </form>
+          <div class="row-actions">
+            <button id="pin-fly-btn" type="button">Fly To Pin</button>
+            <button id="pin-delete-btn" type="button">Delete Pin</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Journeys</h2>
+          <div class="row-actions">
+            <button id="journey-start-btn" type="button">Play Journey</button>
+            <button id="journey-next-btn" type="button">Next Stop</button>
+            <button id="journey-stop-btn" type="button">Stop</button>
+          </div>
+          <p id="journey-status">Journey idle.</p>
+        </section>
       </aside>
 
       <main id="viewport">

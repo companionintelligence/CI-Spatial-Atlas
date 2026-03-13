@@ -81,12 +81,22 @@ body {
   gap: 0.55rem;
 }
 
+#pin-detail-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
 #account-form label {
   color: var(--ink-1);
   font-size: 0.86rem;
 }
 
 #scrapbook-form label {
+  color: var(--ink-1);
+  font-size: 0.86rem;
+}
+
+#pin-detail-form label {
   color: var(--ink-1);
   font-size: 0.86rem;
 }
@@ -109,6 +119,20 @@ body {
   font-size: 0.95rem;
 }
 
+#pin-detail-form input,
+#pin-detail-form textarea {
+  border: 1px solid #356390;
+  background: #091c35;
+  color: var(--ink-0);
+  border-radius: 9px;
+  padding: 0.56rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+#pin-detail-form textarea {
+  resize: vertical;
+}
+
 #account-form button {
   border: 0;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
@@ -123,6 +147,16 @@ body {
   border: 0;
   background: linear-gradient(90deg, #ffd36e, #ff8d6e);
   color: #3d1d0f;
+  border-radius: 9px;
+  padding: 0.6rem 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#pin-detail-form button {
+  border: 0;
+  background: linear-gradient(90deg, #87a6ff, #6de7ff);
+  color: #132046;
   border-radius: 9px;
   padding: 0.6rem 0.75rem;
   font-weight: 700;
@@ -156,6 +190,12 @@ body {
   background: rgba(9, 28, 53, 0.74);
   border-radius: 9px;
   padding: 0.45rem 0.55rem;
+  cursor: pointer;
+}
+
+.pin-item.selected {
+  border-color: rgba(255, 211, 110, 0.78);
+  box-shadow: 0 0 0 1px rgba(255, 211, 110, 0.34);
 }
 
 .pin-item h3 {
@@ -171,6 +211,34 @@ body {
 
 .pin-empty {
   color: var(--ink-2);
+  font-size: 0.82rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.row-actions button {
+  border: 1px solid #3f6793;
+  background: #0a2341;
+  color: var(--ink-0);
+  border-radius: 8px;
+  padding: 0.45rem 0.58rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.row-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#journey-status {
+  color: var(--ink-2);
+  margin: 0.6rem 0 0;
   font-size: 0.82rem;
 }
 

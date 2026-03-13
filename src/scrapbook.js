@@ -72,7 +72,14 @@ export function renderPinList(listEl, pins) {
     title.textContent = pin.label;
 
     const detail = document.createElement('p');
-    detail.textContent = `${pin.lat.toFixed(2)}, ${pin.lon.toFixed(2)} • ${new Date(pin.createdAt).toLocaleDateString()}`;
+    const dateLabel = (pin.createdAt || '').slice(0, 10);
+    detail.textContent = `${pin.lat.toFixed(2)}, ${pin.lon.toFixed(2)} • ${dateLabel}`;
+
+    if (pin.mediaUrl) {
+      const media = document.createElement('p');
+      media.textContent = 'Media attached';
+      item.appendChild(media);
+    }
 
     item.appendChild(title);
     item.appendChild(detail);

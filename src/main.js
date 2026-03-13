@@ -1,17 +1,11 @@
-import * as THREE from 'three';
 import './style.css';
 import { renderWorkflowList } from './workflow.js';
-import {
-  cartesianToLatLon,
-  getAccountPins,
-  latLonToCartesian,
-  loadAllScrapbookData,
-  renderPinList,
-  saveAllScrapbookData,
-  setAccountPins
-} from './scrapbook.js';
+import { createSceneSystem } from './systems/sceneSystem.js';
+import { createScrapbookSystem } from './systems/scrapbookSystem.js';
+import { createInputSystem } from './systems/inputSystem.js';
 
 const appEl = document.getElementById('app');
+const viewportEl = document.getElementById('viewport');
 const workflowListEl = document.getElementById('workflow-list');
 const accountFormEl = document.getElementById('account-form');
 const accountStatusEl = document.getElementById('account-status');
@@ -19,219 +13,145 @@ const accountNameInputEl = document.getElementById('account-name');
 const scrapbookFormEl = document.getElementById('scrapbook-form');
 const pinLabelInputEl = document.getElementById('pin-label');
 const pinListEl = document.getElementById('pin-list');
+const pinDetailFormEl = document.getElementById('pin-detail-form');
+const pinDetailLabelEl = document.getElementById('pin-detail-label');
+const pinDetailNotesEl = document.getElementById('pin-detail-notes');
+const pinDetailMediaUrlEl = document.getElementById('pin-detail-media-url');
+const pinDeleteBtnEl = document.getElementById('pin-delete-btn');
+const pinFlyBtnEl = document.getElementById('pin-fly-btn');
+const journeyStartBtnEl = document.getElementById('journey-start-btn');
+const journeyStopBtnEl = document.getElementById('journey-stop-btn');
+const journeyNextBtnEl = document.getElementById('journey-next-btn');
+const journeyStatusEl = document.getElementById('journey-status');
 
 renderWorkflowList(workflowListEl);
 
-let activeAccount = accountNameInputEl.value.trim() || 'earth-operator';
-let scrapbookDb = loadAllScrapbookData();
-let pins = getAccountPins(scrapbookDb, activeAccount);
+const isStaticMode = new URLSearchParams(window.location.search).get('static') === '1';
+const sceneSystem = createSceneSystem({ mountEl: appEl, viewportEl, isStaticMode });
+const scrapbookSystem = createScrapbookSystem({
+  sceneConfig: sceneSystem.sceneConfig,
+  pinsGroup: sceneSystem.pinsGroup
+});
 
-const sceneConfig = {
-  camera: {
-    fov: 52,
-    near: 0.1,
-    far: 8000,
-    position: new THREE.Vector3(0, 0.35, 4.2)
-  },
-  globe: {
-    radius: 1.24,
-    segments: 120,
-    color: 0x2f8df3,
-    roughness: 0.9,
-    metalness: 0.06
-  },
-  atmosphere: {
-    radius: 1.32,
-    color: 0x82d5ff,
-    opacity: 0.18
-  },
-  ring: {
-    radius: 1.45,
-    tube: 0.02,
-    color: 0x93ffe7
+let journeyIntervalId = null;
+let journeyIndex = 0;
+
+function flyToPin(pin) {
+  if (!pin) {
+    return;
   }
-};
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050f1f);
-
-const camera = new THREE.PerspectiveCamera(
-  sceneConfig.camera.fov,
-  window.innerWidth / window.innerHeight,
-  sceneConfig.camera.near,
-  sceneConfig.camera.far
-);
-camera.position.copy(sceneConfig.camera.position);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-appEl.appendChild(renderer.domElement);
-
-const starGeometry = new THREE.BufferGeometry();
-const starCount = 1800;
-const positions = new Float32Array(starCount * 3);
-
-for (let i = 0; i < starCount * 3; i += 3) {
-  const spread = 55;
-  positions[i] = (Math.random() - 0.5) * spread;
-  positions[i + 1] = (Math.random() - 0.5) * spread;
-  positions[i + 2] = (Math.random() - 0.5) * spread;
-}
-
-starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-const stars = new THREE.Points(
-  starGeometry,
-  new THREE.PointsMaterial({ color: 0xb5dbff, size: 0.035, sizeAttenuation: true })
-);
-scene.add(stars);
-
-const globe = new THREE.Mesh(
-  new THREE.SphereGeometry(
-    sceneConfig.globe.radius,
-    sceneConfig.globe.segments,
-    sceneConfig.globe.segments
-  ),
-  new THREE.MeshStandardMaterial({
-    color: sceneConfig.globe.color,
-    roughness: sceneConfig.globe.roughness,
-    metalness: sceneConfig.globe.metalness
-  })
-);
-scene.add(globe);
-
-const pinsGroup = new THREE.Group();
-scene.add(pinsGroup);
-
-const atmosphere = new THREE.Mesh(
-  new THREE.SphereGeometry(sceneConfig.atmosphere.radius, 84, 84),
-  new THREE.MeshBasicMaterial({
-    color: sceneConfig.atmosphere.color,
-    transparent: true,
-    opacity: sceneConfig.atmosphere.opacity,
-    side: THREE.BackSide
-  })
-);
-scene.add(atmosphere);
-
-const orbitRing = new THREE.Mesh(
-  new THREE.TorusGeometry(sceneConfig.ring.radius, sceneConfig.ring.tube, 22, 140),
-  new THREE.MeshBasicMaterial({ color: sceneConfig.ring.color, transparent: true, opacity: 0.65 })
-);
-orbitRing.rotation.x = Math.PI * 0.43;
-scene.add(orbitRing);
-
-const ambient = new THREE.HemisphereLight(0xd9f2ff, 0x0b1e38, 0.92);
-scene.add(ambient);
-
-const sun = new THREE.DirectionalLight(0xffffff, 1.35);
-sun.position.set(3.8, 1.9, 1.5);
-scene.add(sun);
-
-function renderPinsInScene(currentPins) {
-  pinsGroup.clear();
-
-  currentPins.forEach((pin) => {
-    const point = latLonToCartesian(pin.lat, pin.lon, sceneConfig.globe.radius + 0.04);
-
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.025, 14, 14),
-      new THREE.MeshBasicMaterial({ color: 0xffb86f })
-    );
-
-    mesh.position.copy(point);
-    pinsGroup.add(mesh);
+  sceneSystem.flyToLatLon(pin.lat, pin.lon, {
+    duration: 1400,
+    distance: 0.84
   });
 }
 
-renderPinsInScene(pins);
-renderPinList(pinListEl, pins);
-
-const isStaticMode = new URLSearchParams(window.location.search).get('static') === '1';
-
-function animate() {
-  globe.rotation.y += 0.0015;
-  atmosphere.rotation.y += 0.0011;
-  orbitRing.rotation.z += 0.0016;
-  stars.rotation.y += 0.00008;
-
-  camera.position.x = Math.sin(performance.now() * 0.00035) * 0.18;
-  camera.lookAt(0, 0, 0);
-
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
-}
-
-if (isStaticMode) {
-  renderer.render(scene, camera);
-} else {
-  animate();
-}
-
-accountFormEl.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const value = accountNameInputEl.value.trim();
-  const accountName = value || 'earth-operator';
-  activeAccount = accountName;
-
-  accountNameInputEl.value = accountName;
-  accountStatusEl.textContent = `Active account: ${accountName}`;
-
-  scrapbookDb = loadAllScrapbookData();
-  pins = getAccountPins(scrapbookDb, activeAccount);
-  renderPinsInScene(pins);
-  renderPinList(pinListEl, pins);
-});
-
-accountStatusEl.textContent = `Active account: ${accountNameInputEl.value.trim() || 'earth-operator'}`;
-
-scrapbookFormEl.addEventListener('submit', (event) => {
-  event.preventDefault();
-
-  const labelText = pinLabelInputEl.value.trim() || 'Untitled Memory';
-  const direction = new THREE.Vector3();
-  camera.getWorldDirection(direction);
-
-  const origin = camera.position.clone();
-  const raycaster = new THREE.Raycaster(origin, direction.normalize());
-  const hit = raycaster.intersectObject(globe, true)[0];
-
-  let worldPoint;
-  if (hit) {
-    worldPoint = hit.point;
-  } else {
-    worldPoint = direction.multiplyScalar(-sceneConfig.globe.radius).add(new THREE.Vector3(0, 0, 0));
+function stopJourney() {
+  if (journeyIntervalId) {
+    clearInterval(journeyIntervalId);
+    journeyIntervalId = null;
   }
 
-  const { lat, lon, altitude } = cartesianToLatLon(worldPoint, sceneConfig.globe.radius);
+  refreshUI('Journey idle.');
+}
 
-  const pin = {
-    id: crypto.randomUUID(),
-    label: labelText,
-    lat,
-    lon,
-    altitude,
-    createdAt: new Date().toISOString()
-  };
+function nextJourneyStop() {
+  const journeyPins = scrapbookSystem.getJourneyPins();
 
-  pins = [...pins, pin];
-  scrapbookDb = setAccountPins(scrapbookDb, activeAccount, pins);
-  saveAllScrapbookData(scrapbookDb);
+  if (journeyPins.length === 0) {
+    refreshUI('No journey points. Create pins first.');
+    return;
+  }
 
-  renderPinsInScene(pins);
-  renderPinList(pinListEl, pins);
-});
+  if (journeyIndex >= journeyPins.length) {
+    journeyIndex = 0;
+  }
+
+  const nextPin = journeyPins[journeyIndex];
+  scrapbookSystem.selectPin(nextPin.id);
+  flyToPin(nextPin);
+  journeyIndex += 1;
+  refreshUI(`Journey stop ${journeyIndex}/${journeyPins.length}: ${nextPin.label}`);
+}
+
+function startJourney() {
+  stopJourney();
+  journeyIndex = 0;
+  nextJourneyStop();
+  journeyIntervalId = setInterval(nextJourneyStop, 2600);
+}
+
+const inputSystem = createInputSystem(
+  {
+    accountFormEl,
+    accountNameInputEl,
+    accountStatusEl,
+    scrapbookFormEl,
+    pinLabelInputEl,
+    pinListEl,
+    pinDetailFormEl,
+    pinDetailLabelEl,
+    pinDetailNotesEl,
+    pinDetailMediaUrlEl,
+    pinDeleteBtnEl,
+    pinFlyBtnEl,
+    journeyStartBtnEl,
+    journeyStopBtnEl,
+    journeyNextBtnEl,
+    journeyStatusEl
+  },
+  {
+    onAccountChange(accountName) {
+      scrapbookSystem.setActiveAccount(accountName);
+      stopJourney();
+      refreshUI('Journey idle.');
+    },
+    onCreatePin(label) {
+      const worldPoint = sceneSystem.raycastGlobeFromCamera();
+      scrapbookSystem.addPinFromWorldPoint(worldPoint, label);
+      refreshUI('Pin created.');
+    },
+    onSelectPin(pinId) {
+      scrapbookSystem.selectPin(pinId);
+      refreshUI('Pin selected.');
+    },
+    onSaveSelectedPin(updates) {
+      scrapbookSystem.updateSelectedPin(updates);
+      refreshUI('Pin metadata saved.');
+    },
+    onDeleteSelectedPin() {
+      scrapbookSystem.deleteSelectedPin();
+      refreshUI('Pin deleted.');
+    },
+    onFlyToSelectedPin() {
+      flyToPin(scrapbookSystem.getSelectedPin());
+      refreshUI('Flying to selected pin.');
+    },
+    onStartJourney() {
+      startJourney();
+    },
+    onStopJourney() {
+      stopJourney();
+    },
+    onNextJourneyStop() {
+      nextJourneyStop();
+    }
+  }
+);
+
+function refreshUI(journeyStatus) {
+  inputSystem.renderState({
+    activeAccount: scrapbookSystem.getActiveAccount(),
+    pins: scrapbookSystem.getPins(),
+    selectedPin: scrapbookSystem.getSelectedPin(),
+    journeyStatus
+  });
+}
+
+refreshUI('Journey idle.');
+sceneSystem.startLoop();
 
 window.addEventListener('resize', () => {
-  const viewportEl = document.getElementById('viewport');
-  const width = viewportEl.clientWidth;
-  const height = viewportEl.clientHeight;
-
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-  renderer.setSize(width, height);
+  sceneSystem.resize();
 });
-
-const viewportEl = document.getElementById('viewport');
-renderer.setSize(viewportEl.clientWidth, viewportEl.clientHeight);
