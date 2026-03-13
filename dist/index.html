@@ -5,12 +5,27 @@
     <title>CI Map Timeline</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/Cesium/Widgets/widgets.css" />
-    <script type="module" crossorigin src="/assets/index-DVX5E6FF.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Z32fKMSi.css">
+    <script type="module" crossorigin src="/assets/index-hiOyWTC2.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DAdR7JrZ.css">
   </head>
   <body>
-    <div id="cesiumContainer" class="fullSize"></div>
-    <div id="loadingOverlay" class="overlay"><h1>Loading...</h1></div>
-    <div id="toolbar" class="toolbar"></div>
+    <div id="root" class="fullSize"></div>
+    <script>
+      // Force clear service workers and cache immediately
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (let name of names) {
+            caches.delete(name);
+          }
+        });
+      }
+    </script>
   </body>
 </html>
