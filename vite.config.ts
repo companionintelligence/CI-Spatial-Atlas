@@ -7,7 +7,9 @@ export default defineConfig(({ mode }) => {
     define: {
       __CESIUM_ION_TOKEN__: JSON.stringify(env.CESIUM_ION_TOKEN ?? ''),
       __GOOGLE_MAP_PLATFORM__: JSON.stringify(env.GOOGLE_MAP_PLATFORM ?? ''),
-      __MAPBOX_API_KEY__: JSON.stringify(env.MAPBOX_API_KEY ?? '')
+      __MAPBOX_API_KEY__: JSON.stringify(env.MAPBOX_API_KEY ?? ''),
+      __ESRI_API_KEY__: JSON.stringify(env.ESRI_API_KEY ?? ''),
+      __ESRI_API_ID__: JSON.stringify(env.ESRI_API_ID ?? '')
     },
     build: {
       rollupOptions: {

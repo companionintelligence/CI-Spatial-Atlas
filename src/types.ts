@@ -79,6 +79,7 @@ export interface SceneSystem {
   getHeading: () => number;
   domElement: HTMLCanvasElement;
   xrButtons: { vrButton: HTMLElement; arButton: HTMLElement };
+  setLayerVisible: (layer: 'hillshade' | 'labels' | 'clouds' | 'weather', visible: boolean) => void;
   render: () => void;
 }
 

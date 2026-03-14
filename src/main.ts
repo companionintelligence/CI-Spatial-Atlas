@@ -94,6 +94,14 @@ if (xrButtonsEl) {
 zoomInBtn?.addEventListener('click',  () => sceneSystem.zoomIn());
 zoomOutBtn?.addEventListener('click', () => sceneSystem.zoomOut());
 
+// Layer toggle checkboxes
+(['hillshade', 'labels', 'clouds', 'weather'] as const).forEach((layer) => {
+  const cb = document.getElementById(`layer-${layer}`) as HTMLInputElement | null;
+  if (cb) {
+    cb.addEventListener('change', () => sceneSystem.setLayerVisible(layer, cb.checked));
+  }
+});
+
 // Lat/lon readout on pointer move over globe
 sceneSystem.domElement.addEventListener('pointermove', (e: PointerEvent) => {
   if (!hudCoordsEl) return;

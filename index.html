@@ -11,24 +11,16 @@
         <button id="sidebar-close" class="sidebar-close" aria-label="Close sidebar">✕</button>
         <header class="panel-head">
           <h1>Companion Earth</h1>
-          <p class="sub">Planetary intelligence cockpit with account sessions, map memory, weather, and route playback.</p>
         </header>
 
         <section class="card">
-          <h2>Workflow Steps</h2>
-          <p class="card-note">Deterministic vibe loop: build, screenshot validation, and release gate.</p>
-          <ul id="workflow-list"></ul>
-        </section>
-
-        <section class="card">
-          <h2>New Account</h2>
-          <p class="card-note">Set or switch account scope before editing scrapbook memories.</p>
+          <h2>Account</h2>
           <form id="account-form">
             <label for="account-name">Account Name</label>
-            <input id="account-name" name="accountName" value="earth-operator" maxlength="48" />
-            <button type="submit">Create Account Session</button>
+            <input id="account-name" name="accountName" value="earth-operator" maxlength="64" />
+            <button type="submit">Switch Account</button>
           </form>
-          <p id="account-status" aria-live="polite"></p>
+          <p id="account-status"></p>
         </section>
 
         <section class="card">
@@ -44,6 +36,33 @@
               <dd id="env-weather">Loading...</dd>
             </div>
           </dl>
+        </section>
+
+        <section class="card" id="layer-controls">
+          <h2>Layers</h2>
+          <p class="card-note">Toggle globe overlay layers on and off.</p>
+          <div class="layer-toggles">
+            <label class="layer-row">
+              <input type="checkbox" id="layer-hillshade" checked />
+              <span class="layer-label">Terrain Hillshade</span>
+              <span class="layer-hint">ESRI elevation shading</span>
+            </label>
+            <label class="layer-row">
+              <input type="checkbox" id="layer-labels" checked />
+              <span class="layer-label">Borders &amp; Labels</span>
+              <span class="layer-hint">Country names and borders</span>
+            </label>
+            <label class="layer-row">
+              <input type="checkbox" id="layer-clouds" checked />
+              <span class="layer-label">Clouds</span>
+              <span class="layer-hint">Atmospheric cloud coverage</span>
+            </label>
+            <label class="layer-row">
+              <input type="checkbox" id="layer-weather" checked />
+              <span class="layer-label">Weather</span>
+              <span class="layer-hint">Storm fronts and precipitation</span>
+            </label>
+          </div>
         </section>
 
         <section class="card">

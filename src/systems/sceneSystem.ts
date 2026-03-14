@@ -8,8 +8,10 @@ import {
   createEarthTexture,
   createEarthTileTexture,
   createNightLightsTexture,
+  createOverlayTileTexture,
   createWeatherTexture
 } from './textureFactory';
+import { selectHillshadeTileUrl, selectLabelsTileUrl } from './tileProvider';
 import { createXrSystem } from './xrSystem';
 import { initTilesSystem } from './tilesSystem';
 
@@ -164,6 +166,42 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   worldGroup.add(weatherLayer);
 
   const weatherMaterial = weatherLayer.material as THREE.MeshBasicMaterial;
+
+  // ── Overlay layers (hillshade + labels) ──────────────────────────────────
+  // Skipped in static mode to keep deterministic test renders.
+  let hillshadeLayer: THREE.Mesh | null = null;
+  let labelsLayer: THREE.Mesh | null = null;
+
+  if (!isStaticMode) {
+    // Terrain hillshade — ESRI Elevation/World_Hillshade. Multiply-blended so
+    // shadowed slopes darken the surface and lit slopes are near-identity.
+    const hillshadeTexture = createOverlayTileTexture((z, x, y) => selectHillshadeTileUrl(z, x, y));
+    hillshadeLayer = new THREE.Mesh(
+      new THREE.SphereGeometry(sceneConfig.globe.radius * 1.0015, 96, 96),
+      new THREE.MeshBasicMaterial({
+        map: hillshadeTexture,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.MultiplyBlending
+      })
+    );
+    worldGroup.add(hillshadeLayer);
+
+    // Labels & borders — ESRI World Boundaries and Places. Transparent-PNG tiles
+    // overlaid above the cloud layer so country names and borders are always visible.
+    const labelsTexture = createOverlayTileTexture((z, x, y) => selectLabelsTileUrl(z, x, y));
+    labelsLayer = new THREE.Mesh(
+      new THREE.SphereGeometry(sceneConfig.globe.radius * 1.023, 96, 96),
+      new THREE.MeshBasicMaterial({
+        map: labelsTexture,
+        transparent: true,
+        depthWrite: false,
+        opacity: 0.88,
+        blending: THREE.NormalBlending
+      })
+    );
+    worldGroup.add(labelsLayer);
+  }
 
   // Atmosphere GLSL shader (replaces old BackSide glow spheres)
   const atmoSystem = createAtmosphereMesh(sceneConfig.globe.radius);
@@ -321,6 +359,15 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     renderer.setAnimationLoop((time) => update(time));
   }
 
+  function setLayerVisible(layer: 'hillshade' | 'labels' | 'clouds' | 'weather', visible: boolean): void {
+    switch (layer) {
+      case 'hillshade': if (hillshadeLayer) hillshadeLayer.visible = visible; break;
+      case 'labels':    if (labelsLayer)    labelsLayer.visible    = visible; break;
+      case 'clouds':    clouds.visible      = visible; break;
+      case 'weather':   weatherLayer.visible = visible; break;
+    }
+  }
+
   return {
     sceneConfig,
     globe,
@@ -339,6 +386,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     getHeading: () => controls.getTheta(),
     domElement: renderer.domElement,
     xrButtons:  { vrButton: xrSystem.vrButton, arButton: xrSystem.arButton },
+    setLayerVisible,
     render
   };
 }

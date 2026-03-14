@@ -263,6 +263,82 @@ export function createEarthTileTexture(fallback: THREE.CanvasTexture, zoom = 3):
 }
 
 /**
+ * Load overlay map tiles and remap them to a 1024×512 equirectangular canvas.
+ * The canvas starts transparent; tiles are composited with their native alpha.
+ * Suitable for hillshade, label, and ocean overlays.
+ *
+ * @param getUrl  Returns a tile URL for (z, x, y), or null to skip that tile.
+ * @param zoom    Tile zoom level (default 3 = 8×8 tiles = 64 tiles total).
+ */
+export function createOverlayTileTexture(
+  getUrl: (z: number, x: number, y: number) => string | null,
+  zoom = 3
+): THREE.CanvasTexture {
+  const W = 1024;
+  const H = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, W, H);
+  const outputTexture = new THREE.CanvasTexture(canvas);
+
+  void (async () => {
+    const tileCount = 1 << zoom;
+    const tileSize = 256;
+    const mercatorCanvas = document.createElement('canvas');
+    mercatorCanvas.width  = tileCount * tileSize;
+    mercatorCanvas.height = tileCount * tileSize;
+    const mercatorCtx = mercatorCanvas.getContext('2d')!;
+
+    const jobs: Array<Promise<void>> = [];
+    for (let ty = 0; ty < tileCount; ty++) {
+      for (let tx = 0; tx < tileCount; tx++) {
+        const url = getUrl(zoom, tx, ty);
+        if (!url) continue;
+        jobs.push(
+          loadImage(url)
+            .then((img) => { mercatorCtx.drawImage(img, tx * tileSize, ty * tileSize, tileSize, tileSize); })
+            .catch(() => { /* skip failed tiles */ })
+        );
+      }
+    }
+
+    try {
+      await Promise.all(jobs);
+
+      const srcData = mercatorCtx.getImageData(0, 0, mercatorCanvas.width, mercatorCanvas.height).data;
+      const outImage = ctx.createImageData(W, H);
+      const outData  = outImage.data;
+
+      for (let y = 0; y < H; y++) {
+        const vEq   = y / (H - 1);
+        const lat   = (0.5 - vEq) * Math.PI;
+        const vMerc = Math.min(1, Math.max(0, latToMercatorV(lat)));
+        const sy    = Math.min(mercatorCanvas.height - 1, Math.max(0, Math.round(vMerc * (mercatorCanvas.height - 1))));
+
+        for (let x = 0; x < W; x++) {
+          const sx     = Math.min(mercatorCanvas.width - 1, Math.max(0, Math.round((x / (W - 1)) * (mercatorCanvas.width - 1))));
+          const srcIdx = (sy * mercatorCanvas.width + sx) * 4;
+          const outIdx = (y * W + x) * 4;
+          outData[outIdx]     = srcData[srcIdx];
+          outData[outIdx + 1] = srcData[srcIdx + 1];
+          outData[outIdx + 2] = srcData[srcIdx + 2];
+          outData[outIdx + 3] = srcData[srcIdx + 3];
+        }
+      }
+
+      ctx.putImageData(outImage, 0, 0);
+      outputTexture.needsUpdate = true;
+    } catch {
+      // Keep transparent canvas on failure.
+    }
+  })();
+
+  return outputTexture;
+}
+
+/**
  * Build a deterministic night-lights map from a base earth texture.
  * Brighter clusters are placed mainly on land and away from polar caps.
  */
