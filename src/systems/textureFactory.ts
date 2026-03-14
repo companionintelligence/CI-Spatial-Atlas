@@ -175,3 +175,185 @@ export function createCloudTexture(rand: () => number): THREE.CanvasTexture {
   ctx.putImageData(imageData, 0, 0);
   return new THREE.CanvasTexture(canvas);
 }
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+    image.src = url;
+  });
+}
+
+function latToMercatorV(latRad: number): number {
+  const y = Math.log(Math.tan(Math.PI * 0.25 + latRad * 0.5));
+  return 0.5 - y / (2 * Math.PI);
+}
+
+/**
+ * Load OpenStreetMap tiles and remap them to an equirectangular texture.
+ * If network loading fails, fallback imagery remains in place.
+ */
+export function createEarthTileTexture(fallback: THREE.CanvasTexture, zoom = 2): THREE.CanvasTexture {
+  const fallbackCanvas = fallback.image as HTMLCanvasElement;
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = fallbackCanvas.width;
+  outCanvas.height = fallbackCanvas.height;
+  const outCtx = outCanvas.getContext('2d')!;
+  outCtx.drawImage(fallbackCanvas, 0, 0);
+
+  const outputTexture = new THREE.CanvasTexture(outCanvas);
+
+  void (async () => {
+    const tileCount = 1 << zoom;
+    const tileSize = 256;
+    const mercatorCanvas = document.createElement('canvas');
+    mercatorCanvas.width = tileCount * tileSize;
+    mercatorCanvas.height = tileCount * tileSize;
+    const mercatorCtx = mercatorCanvas.getContext('2d')!;
+
+    try {
+      const jobs: Array<Promise<void>> = [];
+
+      for (let ty = 0; ty < tileCount; ty++) {
+        for (let tx = 0; tx < tileCount; tx++) {
+          const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+          jobs.push(
+            loadImage(url).then((image) => {
+              mercatorCtx.drawImage(image, tx * tileSize, ty * tileSize, tileSize, tileSize);
+            })
+          );
+        }
+      }
+
+      await Promise.all(jobs);
+
+      const srcData = mercatorCtx.getImageData(0, 0, mercatorCanvas.width, mercatorCanvas.height).data;
+      const outImage = outCtx.createImageData(outCanvas.width, outCanvas.height);
+      const outData = outImage.data;
+
+      for (let y = 0; y < outCanvas.height; y++) {
+        const vEq = y / (outCanvas.height - 1);
+        const lat = (0.5 - vEq) * Math.PI;
+        const vMerc = Math.min(1, Math.max(0, latToMercatorV(lat)));
+        const sy = Math.min(mercatorCanvas.height - 1, Math.max(0, Math.round(vMerc * (mercatorCanvas.height - 1))));
+
+        for (let x = 0; x < outCanvas.width; x++) {
+          const sx = Math.min(mercatorCanvas.width - 1, Math.max(0, Math.round((x / (outCanvas.width - 1)) * (mercatorCanvas.width - 1))));
+          const srcIdx = (sy * mercatorCanvas.width + sx) * 4;
+          const outIdx = (y * outCanvas.width + x) * 4;
+
+          outData[outIdx] = srcData[srcIdx];
+          outData[outIdx + 1] = srcData[srcIdx + 1];
+          outData[outIdx + 2] = srcData[srcIdx + 2];
+          outData[outIdx + 3] = 255;
+        }
+      }
+
+      outCtx.putImageData(outImage, 0, 0);
+      outputTexture.needsUpdate = true;
+    } catch {
+      // Keep deterministic fallback texture if network tiles fail.
+    }
+  })();
+
+  return outputTexture;
+}
+
+/**
+ * Build a deterministic night-lights map from a base earth texture.
+ * Brighter clusters are placed mainly on land and away from polar caps.
+ */
+export function createNightLightsTexture(base: THREE.CanvasTexture, rand: () => number): THREE.CanvasTexture {
+  const baseCanvas = base.image as HTMLCanvasElement;
+  const W = baseCanvas.width;
+  const H = baseCanvas.height;
+
+  const srcCtx = baseCanvas.getContext('2d');
+  const srcData = srcCtx?.getImageData(0, 0, W, H).data;
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = W;
+  outCanvas.height = H;
+  const outCtx = outCanvas.getContext('2d')!;
+  const outImage = outCtx.createImageData(W, H);
+  const outData = outImage.data;
+
+  // Low-frequency distribution grid for city clusters.
+  const gridW = 56;
+  const gridH = 28;
+  const cityGrid = buildGrid(gridW, gridH, rand);
+
+  for (let y = 0; y < H; y++) {
+    const latFactor = Math.cos(((y / (H - 1)) - 0.5) * Math.PI);
+
+    for (let x = 0; x < W; x++) {
+      const idx = (y * W + x) * 4;
+      const r = srcData ? srcData[idx] : 0;
+      const g = srcData ? srcData[idx + 1] : 0;
+      const b = srcData ? srcData[idx + 2] : 0;
+
+      // Approximate land mask from color model.
+      const isLand = g > b * 0.9 && g > r * 0.72;
+      const cluster = sampleGrid(cityGrid, gridW, gridH, (x / W) * gridW, (y / H) * (gridH - 1));
+      const cityChance = (cluster - 0.52) * 2.1;
+      const intensity = Math.max(0, cityChance * latFactor);
+
+      const light = isLand ? Math.pow(intensity, 1.45) : 0;
+      const alpha = Math.min(255, Math.round(light * 210));
+
+      outData[idx] = Math.round(255 * light);
+      outData[idx + 1] = Math.round(184 * light);
+      outData[idx + 2] = Math.round(92 * light);
+      outData[idx + 3] = alpha;
+    }
+  }
+
+  outCtx.putImageData(outImage, 0, 0);
+  return new THREE.CanvasTexture(outCanvas);
+}
+
+/**
+ * Generate a translucent global weather layer texture with storm bands.
+ */
+export function createWeatherTexture(rand: () => number): THREE.CanvasTexture {
+  const W = 1024;
+  const H = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const imageData = ctx.createImageData(W, H);
+  const data = imageData.data;
+
+  const GW0 = 20, GH0 = 10;
+  const GW1 = 40, GH1 = 20;
+  const grid0 = buildGrid(GW0, GH0, rand);
+  const grid1 = buildGrid(GW1, GH1, rand);
+
+  for (let y = 0; y < H; y++) {
+    const lat = (0.5 - y / H) * Math.PI;
+    const equatorBand = Math.exp(-Math.pow(lat / 0.6, 2));
+
+    for (let x = 0; x < W; x++) {
+      const nx = x / W;
+      const ny = y / H;
+      const v0 = sampleGrid(grid0, GW0, GH0, nx * GW0, ny * (GH0 - 1));
+      const v1 = sampleGrid(grid1, GW1, GH1, nx * GW1, ny * (GH1 - 1));
+
+      const stormVal = v0 * 0.55 + v1 * 0.45;
+      const front = Math.max(0, (stormVal - 0.56) / 0.44);
+      const alpha = Math.round(Math.min(1, front * (0.42 + equatorBand * 0.58)) * 185);
+
+      const idx = (y * W + x) * 4;
+      data[idx] = Math.round(170 + front * 65);
+      data[idx + 1] = Math.round(208 + front * 38);
+      data[idx + 2] = Math.round(255);
+      data[idx + 3] = alpha;
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return new THREE.CanvasTexture(canvas);
+}

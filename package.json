@@ -18,7 +18,7 @@
     "account:new": "tsx scripts/new-account.ts"
   },
   "dependencies": {
-    "three": "^0.179.1"
+    "three": "^0.183.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

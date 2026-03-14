@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 
 import { latLonToCartesian } from '../scrapbook';
-import { createCloudTexture, createEarthTexture } from './textureFactory';
+import {
+  createCloudTexture,
+  createEarthTexture,
+  createEarthTileTexture,
+  createNightLightsTexture,
+  createWeatherTexture
+} from './textureFactory';
 
 import type { CreateSceneSystemOptions, SceneConfig, ViewportInteractionHandlers } from '../types';
 
@@ -22,6 +28,11 @@ interface DragState {
   startX: number;
   startY: number;
   selectionHandler: ((pinId: string) => void) | null;
+}
+
+interface EnvironmentState {
+  utcTime: string;
+  weather: string;
 }
 
 function seededRandomFactory(seed: number): () => number {
@@ -118,8 +129,13 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
 
   const earthRand = seededRandomFactory(43);
   const cloudRand = seededRandomFactory(44);
-  const earthTexture = createEarthTexture(earthRand);
+  const cityLightRand = seededRandomFactory(45);
+  const weatherRand = seededRandomFactory(46);
+  const earthFallbackTexture = createEarthTexture(earthRand);
+  const earthTexture = isStaticMode ? earthFallbackTexture : createEarthTileTexture(earthFallbackTexture, 2);
   const cloudTexture = createCloudTexture(cloudRand);
+  const nightLightsTexture = createNightLightsTexture(earthFallbackTexture, cityLightRand);
+  const weatherTexture = createWeatherTexture(weatherRand);
 
   const globe = new THREE.Mesh(
     new THREE.SphereGeometry(
@@ -129,11 +145,16 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     ),
     new THREE.MeshStandardMaterial({
       map: earthTexture,
-      roughness: 0.75,
-      metalness: 0.08
+      emissiveMap: nightLightsTexture,
+      emissive: new THREE.Color(0xffc46a),
+      emissiveIntensity: 0.02,
+      roughness: 0.72,
+      metalness: 0.11
     })
   );
   worldGroup.add(globe);
+
+  const globeMaterial = globe.material as THREE.MeshStandardMaterial;
 
   const clouds = new THREE.Mesh(
     new THREE.SphereGeometry(sceneConfig.globe.radius * 1.006, 80, 80),
@@ -141,11 +162,28 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       map: cloudTexture,
       transparent: true,
       depthWrite: false,
+      opacity: 0.58,
       roughness: 0.9,
       metalness: 0
     })
   );
   worldGroup.add(clouds);
+
+  const cloudMaterial = clouds.material as THREE.MeshStandardMaterial;
+
+  const weatherLayer = new THREE.Mesh(
+    new THREE.SphereGeometry(sceneConfig.globe.radius * 1.014, 80, 80),
+    new THREE.MeshBasicMaterial({
+      map: weatherTexture,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  worldGroup.add(weatherLayer);
+
+  const weatherMaterial = weatherLayer.material as THREE.MeshBasicMaterial;
 
   const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(sceneConfig.atmosphere.radius, 84, 84),
@@ -157,6 +195,8 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     })
   );
   worldGroup.add(atmosphere);
+
+  const atmosphereMaterial = atmosphere.material as THREE.MeshBasicMaterial;
 
   const atmosphereGlow = new THREE.Mesh(
     new THREE.SphereGeometry(sceneConfig.atmosphere.radius * 1.06, 84, 84),
@@ -171,18 +211,11 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   );
   worldGroup.add(atmosphereGlow);
 
-  const orbitRing = new THREE.Mesh(
-    new THREE.TorusGeometry(sceneConfig.ring.radius, sceneConfig.ring.tube, 22, 140),
-    new THREE.MeshBasicMaterial({ color: sceneConfig.ring.color, transparent: true, opacity: 0.65 })
-  );
-  orbitRing.rotation.x = Math.PI * 0.43;
-  worldGroup.add(orbitRing);
-
-  const ambient = new THREE.HemisphereLight(0xd9f2ff, 0x0b1e38, 0.92);
+  const ambient = new THREE.HemisphereLight(0xc8dbff, 0x071325, 0.84);
   scene.add(ambient);
 
-  const sun = new THREE.DirectionalLight(0xffffff, 1.35);
-  sun.position.set(3.8, 1.9, 1.5);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.25);
+  sun.position.set(3.8, 1.7, 1.2);
   scene.add(sun);
 
   const pinsGroup = new THREE.Group();
@@ -203,6 +236,12 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   };
 
   let flight: FlightState | null = null;
+  const dayCycleMs = 160000;
+  const baseUtcHours = new Date().getUTCHours() + new Date().getUTCMinutes() / 60;
+  const environmentState: EnvironmentState = {
+    utcTime: '--:-- UTC',
+    weather: 'Calm skies'
+  };
 
   function requestRender(): void {
     camera.lookAt(lookTarget);
@@ -344,10 +383,46 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   }
 
   function update(time: number): void {
+    const tDay = isStaticMode ? 0.37 : (time % dayCycleMs) / dayCycleMs;
+    const simHours = (baseUtcHours + tDay * 24) % 24;
+    const simHourInt = Math.floor(simHours);
+    const simMinuteInt = Math.floor((simHours - simHourInt) * 60);
+    environmentState.utcTime = `${String(simHourInt).padStart(2, '0')}:${String(simMinuteInt).padStart(2, '0')} UTC`;
+
+    const sunTheta = tDay * Math.PI * 2;
+    sun.position.set(
+      Math.cos(sunTheta) * 4.2,
+      Math.sin(sunTheta) * 2.35,
+      Math.sin(sunTheta * 0.56) * 2.2
+    );
+    const sunAltitude = THREE.MathUtils.clamp((sun.position.y + 2.35) / 4.7, 0, 1);
+    ambient.intensity = 0.42 + sunAltitude * 0.58;
+    sun.intensity = 0.45 + sunAltitude * 1.35;
+    globeMaterial.emissiveIntensity = THREE.MathUtils.clamp(1 - sunAltitude * 1.55, 0.02, 0.95);
+
+    const weatherBand = isStaticMode
+      ? 0.46
+      : 0.5 + Math.sin(time * 0.00009) * 0.22 + Math.sin(time * 0.000033 + 1.4) * 0.16;
+
+    let weatherLabel = 'Calm skies';
+    if (weatherBand > 0.74) {
+      weatherLabel = 'Storm fronts';
+    } else if (weatherBand > 0.58) {
+      weatherLabel = 'Cloudy';
+    } else if (weatherBand < 0.34) {
+      weatherLabel = 'Clear';
+    }
+
+    environmentState.weather = weatherLabel;
+    const cloudOpacity = THREE.MathUtils.clamp(0.35 + weatherBand * 0.42, 0.3, 0.82);
+    cloudMaterial.opacity = cloudOpacity;
+    weatherMaterial.opacity = THREE.MathUtils.clamp(0.08 + weatherBand * 0.28, 0.08, 0.42);
+    atmosphereMaterial.opacity = THREE.MathUtils.clamp(0.14 + weatherBand * 0.14, 0.12, 0.32);
+
     globe.rotation.y += 0.0014;
     clouds.rotation.y += 0.0009;
+    weatherLayer.rotation.y += 0.0016;
     atmosphere.rotation.y += 0.001;
-    orbitRing.rotation.z += 0.0015;
     stars.rotation.y += 0.00008;
 
     if (flight) {
@@ -409,6 +484,9 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     resize,
     flyToLatLon,
     raycastGlobeFromCamera,
+    getEnvironmentState() {
+      return environmentState;
+    },
     render
   };
 }

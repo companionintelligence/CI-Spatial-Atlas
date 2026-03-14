@@ -115,6 +115,35 @@ body {
   line-height: 1.33;
 }
 
+.env-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+.env-grid div {
+  border: 1px solid rgba(145, 178, 242, 0.26);
+  border-radius: 10px;
+  padding: 0.46rem 0.5rem;
+  background: rgba(12, 29, 55, 0.72);
+}
+
+.env-grid dt {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.env-grid dd {
+  margin: 0.18rem 0 0;
+  color: #e8eeff;
+  font-weight: 700;
+  font-size: 0.83rem;
+}
+
 #account-form,
 #scrapbook-form,
 #pin-detail-form {
@@ -349,5 +378,9 @@ body {
 
   #viewport {
     min-height: 56vh;
+  }
+
+  .env-grid {
+    grid-template-columns: 1fr;
   }
 }

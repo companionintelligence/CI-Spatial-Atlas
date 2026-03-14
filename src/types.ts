@@ -75,6 +75,10 @@ export interface SceneSystem {
   resize: () => void;
   flyToLatLon: (lat: number, lon: number, options?: { duration?: number; distance?: number }) => void;
   raycastGlobeFromCamera: () => Vector3;
+  getEnvironmentState: () => {
+    utcTime: string;
+    weather: string;
+  };
   render: () => void;
 }
 

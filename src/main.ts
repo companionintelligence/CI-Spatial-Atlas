@@ -16,9 +16,15 @@ function getElementByIdOrThrow<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 
+function getElementById<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
 const appEl = getElementByIdOrThrow<HTMLDivElement>('app');
 const viewportEl = getElementByIdOrThrow<HTMLElement>('viewport');
-const workflowListEl = getElementByIdOrThrow<HTMLUListElement>('workflow-list');
+const workflowListEl = getElementById<HTMLUListElement>('workflow-list');
+const envTimeEl = getElementById<HTMLElement>('env-time');
+const envWeatherEl = getElementById<HTMLElement>('env-weather');
 
 const elements: InputElements = {
   accountFormEl: getElementByIdOrThrow<HTMLFormElement>('account-form'),
@@ -39,7 +45,9 @@ const elements: InputElements = {
   journeyStatusEl: getElementByIdOrThrow<HTMLParagraphElement>('journey-status')
 };
 
-renderWorkflowList(workflowListEl);
+if (workflowListEl) {
+  renderWorkflowList(workflowListEl);
+}
 
 const isStaticMode = new URLSearchParams(window.location.search).get('static') === '1';
 const sceneSystem = createSceneSystem({ mountEl: appEl, viewportEl, isStaticMode });
@@ -149,6 +157,15 @@ function refreshUI(journeyStatus: string): void {
     selectedPin: scrapbookSystem.getSelectedPin(),
     journeyStatus
   });
+
+  const env = sceneSystem.getEnvironmentState();
+  if (envTimeEl) {
+    envTimeEl.textContent = env.utcTime;
+  }
+
+  if (envWeatherEl) {
+    envWeatherEl.textContent = env.weather;
+  }
 }
 
 refreshUI('Journey idle.');

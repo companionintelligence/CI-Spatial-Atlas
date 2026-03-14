@@ -8,16 +8,41 @@
   <body>
     <div id="layout">
       <aside id="control-panel">
+        <header class="panel-head">
+          <h1>Companion Earth</h1>
+          <p class="sub">Planetary intelligence cockpit with account sessions, map memory, weather, and route playback.</p>
+        </header>
+
+        <section class="card">
+          <h2>Workflow Steps</h2>
+          <p class="card-note">Deterministic vibe loop: build, screenshot validation, and release gate.</p>
+          <ul id="workflow-list"></ul>
+        </section>
 
         <section class="card">
           <h2>New Account</h2>
-          <p class="card-note">Switch context before creating or editing scrapbook entries.</p>
+          <p class="card-note">Set or switch account scope before editing scrapbook memories.</p>
           <form id="account-form">
             <label for="account-name">Account Name</label>
             <input id="account-name" name="accountName" value="earth-operator" maxlength="48" />
             <button type="submit">Create Account Session</button>
           </form>
           <p id="account-status" aria-live="polite"></p>
+        </section>
+
+        <section class="card">
+          <h2>Environment</h2>
+          <p class="card-note">Live simulated time and weather state for globe lighting and atmosphere behavior.</p>
+          <dl class="env-grid">
+            <div>
+              <dt>Time</dt>
+              <dd id="env-time">--:-- UTC</dd>
+            </div>
+            <div>
+              <dt>Weather</dt>
+              <dd id="env-weather">Loading...</dd>
+            </div>
+          </dl>
         </section>
 
         <section class="card">
