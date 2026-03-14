@@ -267,9 +267,9 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const xrSystem = createXrSystem(renderer, scene, worldGroup);
   renderer.domElement.addEventListener('xr-squeeze-start', () => controls.zoomIn());
 
-  // 3D Tiles (silently disabled if token absent)
+  // 3D Tiles (silently disabled if no token present)
   let tilesSystem: Awaited<ReturnType<typeof initTilesSystem>> = null;
-  void initTilesSystem(scene, camera, renderer, sceneConfig.globe.radius).then((sys) => { tilesSystem = sys; });
+  void initTilesSystem(scene, camera, renderer, sceneConfig.globe.radius, viewportEl).then((sys) => { tilesSystem = sys; });
 
   function bindViewportInteractions({ onSelectPin }: ViewportInteractionHandlers): void {
     selectionHandler = onSelectPin ?? null;
