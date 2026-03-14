@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+
 import {
   cartesianToLatLon,
   getAccountPins,
@@ -6,9 +7,11 @@ import {
   loadAllScrapbookData,
   saveAllScrapbookData,
   setAccountPins
-} from '../scrapbook.js';
+} from '../scrapbook';
 
-function createPinMarker(pin, sceneConfig, isSelected) {
+import type { CreateScrapbookSystemOptions, Pin, PinUpdates } from '../types';
+
+function createPinMarker(pin: Pin, sceneConfig: CreateScrapbookSystemOptions['sceneConfig'], isSelected: boolean): THREE.Group {
   const visuals = sceneConfig.scrapbook;
   const normal = latLonToCartesian(pin.lat, pin.lon, 1).normalize();
   const anchorPoint = latLonToCartesian(pin.lat, pin.lon, sceneConfig.globe.radius);
@@ -58,7 +61,7 @@ function createPinMarker(pin, sceneConfig, isSelected) {
   return group;
 }
 
-function createJourneyRoute(pins, sceneConfig) {
+function createJourneyRoute(pins: Pin[], sceneConfig: CreateScrapbookSystemOptions['sceneConfig']): THREE.Line | null {
   if (pins.length < 2) {
     return null;
   }
@@ -81,18 +84,29 @@ function createJourneyRoute(pins, sceneConfig) {
   );
 }
 
-export function createScrapbookSystem({ sceneConfig, pinsGroup }) {
+export function createScrapbookSystem({ sceneConfig, pinsGroup }: CreateScrapbookSystemOptions): {
+  setActiveAccount: (accountName: string) => void;
+  getActiveAccount: () => string;
+  getPins: () => Pin[];
+  getSelectedPin: () => Pin | null;
+  selectPin: (pinId: string) => void;
+  addPinFromWorldPoint: (worldPoint: THREE.Vector3, labelText: string) => void;
+  updateSelectedPin: (updates: PinUpdates) => void;
+  deleteSelectedPin: () => void;
+  getJourneyPins: () => Pin[];
+  renderPinsInScene: () => void;
+} {
   let scrapbookDb = loadAllScrapbookData();
   let activeAccount = 'earth-operator';
   let pins = getAccountPins(scrapbookDb, activeAccount);
   let selectedPinId = pins[0]?.id || null;
 
-  function persist() {
+  function persist(): void {
     scrapbookDb = setAccountPins(scrapbookDb, activeAccount, pins);
     saveAllScrapbookData(scrapbookDb);
   }
 
-  function setActiveAccount(accountName) {
+  function setActiveAccount(accountName: string): void {
     activeAccount = accountName;
     scrapbookDb = loadAllScrapbookData();
     pins = getAccountPins(scrapbookDb, activeAccount);
@@ -100,19 +114,19 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }) {
     renderPinsInScene();
   }
 
-  function selectPin(pinId) {
+  function selectPin(pinId: string): void {
     selectedPinId = pinId;
     renderPinsInScene();
   }
 
-  function getSelectedPin() {
+  function getSelectedPin(): Pin | null {
     return pins.find((pin) => pin.id === selectedPinId) || null;
   }
 
-  function addPinFromWorldPoint(worldPoint, labelText) {
+  function addPinFromWorldPoint(worldPoint: THREE.Vector3, labelText: string): void {
     const { lat, lon, altitude } = cartesianToLatLon(worldPoint, sceneConfig.globe.radius);
 
-    const pin = {
+    const pin: Pin = {
       id: crypto.randomUUID(),
       label: labelText || 'Untitled Memory',
       notes: '',
@@ -129,7 +143,7 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }) {
     renderPinsInScene();
   }
 
-  function updateSelectedPin(updates) {
+  function updateSelectedPin(updates: PinUpdates): void {
     if (!selectedPinId) {
       return;
     }
@@ -151,7 +165,7 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }) {
     renderPinsInScene();
   }
 
-  function deleteSelectedPin() {
+  function deleteSelectedPin(): void {
     if (!selectedPinId) {
       return;
     }
@@ -163,19 +177,19 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }) {
     renderPinsInScene();
   }
 
-  function getPins() {
+  function getPins(): Pin[] {
     return pins;
   }
 
-  function getActiveAccount() {
+  function getActiveAccount(): string {
     return activeAccount;
   }
 
-  function getJourneyPins() {
+  function getJourneyPins(): Pin[] {
     return pins.slice().sort((a, b) => new Date(a.createdAt).valueOf() - new Date(b.createdAt).valueOf());
   }
 
-  function renderPinsInScene() {
+  function renderPinsInScene(): void {
     pinsGroup.clear();
 
     const journeyRoute = createJourneyRoute(getJourneyPins(), sceneConfig);

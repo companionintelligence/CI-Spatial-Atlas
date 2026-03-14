@@ -1,7 +1,29 @@
 import * as THREE from 'three';
-import { latLonToCartesian } from '../scrapbook.js';
 
-function seededRandomFactory(seed) {
+import { latLonToCartesian } from '../scrapbook';
+
+import type { CreateSceneSystemOptions, SceneConfig, ViewportInteractionHandlers } from '../types';
+
+interface FlightState {
+  startAt: number;
+  duration: number;
+  fromPosition: THREE.Vector3;
+  fromTarget: THREE.Vector3;
+  toPosition: THREE.Vector3;
+  toTarget: THREE.Vector3;
+}
+
+interface DragState {
+  active: boolean;
+  moved: boolean;
+  lastX: number;
+  lastY: number;
+  startX: number;
+  startY: number;
+  selectionHandler: ((pinId: string) => void) | null;
+}
+
+function seededRandomFactory(seed: number): () => number {
   let value = seed;
   return () => {
     value = (value * 1664525 + 1013904223) % 4294967296;
@@ -9,8 +31,8 @@ function seededRandomFactory(seed) {
   };
 }
 
-export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
-  const sceneConfig = {
+export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateSceneSystemOptions) {
+  const sceneConfig: SceneConfig = {
     camera: {
       fov: 52,
       near: 0.1,
@@ -139,7 +161,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
 
-  const dragState = {
+  const dragState: DragState = {
     active: false,
     moved: false,
     lastX: 0,
@@ -149,35 +171,35 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     selectionHandler: null
   };
 
-  let flight = null;
+  let flight: FlightState | null = null;
 
-  function requestRender() {
+  function requestRender(): void {
     camera.lookAt(lookTarget);
     render();
   }
 
-  function setPointerFromViewport(clientX, clientY) {
+  function setPointerFromViewport(clientX: number, clientY: number): void {
     const bounds = renderer.domElement.getBoundingClientRect();
 
     pointerNdc.x = ((clientX - bounds.left) / bounds.width) * 2 - 1;
     pointerNdc.y = -((clientY - bounds.top) / bounds.height) * 2 + 1;
   }
 
-  function intersectObjectsAtViewport(clientX, clientY, objects) {
+  function intersectObjectsAtViewport(clientX: number, clientY: number, objects: THREE.Object3D[]): THREE.Intersection[] {
     setPointerFromViewport(clientX, clientY);
     raycaster.setFromCamera(pointerNdc, camera);
     return raycaster.intersectObjects(objects, true);
   }
 
-  function pickPinFromViewport(clientX, clientY) {
+  function pickPinFromViewport(clientX: number, clientY: number): string | null {
     const hit = intersectObjectsAtViewport(clientX, clientY, [pinsGroup]).find(
-      (entry) => entry.object.userData.pinId
+      (entry) => typeof entry.object.userData.pinId === 'string'
     );
 
-    return hit?.object.userData.pinId || null;
+    return (hit?.object.userData.pinId as string | undefined) || null;
   }
 
-  function onPointerDown(event) {
+  function onPointerDown(event: PointerEvent): void {
     if (event.button !== 0) {
       return;
     }
@@ -192,7 +214,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     renderer.domElement.setPointerCapture(event.pointerId);
   }
 
-  function onPointerMove(event) {
+  function onPointerMove(event: PointerEvent): void {
     if (!dragState.active) {
       return;
     }
@@ -223,7 +245,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     requestRender();
   }
 
-  function onPointerUp(event) {
+  function onPointerUp(event: PointerEvent): void {
     if (!dragState.active) {
       return;
     }
@@ -241,7 +263,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     dragState.active = false;
   }
 
-  function onPointerCancel(event) {
+  function onPointerCancel(event: PointerEvent): void {
     if (!dragState.active) {
       return;
     }
@@ -251,7 +273,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     dragState.active = false;
   }
 
-  function bindViewportInteractions({ onSelectPin }) {
+  function bindViewportInteractions({ onSelectPin }: ViewportInteractionHandlers): void {
     dragState.selectionHandler = onSelectPin || null;
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
@@ -260,11 +282,11 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     renderer.domElement.addEventListener('pointercancel', onPointerCancel);
   }
 
-  function render() {
+  function render(): void {
     renderer.render(scene, camera);
   }
 
-  function resize() {
+  function resize(): void {
     const width = viewportEl.clientWidth;
     const height = viewportEl.clientHeight;
 
@@ -273,7 +295,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     renderer.setSize(width, height);
   }
 
-  function flyToLatLon(lat, lon, options = {}) {
+  function flyToLatLon(lat: number, lon: number, options: { duration?: number; distance?: number } = {}): void {
     const duration = options.duration ?? 1400;
     const distance = options.distance ?? 0.78;
 
@@ -290,7 +312,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     };
   }
 
-  function update(time) {
+  function update(time: number): void {
     globe.rotation.y += 0.0014;
     atmosphere.rotation.y += 0.001;
     orbitRing.rotation.z += 0.0015;
@@ -318,12 +340,12 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     render();
   }
 
-  function raycastGlobeFromCamera() {
+  function raycastGlobeFromCamera(): THREE.Vector3 {
     const direction = new THREE.Vector3();
     camera.getWorldDirection(direction);
 
-    const raycaster = new THREE.Raycaster(camera.position.clone(), direction.normalize());
-    const hit = raycaster.intersectObject(globe, true)[0];
+    const cameraRaycaster = new THREE.Raycaster(camera.position.clone(), direction.normalize());
+    const hit = cameraRaycaster.intersectObject(globe, true)[0];
     if (hit) {
       return hit.point;
     }
@@ -331,18 +353,18 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     return direction.multiplyScalar(-sceneConfig.globe.radius);
   }
 
-  function startLoop() {
+  function startLoop(): void {
     if (isStaticMode) {
       update(performance.now());
       return;
     }
 
-    const animate = (time) => {
+    const animate = (time: number) => {
       update(time);
-      requestAnimationFrame(animate);
+      window.requestAnimationFrame(animate);
     };
 
-    requestAnimationFrame(animate);
+    window.requestAnimationFrame(animate);
   }
 
   return {

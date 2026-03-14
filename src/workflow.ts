@@ -29,9 +29,9 @@ export const workflowSteps = [
     detail: 'Persist account-scoped scrapbook pins on globe coordinates.',
     status: 'active'
   }
-];
+] as const;
 
-export function renderWorkflowList(mountEl) {
+export function renderWorkflowList(mountEl: HTMLUListElement): void {
   mountEl.innerHTML = '';
 
   workflowSteps.forEach((step) => {

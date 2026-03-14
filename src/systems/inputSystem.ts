@@ -1,6 +1,10 @@
-import { renderPinList } from '../scrapbook.js';
+import { renderPinList } from '../scrapbook';
 
-export function createInputSystem(elements, handlers) {
+import type { InputElements, InputHandlers, InputState } from '../types';
+
+export function createInputSystem(elements: InputElements, handlers: InputHandlers): {
+  renderState: (state: InputState) => void;
+} {
   const {
     accountFormEl,
     accountNameInputEl,
@@ -62,12 +66,12 @@ export function createInputSystem(elements, handlers) {
     handlers.onNextJourneyStop();
   });
 
-  function renderState(state) {
+  function renderState(state: InputState): void {
     accountStatusEl.textContent = `Active account: ${state.activeAccount}`;
 
     renderPinList(pinListEl, state.pins);
 
-    const pinRows = pinListEl.querySelectorAll('.pin-item');
+    const pinRows = pinListEl.querySelectorAll<HTMLLIElement>('.pin-item');
     pinRows.forEach((row, index) => {
       const pin = state.pins[state.pins.length - 1 - index];
       row.dataset.pinId = pin.id;
