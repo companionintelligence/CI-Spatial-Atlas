@@ -1,0 +1,311 @@
+:root {
+  --ink-0: #f4f8ff;
+  --ink-1: #c8d8ec;
+  --ink-2: #7e97b8;
+  --panel: #08152a;
+  --panel-border: #28456a;
+  --accent: #42d4b8;
+  --accent-2: #76b7ff;
+  --bg-1: #041027;
+  --bg-2: #090f1d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif;
+  color: var(--ink-0);
+  background:
+    radial-gradient(1200px 700px at 75% 20%, #11406c 0%, rgba(17, 64, 108, 0) 62%),
+    radial-gradient(900px 500px at 15% 92%, #0f2744 0%, rgba(15, 39, 68, 0) 62%),
+    linear-gradient(150deg, var(--bg-1), var(--bg-2));
+}
+
+#layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 340px) 1fr;
+  width: 100%;
+  height: 100%;
+  gap: 0;
+}
+
+#control-panel {
+  border-right: 1px solid rgba(118, 183, 255, 0.25);
+  background: linear-gradient(180deg, rgba(8, 21, 42, 0.92), rgba(4, 16, 32, 0.92));
+  backdrop-filter: blur(8px);
+  padding: 1.1rem;
+  overflow-y: auto;
+}
+
+#control-panel h1 {
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: 0.01em;
+}
+
+#control-panel .sub {
+  margin: 0.25rem 0 1rem;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+
+.card {
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 0.8rem;
+  margin-bottom: 0.8rem;
+  background: rgba(7, 22, 43, 0.72);
+}
+
+.card h2 {
+  margin: 0 0 0.65rem;
+  font-size: 0.98rem;
+  color: var(--ink-1);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+#account-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+#scrapbook-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+#pin-detail-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+#account-form label {
+  color: var(--ink-1);
+  font-size: 0.86rem;
+}
+
+#scrapbook-form label {
+  color: var(--ink-1);
+  font-size: 0.86rem;
+}
+
+#pin-detail-form label {
+  color: var(--ink-1);
+  font-size: 0.86rem;
+}
+
+#account-form input {
+  border: 1px solid #356390;
+  background: #091c35;
+  color: var(--ink-0);
+  border-radius: 9px;
+  padding: 0.56rem 0.6rem;
+  font-size: 0.95rem;
+}
+
+#scrapbook-form input {
+  border: 1px solid #356390;
+  background: #091c35;
+  color: var(--ink-0);
+  border-radius: 9px;
+  padding: 0.56rem 0.6rem;
+  font-size: 0.95rem;
+}
+
+#pin-detail-form input,
+#pin-detail-form textarea {
+  border: 1px solid #356390;
+  background: #091c35;
+  color: var(--ink-0);
+  border-radius: 9px;
+  padding: 0.56rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+#pin-detail-form textarea {
+  resize: vertical;
+}
+
+#account-form button {
+  border: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #042233;
+  border-radius: 9px;
+  padding: 0.6rem 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#scrapbook-form button {
+  border: 0;
+  background: linear-gradient(90deg, #ffd36e, #ff8d6e);
+  color: #3d1d0f;
+  border-radius: 9px;
+  padding: 0.6rem 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#pin-detail-form button {
+  border: 0;
+  background: linear-gradient(90deg, #87a6ff, #6de7ff);
+  color: #132046;
+  border-radius: 9px;
+  padding: 0.6rem 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#account-status {
+  color: var(--ink-1);
+  margin: 0.62rem 0 0;
+  font-size: 0.86rem;
+}
+
+#workflow-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+}
+
+#pin-list {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pin-item {
+  border: 1px solid rgba(118, 183, 255, 0.24);
+  background: rgba(9, 28, 53, 0.74);
+  border-radius: 9px;
+  padding: 0.45rem 0.55rem;
+  cursor: pointer;
+}
+
+.pin-item.selected {
+  border-color: rgba(255, 211, 110, 0.78);
+  box-shadow: 0 0 0 1px rgba(255, 211, 110, 0.34);
+}
+
+.pin-item h3 {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.pin-item p {
+  margin: 0.2rem 0 0;
+  color: var(--ink-2);
+  font-size: 0.78rem;
+}
+
+.pin-empty {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.row-actions button {
+  border: 1px solid #3f6793;
+  background: #0a2341;
+  color: var(--ink-0);
+  border-radius: 8px;
+  padding: 0.45rem 0.58rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.row-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#journey-status {
+  color: var(--ink-2);
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+}
+
+.workflow-item {
+  display: grid;
+  grid-template-columns: 11px 1fr;
+  align-items: start;
+  gap: 0.62rem;
+}
+
+.workflow-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  margin-top: 0.34rem;
+  box-shadow: 0 0 0 3px rgba(118, 183, 255, 0.2);
+}
+
+.workflow-dot.active {
+  background: #48e5b5;
+}
+
+.workflow-item h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.workflow-item p {
+  margin: 0.18rem 0 0;
+  color: var(--ink-2);
+  font-size: 0.83rem;
+  line-height: 1.35;
+}
+
+#viewport {
+  min-width: 0;
+  min-height: 0;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+#app canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+#app canvas.is-dragging {
+  cursor: grabbing;
+}
+
+@media (max-width: 920px) {
+  #layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  #control-panel {
+    border-right: 0;
+    border-bottom: 1px solid rgba(118, 183, 255, 0.25);
+  }
+
+  #viewport {
+    min-height: 56vh;
+  }
+}

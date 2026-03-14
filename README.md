@@ -1,113 +1,37 @@
-# CI Map Testbed
+# Companion Earth
 
-React + Cesium web app to visualize and edit time-dynamic geospatial tracks (timeline) plus a 3D Tileset.
+Companion Earth is a browser-native, Three.js-powered planetary exploration prototype with an iterative vibe coding workflow.
 
-## Quick Start
+## Current Feature Set
 
-1. Create an `.env` file with:
+- Declarative scene setup for globe rendering
+- Desktop drag-to-rotate globe interaction
+- Account session switching
+- Spatial scrapbook pin drops rendered as globe beacons
+- Direct in-scene scrapbook beacon selection
+- Chronological journey routes rendered across scrapbook memories
+- Account-scoped local persistence for scrapbook memories
+- Deterministic visual regression mode via `/?static=1`
 
-```bash
-echo "VITE_CESIUM_ION_ACCESS_TOKEN=YOUR_TOKEN_HERE" > .env
-```
+## Iterative Vibe Loop
 
-1. Install dependencies:
+1. `npm install`
+2. `npm run vibe:dev`
+3. `npm run vibe:build`
+4. `npm run vibe:test`
+5. If UI changes are intentional: `npm run vibe:test:update` then `npm run vibe:test`
+6. Pre-merge gate: `npm run vibe:loop`
 
-```bash
-npm install
-```
+## New Account Session
 
-1. Run the dev server:
+- CLI setup: `npm run account:new -- "my-account"`
+- In-app setup: use the **New Account** panel and submit.
 
-```bash
-npm run dev
-```
+## Agent Customization Files
 
-Open the printed local URL. You should see the Cesium globe, timeline and a loading overlay that disappears when assets load.
+- `.github/copilot-instructions.md`
+- `.github/instructions/vibe-loop.instructions.md`
+- `.github/agents/vibe-iteration.agent.md`
+- `.github/prompts/vibe-iterate.prompt.md`
 
-## Building
-
-```bash
-npm run build
-npm run preview
-```
-
-## Adding & Editing Time-Dynamic Tracks
-
-Use the left-hand Track Editor panel in the running app to:
-
-* Add / remove tracks
-* Add / edit / delete samples (time + lon + lat + optional height)
-* Change track color & id
-* Import / export GeoJSON
-
-Edits are persisted automatically to `localStorage` (`tracksGeoJSON`).
-
-Example programmatic track snippet (in `src/data/points.ts` default seeds):
-
-```ts
-export const tracks: TimedPointTrack[] = [
-  {
-    id: 'vehicle-42',
-    color: Cesium.Color.LIME,
-    samples: [
-      { time: '2025-11-02T18:00:00Z', lon: -122.4, lat: 37.77 },
-      { time: '2025-11-02T18:02:00Z', lon: -122.398, lat: 37.771 },
-      { time: '2025-11-02T18:04:00Z', lon: -122.397, lat: 37.772 }
-    ]
-  }
-];
-```
-
-Rules:
-
-* ISO timestamps should be ascending (editor re-sorts after changes).
-* Provide lon/lat in WGS84 degrees, optional height meters.
-* Color stored as CSS hex.
-* Clock automatically spans earliest start -> latest stop across all tracks.
-
-To load external JSON dynamically outside the editor, replace the static import with a fetch:
-
-```ts
-const response = await fetch('/data/tracks.json');
-const tracks = await response.json();
-```
-
-## GeoJSON Schema
-
-Exported file is a FeatureCollection where each Feature represents a track:
-
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": { "type": "MultiPoint", "coordinates": [[lon, lat, height], ...] },
-      "properties": {
-        "id": "alpha",
-        "times": ["2025-11-02T18:00:00Z", "2025-11-02T18:01:00Z", "..."],
-        "color": "#00ffcc",
-        "meta": { }
-      }
-    }
-  ]
-}
-```
-
-The order of `coordinates` aligns 1:1 with `times`.
-
-Conversion utilities live in `src/lib/geojson.ts` (`tracksToGeoJSON` / `geoJSONToTracks`).
-
-## Environment Token
-
-The prior variable `CESIUM_ION_ACCESS_TOKEN` has been renamed for Vite consumption to `VITE_CESIUM_ION_ACCESS_TOKEN`. Rotate tokens periodically. Do not commit real tokens to public repositories.
-
-## Future Enhancements
-
-* Validation UI for overlapping / duplicate timestamps
-* Performance: dynamic import Cesium submodules to shrink bundle
-* Drag timeline scrubber integration with custom playback controls
-* Export as animated video or frame sequence
-* Server sync (REST or WebSocket) for collaborative editing
-
-
+These files are configured to support continuous, scoped iterations with visual stability checks.

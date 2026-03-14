@@ -1,31 +1,6 @@
-# Node
-node_modules/
-backend/dist/
-backend/node_modules/
-
-# Test temporary directories
-backend/test-*/
-backend/tests/
-backend/backend/
-!backend/tmp_test/
-
-# Build artifacts
-*.o
-*.so
-*.dylib
-*.test
-*.out
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
+/node_modules
+/dist
+/.env
+/.env.local
+/.env.development
+/.env.test
