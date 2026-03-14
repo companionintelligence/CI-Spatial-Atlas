@@ -40,7 +40,7 @@ export function createCameraControls(
   domElement: HTMLElement,
   opts: CameraControlsOptions = {}
 ) {
-  const minRadius = opts.minRadius ?? 1.32;
+  const minRadius = opts.minRadius ?? 1.15;
   const maxRadius = opts.maxRadius ?? 14;
 
   // Current displayed state (damped toward target)
@@ -162,7 +162,7 @@ export function createCameraControls(
     flight = null;
     // Drag sensitivity scales with altitude: slower when zoomed in, faster when zoomed out
     const rotSpeed = 0.008 * Math.max(0.35, radius / 4.0);
-    tTheta -= dx * rotSpeed;
+    tTheta += dx * rotSpeed;
     tPhi = clampPhi(tPhi + dy * rotSpeed * 0.82);
   }
 
@@ -200,14 +200,14 @@ export function createCameraControls(
   function onWheel(e: WheelEvent): void {
     e.preventDefault();
     flight = null;
-    const factor = e.deltaY > 0 ? 1.12 : 0.89;
+    const factor = e.deltaY > 0 ? 1.18 : 0.82;
     tRadius = THREE.MathUtils.clamp(tRadius * factor, minRadius, maxRadius);
   }
 
   function onDblClick(): void {
     // Double-click zooms in 35% — mirrors Google Earth/Maps behaviour
     flight = null;
-    tRadius = THREE.MathUtils.clamp(tRadius * 0.65, minRadius, maxRadius);
+    tRadius = THREE.MathUtils.clamp(tRadius * 0.55, minRadius, maxRadius);
   }
 
   function onContextMenu(e: Event): void {

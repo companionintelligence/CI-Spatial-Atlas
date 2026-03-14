@@ -86,7 +86,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   renderer.setSize(viewportEl.clientWidth, viewportEl.clientHeight);
   // Physically-based render pipeline
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 0.82;
   mountEl.appendChild(renderer.domElement);
 
   const worldGroup = new THREE.Group();
@@ -94,11 +94,11 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
 
   const starRand = seededRandomFactory(42);
   const starGeometry = new THREE.BufferGeometry();
-  const starCount = 2200;
+  const starCount = 3200;
   const positions = new Float32Array(starCount * 3);
 
   for (let i = 0; i < starCount * 3; i += 3) {
-    const spread = 55;
+    const spread = 42;
     positions[i]     = (starRand() - 0.5) * spread;
     positions[i + 1] = (starRand() - 0.5) * spread;
     positions[i + 2] = (starRand() - 0.5) * spread;
@@ -108,7 +108,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
 
   const stars = new THREE.Points(
     starGeometry,
-    new THREE.PointsMaterial({ color: 0xc8deff, size: 0.032, sizeAttenuation: true })
+    new THREE.PointsMaterial({ color: 0xd8e7ff, size: 0.05, sizeAttenuation: true, transparent: true, opacity: 0.9 })
   );
   scene.add(stars);
 
@@ -147,7 +147,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       map: cloudTexture,
       transparent: true,
       depthWrite: false,
-      opacity: 0.55,
+      opacity: 0.42,
       roughness: 0.9,
       metalness: 0
     })
@@ -162,7 +162,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       map: weatherTexture,
       transparent: true,
       depthWrite: false,
-      opacity: 0.14,
+      opacity: 0.08,
       blending: THREE.AdditiveBlending
     })
   );
@@ -185,6 +185,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
         map: hillshadeTexture,
         transparent: true,
         depthWrite: false,
+        opacity: 0.32,
         blending: THREE.MultiplyBlending
       })
     );
@@ -199,7 +200,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
         map: labelsTexture,
         transparent: true,
         depthWrite: false,
-        opacity: 0.88,
+        opacity: 0.58,
         blending: THREE.NormalBlending
       })
     );
@@ -211,10 +212,10 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   worldGroup.add(atmoSystem.mesh);
   const sunDirection = new THREE.Vector3();
 
-  const ambient = new THREE.HemisphereLight(0xc8dbff, 0x071325, 0.72);
+  const ambient = new THREE.HemisphereLight(0xbfd4ff, 0x040d1c, 0.5);
   scene.add(ambient);
 
-  const sun = new THREE.DirectionalLight(0xffeedd, 1.4);
+  const sun = new THREE.DirectionalLight(0xffefda, 0.98);
   sun.position.set(3.8, 1.7, 1.2);
   scene.add(sun);
 
@@ -255,7 +256,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   // Initial orbit matches legacy camera position (0, 0.35, 4.2).
   const controls = createCameraControls(camera, renderer.domElement, {
     theta: Math.PI / 2, phi: 0.083, radius: 4.215,
-    minRadius: 1.3, maxRadius: 14,
+    minRadius: 1.15, maxRadius: 14,
     onTap: (e: PointerEvent) => {
       if (!selectionHandler) return;
       const pinId = pickPinFromViewport(e.clientX, e.clientY);
@@ -330,8 +331,8 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     else if (weatherBand < 0.34) weatherLabel = 'Clear';
     environmentState.weather = weatherLabel;
 
-    cloudMaterial.opacity   = THREE.MathUtils.clamp(0.3  + weatherBand * 0.42, 0.25, 0.82);
-    weatherMaterial.opacity = THREE.MathUtils.clamp(0.07 + weatherBand * 0.26, 0.07, 0.38);
+    cloudMaterial.opacity   = THREE.MathUtils.clamp(0.2  + weatherBand * 0.28, 0.18, 0.55);
+    weatherMaterial.opacity = THREE.MathUtils.clamp(0.03 + weatherBand * 0.12, 0.03, 0.16);
 
     controls.tick(time);
     xrSystem.tick();
@@ -386,7 +387,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     getEnvironmentState() { return environmentState; },
     zoomIn:     () => controls.zoomIn(),
     zoomOut:    () => controls.zoomOut(),
-    getHeading: () => controls.getTheta(),
+    getHeading: () => THREE.MathUtils.euclideanModulo(controls.getTheta() - Math.PI / 2, Math.PI * 2),
     getRadius:  () => controls.getRadius(),
     domElement: renderer.domElement,
     xrButtons:  { vrButton: xrSystem.vrButton, arButton: xrSystem.arButton },

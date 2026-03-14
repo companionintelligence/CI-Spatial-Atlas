@@ -41,12 +41,12 @@ const FRAG_GLSL = /* glsl */ `
 
     // Sun altitude above surface normal
     float sunDot   = dot(norm, uSunDirection);
-    float dayFactor = smoothstep(-0.35, 0.55, sunDot);
+    float dayFactor = smoothstep(-0.50, 0.60, sunDot);
 
     // Rayleigh: deep-blue on night side, bright sky-blue on day side
     vec3 rayleigh = mix(
-      vec3(0.04, 0.10, 0.32),   // night twilight
-      vec3(0.18, 0.52, 0.98),   // daytime sky
+      vec3(0.08, 0.14, 0.38),   // night twilight
+      vec3(0.15, 0.44, 0.86),   // daytime sky
       dayFactor
     );
 
@@ -62,7 +62,7 @@ const FRAG_GLSL = /* glsl */ `
     vec3  mieCol = vec3(1.0, 0.95, 0.75) * mie;
 
     vec3  color = (rayleigh + sunsetCol + mieCol) * fresnel;
-    float alpha = fresnel * (0.52 + dayFactor * 0.48);
+    float alpha = fresnel * (0.38 + dayFactor * 0.34);
 
     gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.92));
   }

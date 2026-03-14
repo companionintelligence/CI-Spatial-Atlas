@@ -424,9 +424,9 @@ export function createWeatherTexture(rand: () => number): THREE.CanvasTexture {
       const alpha = Math.round(Math.min(1, front * (0.42 + equatorBand * 0.58)) * 185);
 
       const idx = (y * W + x) * 4;
-      data[idx] = Math.round(170 + front * 65);
-      data[idx + 1] = Math.round(208 + front * 38);
-      data[idx + 2] = Math.round(255);
+      data[idx] = Math.round(120 + front * 85);
+      data[idx + 1] = Math.round(160 + front * 65);
+      data[idx + 2] = Math.round(220 + front * 35);
       data[idx + 3] = alpha;
     }
   }

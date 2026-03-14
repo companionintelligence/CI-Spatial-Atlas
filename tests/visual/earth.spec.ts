@@ -101,6 +101,21 @@ test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
   });
 });
 
+test('Companion Earth closer zoom is visually stable', async ({ page }) => {
+  await page.goto('/?static=1');
+  await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
+
+  await page.locator('#zoom-in-btn').click();
+  await page.locator('#zoom-in-btn').click();
+  await page.locator('#zoom-in-btn').click();
+  await page.waitForTimeout(900);
+
+  await expect(page).toHaveScreenshot('companion-earth-close-zoom.png', {
+    animations: 'disabled',
+    fullPage: true
+  });
+});
+
 test('Companion Earth selects a pin directly from the globe', async ({ page }) => {
   await seedScrapbookState(page, seededInteractionState);
 
