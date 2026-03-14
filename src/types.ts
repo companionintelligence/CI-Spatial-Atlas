@@ -77,6 +77,7 @@ export interface SceneSystem {
   zoomIn: () => void;
   zoomOut: () => void;
   getHeading: () => number;
+  getRadius: () => number;
   domElement: HTMLCanvasElement;
   xrButtons: { vrButton: HTMLElement; arButton: HTMLElement };
   setLayerVisible: (layer: 'hillshade' | 'labels' | 'clouds' | 'weather', visible: boolean) => void;

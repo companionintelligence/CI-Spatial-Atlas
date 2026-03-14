@@ -84,6 +84,9 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(viewportEl.clientWidth, viewportEl.clientHeight);
+  // Physically-based render pipeline
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   mountEl.appendChild(renderer.domElement);
 
   const worldGroup = new THREE.Group();
@@ -130,8 +133,8 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       emissiveMap: nightLightsTexture,
       emissive: new THREE.Color(0xffa84a),
       emissiveIntensity: 0.02,
-      roughness: 0.68,
-      metalness: 0.08
+      roughness: 0.58,
+      metalness: 0.05
     })
   );
   worldGroup.add(globe);
@@ -384,6 +387,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     zoomIn:     () => controls.zoomIn(),
     zoomOut:    () => controls.zoomOut(),
     getHeading: () => controls.getTheta(),
+    getRadius:  () => controls.getRadius(),
     domElement: renderer.domElement,
     xrButtons:  { vrButton: xrSystem.vrButton, arButton: xrSystem.arButton },
     setLayerVisible,

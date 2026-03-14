@@ -672,3 +672,40 @@ body {
   #hud-coords { bottom: 72px; }
   #env-bar    { bottom: 72px; }
 }
+
+/* ── Settings / Account collapsible card ───────────────────────────────────── */
+details.settings-card > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #cfe0ff;
+  padding-bottom: 0.28rem;
+  user-select: none;
+}
+
+details.settings-card > summary::-webkit-details-marker { display: none; }
+
+details.settings-card > summary::after {
+  content: '\25B8';  /* ▸ */
+  font-size: 0.72rem;
+  opacity: 0.6;
+  transition: transform 0.18s ease;
+}
+
+details.settings-card[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+details.settings-card > summary ~ * {
+  margin-top: 0.55rem;
+}
+
+/* ── Tilt cursor ────────────────────────────────────────────────────────────── */
+#app canvas.is-tilting {
+  cursor: ns-resize;
+}

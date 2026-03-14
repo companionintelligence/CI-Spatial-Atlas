@@ -28,6 +28,7 @@ const envWeatherEl    = getElementById<HTMLElement>('env-weather');
 const envBarTimeEl    = getElementById<HTMLElement>('env-bar-time');
 const envBarWeatherEl = getElementById<HTMLElement>('env-bar-weather');
 const hudCoordsEl     = getElementById<HTMLElement>('hud-coords');
+const envBarAltEl     = getElementById<HTMLElement>('env-bar-alt');
 const sidebarOpenBtn  = getElementById<HTMLButtonElement>('sidebar-open');
 const sidebarCloseBtn = getElementById<HTMLButtonElement>('sidebar-close');
 const controlPanelEl  = getElementById<HTMLElement>('control-panel');
@@ -230,6 +231,35 @@ function refreshUI(journeyStatus: string): void {
 
 refreshUI('Journey idle.');
 sceneSystem.startLoop();
+
+// -------------------------------------------------------------------------
+// Live HUD tick — update env-bar and compass independently of pin events
+// so time/weather/altitude/heading are always current while orbiting.
+// -------------------------------------------------------------------------
+const GLOBE_RADIUS_UNITS = sceneSystem.sceneConfig.globe.radius; // 1.24
+const EARTH_RADIUS_KM = 6371;
+const KM_PER_UNIT = EARTH_RADIUS_KM / GLOBE_RADIUS_UNITS;
+
+function formatAltitude(km: number): string {
+  if (km < 1)      return `${Math.round(km * 1000)} m`;
+  if (km < 100)    return `${km.toFixed(1)} km`;
+  if (km < 10000)  return `${Math.round(km).toLocaleString()} km`;
+  return `${(km / 1000).toFixed(1)}k km`;
+}
+
+window.setInterval(() => {
+  const env = sceneSystem.getEnvironmentState();
+  if (envBarTimeEl)    envBarTimeEl.textContent    = env.utcTime;
+  if (envBarWeatherEl) envBarWeatherEl.textContent  = env.weather;
+
+  const altKm = Math.max(0, (sceneSystem.getRadius() - GLOBE_RADIUS_UNITS) * KM_PER_UNIT);
+  if (envBarAltEl) envBarAltEl.textContent = formatAltitude(altKm);
+
+  if (compassSvgEl) {
+    const headingDeg = (sceneSystem.getHeading() * 180) / Math.PI;
+    compassSvgEl.style.transform = `rotate(${-headingDeg}deg)`;
+  }
+}, 200);
 
 window.addEventListener('resize', () => {
   sceneSystem.resize();

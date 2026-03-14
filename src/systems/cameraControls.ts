@@ -63,6 +63,10 @@ export function createCameraControls(
   let dragLastX = 0;
   let dragLastY = 0;
 
+  // Right-drag (tilt-only) state — right-button drag adjusts phi without orbit
+  let rightDragActive = false;
+  let rightDragLastY = 0;
+
   // Touch / pinch state
   const activeTouches = new Map<number, { x: number; y: number }>();
   let prevPinchDist = 0;
@@ -116,6 +120,14 @@ export function createCameraControls(
   // -------------------------------------------------------------------------
 
   function onPointerDown(e: PointerEvent): void {
+    if (e.button === 2) {
+      // Right-click → tilt only (Google Earth right-drag behaviour)
+      rightDragActive = true;
+      rightDragLastY = e.clientY;
+      domElement.setPointerCapture(e.pointerId);
+      domElement.classList.add('is-tilting');
+      return;
+    }
     if (e.button !== 0) return;
     dragActive = true;
     dragMoved = false;
@@ -126,6 +138,15 @@ export function createCameraControls(
   }
 
   function onPointerMove(e: PointerEvent): void {
+    if (rightDragActive) {
+      // Right-drag: tilt (phi) only — no orbit
+      const dy = e.clientY - rightDragLastY;
+      rightDragLastY = e.clientY;
+      flight = null;
+      tPhi = clampPhi(tPhi + dy * 0.006);
+      return;
+    }
+
     if (!dragActive) return;
 
     const dx = e.clientX - dragLastX;
@@ -139,11 +160,19 @@ export function createCameraControls(
     if (!dragMoved) return;
 
     flight = null;
-    tTheta -= dx * 0.008;
-    tPhi = clampPhi(tPhi + dy * 0.0065);
+    // Drag sensitivity scales with altitude: slower when zoomed in, faster when zoomed out
+    const rotSpeed = 0.008 * Math.max(0.35, radius / 4.0);
+    tTheta -= dx * rotSpeed;
+    tPhi = clampPhi(tPhi + dy * rotSpeed * 0.82);
   }
 
   function onPointerUp(e: PointerEvent): void {
+    if (e.button === 2 && rightDragActive) {
+      domElement.releasePointerCapture(e.pointerId);
+      domElement.classList.remove('is-tilting');
+      rightDragActive = false;
+      return;
+    }
     if (!dragActive) return;
     domElement.releasePointerCapture(e.pointerId);
     domElement.classList.remove('is-dragging');
@@ -157,6 +186,10 @@ export function createCameraControls(
   }
 
   function onPointerCancel(e: PointerEvent): void {
+    if (rightDragActive) {
+      domElement.classList.remove('is-tilting');
+      rightDragActive = false;
+    }
     if (!dragActive) return;
     domElement.releasePointerCapture(e.pointerId);
     domElement.classList.remove('is-dragging');
@@ -169,6 +202,16 @@ export function createCameraControls(
     flight = null;
     const factor = e.deltaY > 0 ? 1.12 : 0.89;
     tRadius = THREE.MathUtils.clamp(tRadius * factor, minRadius, maxRadius);
+  }
+
+  function onDblClick(): void {
+    // Double-click zooms in 35% — mirrors Google Earth/Maps behaviour
+    flight = null;
+    tRadius = THREE.MathUtils.clamp(tRadius * 0.65, minRadius, maxRadius);
+  }
+
+  function onContextMenu(e: Event): void {
+    e.preventDefault();
   }
 
   // -------------------------------------------------------------------------
@@ -219,6 +262,8 @@ export function createCameraControls(
     domElement.addEventListener('pointerup', onPointerUp);
     domElement.addEventListener('pointercancel', onPointerCancel);
     domElement.addEventListener('wheel', onWheel, { passive: false });
+    domElement.addEventListener('dblclick', onDblClick);
+    domElement.addEventListener('contextmenu', onContextMenu);
     domElement.addEventListener('touchstart', onTouchStart, { passive: true });
     domElement.addEventListener('touchmove', onTouchMove, { passive: false });
     domElement.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -230,6 +275,8 @@ export function createCameraControls(
     domElement.removeEventListener('pointerup', onPointerUp);
     domElement.removeEventListener('pointercancel', onPointerCancel);
     domElement.removeEventListener('wheel', onWheel);
+    domElement.removeEventListener('dblclick', onDblClick);
+    domElement.removeEventListener('contextmenu', onContextMenu);
     domElement.removeEventListener('touchstart', onTouchStart);
     domElement.removeEventListener('touchmove', onTouchMove);
     domElement.removeEventListener('touchend', onTouchEnd);

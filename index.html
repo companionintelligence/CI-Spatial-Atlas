@@ -14,16 +14,6 @@
         </header>
 
         <section class="card">
-          <h2>Account</h2>
-          <form id="account-form">
-            <label for="account-name">Account Name</label>
-            <input id="account-name" name="accountName" value="earth-operator" maxlength="64" />
-            <button type="submit">Switch Account</button>
-          </form>
-          <p id="account-status"></p>
-        </section>
-
-        <section class="card">
           <h2>Environment</h2>
           <p class="card-note">Live simulated time and weather state for globe lighting and atmosphere.</p>
           <dl class="env-grid">
@@ -107,6 +97,16 @@
           </div>
           <p id="journey-status">Journey idle.</p>
         </section>
+
+        <details class="card settings-card">
+          <summary>Account Settings</summary>
+          <form id="account-form">
+            <label for="account-name">Account Name</label>
+            <input id="account-name" name="accountName" value="earth-operator" maxlength="64" />
+            <button type="submit">Switch Account</button>
+          </form>
+          <p id="account-status"></p>
+        </details>
       </aside>
 
       <main id="viewport">
@@ -140,6 +140,8 @@
           <span id="env-bar-time">--:-- UTC</span>
           <span class="env-bar-sep">·</span>
           <span id="env-bar-weather">Loading…</span>
+          <span class="env-bar-sep">·</span>
+          <span id="env-bar-alt">-- km</span>
         </div>
       </main>
     </div>
