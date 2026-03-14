@@ -47,7 +47,10 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
       stemColor: 0xffd78e,
       routeColor: 0x7af5ff,
       routeOpacity: 0.72,
-      haloColor: 0xfff2ba
+      haloColor: 0xfff2ba,
+      rotationSpeed: 0.008,
+      maxTilt: Math.PI * 0.42,
+      idleSpin: 0.0012
     }
   };
 
@@ -66,6 +69,9 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(viewportEl.clientWidth, viewportEl.clientHeight);
   mountEl.appendChild(renderer.domElement);
+
+  const worldGroup = new THREE.Group();
+  scene.add(worldGroup);
 
   const rand = seededRandomFactory(42);
   const starGeometry = new THREE.BufferGeometry();
@@ -99,7 +105,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
       metalness: sceneConfig.globe.metalness
     })
   );
-  scene.add(globe);
+  worldGroup.add(globe);
 
   const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(sceneConfig.atmosphere.radius, 84, 84),
@@ -110,14 +116,14 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
       side: THREE.BackSide
     })
   );
-  scene.add(atmosphere);
+  worldGroup.add(atmosphere);
 
   const orbitRing = new THREE.Mesh(
     new THREE.TorusGeometry(sceneConfig.ring.radius, sceneConfig.ring.tube, 22, 140),
     new THREE.MeshBasicMaterial({ color: sceneConfig.ring.color, transparent: true, opacity: 0.65 })
   );
   orbitRing.rotation.x = Math.PI * 0.43;
-  scene.add(orbitRing);
+  worldGroup.add(orbitRing);
 
   const ambient = new THREE.HemisphereLight(0xd9f2ff, 0x0b1e38, 0.92);
   scene.add(ambient);
@@ -127,11 +133,132 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
   scene.add(sun);
 
   const pinsGroup = new THREE.Group();
-  scene.add(pinsGroup);
+  worldGroup.add(pinsGroup);
 
   const lookTarget = new THREE.Vector3(0, 0, 0);
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+
+  const dragState = {
+    active: false,
+    moved: false,
+    lastX: 0,
+    lastY: 0,
+    startX: 0,
+    startY: 0,
+    selectionHandler: null
+  };
 
   let flight = null;
+
+  function requestRender() {
+    camera.lookAt(lookTarget);
+    render();
+  }
+
+  function setPointerFromViewport(clientX, clientY) {
+    const bounds = renderer.domElement.getBoundingClientRect();
+
+    pointerNdc.x = ((clientX - bounds.left) / bounds.width) * 2 - 1;
+    pointerNdc.y = -((clientY - bounds.top) / bounds.height) * 2 + 1;
+  }
+
+  function intersectObjectsAtViewport(clientX, clientY, objects) {
+    setPointerFromViewport(clientX, clientY);
+    raycaster.setFromCamera(pointerNdc, camera);
+    return raycaster.intersectObjects(objects, true);
+  }
+
+  function pickPinFromViewport(clientX, clientY) {
+    const hit = intersectObjectsAtViewport(clientX, clientY, [pinsGroup]).find(
+      (entry) => entry.object.userData.pinId
+    );
+
+    return hit?.object.userData.pinId || null;
+  }
+
+  function onPointerDown(event) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    dragState.active = true;
+    dragState.moved = false;
+    dragState.startX = event.clientX;
+    dragState.startY = event.clientY;
+    dragState.lastX = event.clientX;
+    dragState.lastY = event.clientY;
+    renderer.domElement.classList.add('is-dragging');
+    renderer.domElement.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerMove(event) {
+    if (!dragState.active) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragState.lastX;
+    const deltaY = event.clientY - dragState.lastY;
+    const movement = Math.abs(event.clientX - dragState.startX) + Math.abs(event.clientY - dragState.startY);
+
+    dragState.lastX = event.clientX;
+    dragState.lastY = event.clientY;
+
+    if (movement > 4) {
+      dragState.moved = true;
+    }
+
+    if (!dragState.moved) {
+      return;
+    }
+
+    flight = null;
+    worldGroup.rotation.y += deltaX * sceneConfig.scrapbook.rotationSpeed;
+    worldGroup.rotation.x = THREE.MathUtils.clamp(
+      worldGroup.rotation.x + deltaY * sceneConfig.scrapbook.rotationSpeed,
+      -sceneConfig.scrapbook.maxTilt,
+      sceneConfig.scrapbook.maxTilt
+    );
+
+    requestRender();
+  }
+
+  function onPointerUp(event) {
+    if (!dragState.active) {
+      return;
+    }
+
+    renderer.domElement.classList.remove('is-dragging');
+    renderer.domElement.releasePointerCapture(event.pointerId);
+
+    if (!dragState.moved && dragState.selectionHandler) {
+      const pinId = pickPinFromViewport(event.clientX, event.clientY);
+      if (pinId) {
+        dragState.selectionHandler(pinId);
+      }
+    }
+
+    dragState.active = false;
+  }
+
+  function onPointerCancel(event) {
+    if (!dragState.active) {
+      return;
+    }
+
+    renderer.domElement.classList.remove('is-dragging');
+    renderer.domElement.releasePointerCapture(event.pointerId);
+    dragState.active = false;
+  }
+
+  function bindViewportInteractions({ onSelectPin }) {
+    dragState.selectionHandler = onSelectPin || null;
+
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerCancel);
+  }
 
   function render() {
     renderer.render(scene, camera);
@@ -182,6 +309,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
       }
     } else if (!isStaticMode) {
       camera.position.x = Math.sin(time * 0.00035) * 0.18;
+      worldGroup.rotation.y += sceneConfig.scrapbook.idleSpin;
       lookTarget.set(0, 0, 0);
     }
 
@@ -221,6 +349,8 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
     sceneConfig,
     globe,
     pinsGroup,
+    bindViewportInteractions,
+    pickPinFromViewport,
     startLoop,
     resize,
     flyToLatLon,

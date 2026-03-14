@@ -35,6 +35,31 @@ const seededScrapbookState = {
   ]
 };
 
+const seededInteractionState = {
+  'earth-operator': [
+    {
+      id: 'pin-pacific',
+      label: 'Pacific Archive',
+      notes: 'Starts selected because it is first in storage order.',
+      mediaUrl: '',
+      lat: 0,
+      lon: -90,
+      altitude: 0,
+      createdAt: '2026-03-14T08:00:00.000Z'
+    },
+    {
+      id: 'pin-front',
+      label: 'Viewport Beacon',
+      notes: 'Front-facing marker used for direct scene selection.',
+      mediaUrl: '',
+      lat: 4.8,
+      lon: 90,
+      altitude: 0,
+      createdAt: '2026-03-14T08:05:00.000Z'
+    }
+  ]
+};
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.clear();
@@ -68,4 +93,30 @@ test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
     animations: 'disabled',
     fullPage: true
   });
+});
+
+test('Companion Earth selects a pin directly from the globe', async ({ page }) => {
+  await page.addInitScript((scrapbookState) => {
+    localStorage.setItem('ci-earth-scrapbook', JSON.stringify(scrapbookState));
+  }, seededInteractionState);
+
+  await page.goto('/?static=1');
+  await expect(page.locator('#pin-detail-label')).toHaveValue('Pacific Archive');
+
+  const canvas = page.locator('#app canvas');
+  const box = await canvas.boundingBox();
+
+  if (!box) {
+    throw new Error('Scene canvas was not rendered.');
+  }
+
+  await canvas.click({
+    position: {
+      x: box.width / 2,
+      y: box.height / 2
+    }
+  });
+
+  await expect(page.locator('#pin-detail-label')).toHaveValue('Viewport Beacon');
+  await expect(page.locator('#journey-status')).toHaveText('Pin selected from globe.');
 });

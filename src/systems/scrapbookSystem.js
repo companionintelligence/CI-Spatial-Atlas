@@ -19,11 +19,13 @@ function createPinMarker(pin, sceneConfig, isSelected) {
     .add(normal.clone().multiplyScalar(visuals.markerOffset + stemLength));
 
   const group = new THREE.Group();
+  group.userData.pinId = pin.id;
 
   const stem = new THREE.Mesh(
     new THREE.CylinderGeometry(visuals.stemRadius, visuals.stemRadius, stemLength, 10),
     new THREE.MeshBasicMaterial({ color: visuals.stemColor, transparent: true, opacity: 0.9 })
   );
+  stem.userData.pinId = pin.id;
   stem.position.copy(anchorPoint).add(normal.clone().multiplyScalar((visuals.markerOffset + stemLength) * 0.5));
   stem.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
   group.add(stem);
@@ -34,6 +36,7 @@ function createPinMarker(pin, sceneConfig, isSelected) {
       color: isSelected ? visuals.selectedMarkerColor : visuals.markerColor
     })
   );
+  beacon.userData.pinId = pin.id;
   beacon.position.copy(markerPoint);
   group.add(beacon);
 
@@ -46,6 +49,7 @@ function createPinMarker(pin, sceneConfig, isSelected) {
         opacity: 0.85
       })
     );
+    halo.userData.pinId = pin.id;
     halo.position.copy(markerPoint);
     halo.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
     group.add(halo);

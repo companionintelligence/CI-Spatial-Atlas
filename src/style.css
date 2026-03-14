@@ -283,6 +283,17 @@ body {
   height: 100%;
 }
 
+#app canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+#app canvas.is-dragging {
+  cursor: grabbing;
+}
+
 @media (max-width: 920px) {
   #layout {
     grid-template-columns: 1fr;

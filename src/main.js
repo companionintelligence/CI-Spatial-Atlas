@@ -33,6 +33,13 @@ const scrapbookSystem = createScrapbookSystem({
   pinsGroup: sceneSystem.pinsGroup
 });
 
+sceneSystem.bindViewportInteractions({
+  onSelectPin(pinId) {
+    scrapbookSystem.selectPin(pinId);
+    refreshUI('Pin selected from globe.');
+  }
+});
+
 let journeyIntervalId = null;
 let journeyIndex = 0;
 
