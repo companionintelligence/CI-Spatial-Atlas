@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { latLonToCartesian } from '../scrapbook';
+import { createCloudTexture, createEarthTexture } from './textureFactory';
 
 import type { CreateSceneSystemOptions, SceneConfig, ViewportInteractionHandlers } from '../types';
 
@@ -77,7 +78,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   };
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x050f1f);
+  scene.background = new THREE.Color(0x030a18);
 
   const camera = new THREE.PerspectiveCamera(
     sceneConfig.camera.fov,
@@ -115,6 +116,11 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   );
   scene.add(stars);
 
+  const earthRand = seededRandomFactory(43);
+  const cloudRand = seededRandomFactory(44);
+  const earthTexture = createEarthTexture(earthRand);
+  const cloudTexture = createCloudTexture(cloudRand);
+
   const globe = new THREE.Mesh(
     new THREE.SphereGeometry(
       sceneConfig.globe.radius,
@@ -122,12 +128,24 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       sceneConfig.globe.segments
     ),
     new THREE.MeshStandardMaterial({
-      color: sceneConfig.globe.color,
-      roughness: sceneConfig.globe.roughness,
-      metalness: sceneConfig.globe.metalness
+      map: earthTexture,
+      roughness: 0.75,
+      metalness: 0.08
     })
   );
   worldGroup.add(globe);
+
+  const clouds = new THREE.Mesh(
+    new THREE.SphereGeometry(sceneConfig.globe.radius * 1.006, 80, 80),
+    new THREE.MeshStandardMaterial({
+      map: cloudTexture,
+      transparent: true,
+      depthWrite: false,
+      roughness: 0.9,
+      metalness: 0
+    })
+  );
+  worldGroup.add(clouds);
 
   const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(sceneConfig.atmosphere.radius, 84, 84),
@@ -139,6 +157,19 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     })
   );
   worldGroup.add(atmosphere);
+
+  const atmosphereGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(sceneConfig.atmosphere.radius * 1.06, 84, 84),
+    new THREE.MeshBasicMaterial({
+      color: 0x5ab8ff,
+      transparent: true,
+      opacity: 0.09,
+      side: THREE.FrontSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  worldGroup.add(atmosphereGlow);
 
   const orbitRing = new THREE.Mesh(
     new THREE.TorusGeometry(sceneConfig.ring.radius, sceneConfig.ring.tube, 22, 140),
@@ -314,6 +345,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
 
   function update(time: number): void {
     globe.rotation.y += 0.0014;
+    clouds.rotation.y += 0.0009;
     atmosphere.rotation.y += 0.001;
     orbitRing.rotation.z += 0.0015;
     stars.rotation.y += 0.00008;

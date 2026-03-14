@@ -8,10 +8,10 @@
   <body>
     <div id="layout">
       <aside id="control-panel">
-        <h1>Companion Earth</h1>
-        
+
         <section class="card">
           <h2>New Account</h2>
+          <p class="card-note">Switch context before creating or editing scrapbook entries.</p>
           <form id="account-form">
             <label for="account-name">Account Name</label>
             <input id="account-name" name="accountName" value="earth-operator" maxlength="48" />
@@ -21,12 +21,8 @@
         </section>
 
         <section class="card">
-          <h2>Workflow Steps</h2>
-          <ul id="workflow-list"></ul>
-        </section>
-
-        <section class="card">
           <h2>Spatial Scrapbook</h2>
+          <p class="card-note">Drop a pin from the current viewport and manage your memory stack.</p>
           <form id="scrapbook-form">
             <label for="pin-label">Pin Label</label>
             <input id="pin-label" name="pinLabel" value="New Memory" maxlength="64" />
@@ -37,6 +33,7 @@
 
         <section class="card">
           <h2>Pin Details</h2>
+          <p class="card-note">Update selected pin metadata and media references.</p>
           <form id="pin-detail-form">
             <label for="pin-detail-label">Label</label>
             <input id="pin-detail-label" name="pinDetailLabel" maxlength="64" />
@@ -57,6 +54,7 @@
 
         <section class="card">
           <h2>Journeys</h2>
+          <p class="card-note">Playback memories in chronological order with auto-fly navigation.</p>
           <div class="row-actions">
             <button id="journey-start-btn" type="button">Play Journey</button>
             <button id="journey-next-btn" type="button">Next Stop</button>
