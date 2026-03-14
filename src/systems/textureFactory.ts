@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { selectTileUrl } from './tileProvider';
 
 // ---------------------------------------------------------------------------
 // Shared noise primitives
@@ -195,7 +196,7 @@ function latToMercatorV(latRad: number): number {
  * Load OpenStreetMap tiles and remap them to an equirectangular texture.
  * If network loading fails, fallback imagery remains in place.
  */
-export function createEarthTileTexture(fallback: THREE.CanvasTexture, zoom = 2): THREE.CanvasTexture {
+export function createEarthTileTexture(fallback: THREE.CanvasTexture, zoom = 3): THREE.CanvasTexture {
   const fallbackCanvas = fallback.image as HTMLCanvasElement;
   const outCanvas = document.createElement('canvas');
   outCanvas.width = fallbackCanvas.width;
@@ -218,7 +219,7 @@ export function createEarthTileTexture(fallback: THREE.CanvasTexture, zoom = 2):
 
       for (let ty = 0; ty < tileCount; ty++) {
         for (let tx = 0; tx < tileCount; tx++) {
-          const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+          const url = selectTileUrl(zoom, tx, ty);
           jobs.push(
             loadImage(url).then((image) => {
               mercatorCtx.drawImage(image, tx * tileSize, ty * tileSize, tileSize, tileSize);

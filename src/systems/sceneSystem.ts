@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 
-import { latLonToCartesian } from '../scrapbook';
+import { cartesianToLatLon, latLonToCartesian } from '../scrapbook';
+import { createAtmosphereMesh } from './atmosphereSystem';
+import { createCameraControls } from './cameraControls';
 import {
   createCloudTexture,
   createEarthTexture,
@@ -8,27 +10,10 @@ import {
   createNightLightsTexture,
   createWeatherTexture
 } from './textureFactory';
+import { createXrSystem } from './xrSystem';
+import { initTilesSystem } from './tilesSystem';
 
 import type { CreateSceneSystemOptions, SceneConfig, ViewportInteractionHandlers } from '../types';
-
-interface FlightState {
-  startAt: number;
-  duration: number;
-  fromPosition: THREE.Vector3;
-  fromTarget: THREE.Vector3;
-  toPosition: THREE.Vector3;
-  toTarget: THREE.Vector3;
-}
-
-interface DragState {
-  active: boolean;
-  moved: boolean;
-  lastX: number;
-  lastY: number;
-  startX: number;
-  startY: number;
-  selectionHandler: ((pinId: string) => void) | null;
-}
 
 interface EnvironmentState {
   utcTime: string;
@@ -47,13 +32,13 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const sceneConfig: SceneConfig = {
     camera: {
       fov: 52,
-      near: 0.1,
+      near: 0.05,
       far: 8000,
       position: new THREE.Vector3(0, 0.35, 4.2)
     },
     globe: {
       radius: 1.24,
-      segments: 120,
+      segments: 128,
       color: 0x2f8df3,
       roughness: 0.9,
       metalness: 0.06
@@ -62,11 +47,6 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       radius: 1.32,
       color: 0x82d5ff,
       opacity: 0.18
-    },
-    ring: {
-      radius: 1.45,
-      tube: 0.02,
-      color: 0x93ffe7
     },
     scrapbook: {
       markerOffset: 0.04,
@@ -99,7 +79,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   );
   camera.position.copy(sceneConfig.camera.position);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(viewportEl.clientWidth, viewportEl.clientHeight);
   mountEl.appendChild(renderer.domElement);
@@ -107,23 +87,23 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const worldGroup = new THREE.Group();
   scene.add(worldGroup);
 
-  const rand = seededRandomFactory(42);
+  const starRand = seededRandomFactory(42);
   const starGeometry = new THREE.BufferGeometry();
-  const starCount = 1800;
+  const starCount = 2200;
   const positions = new Float32Array(starCount * 3);
 
   for (let i = 0; i < starCount * 3; i += 3) {
     const spread = 55;
-    positions[i] = (rand() - 0.5) * spread;
-    positions[i + 1] = (rand() - 0.5) * spread;
-    positions[i + 2] = (rand() - 0.5) * spread;
+    positions[i]     = (starRand() - 0.5) * spread;
+    positions[i + 1] = (starRand() - 0.5) * spread;
+    positions[i + 2] = (starRand() - 0.5) * spread;
   }
 
   starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
   const stars = new THREE.Points(
     starGeometry,
-    new THREE.PointsMaterial({ color: 0xb5dbff, size: 0.035, sizeAttenuation: true })
+    new THREE.PointsMaterial({ color: 0xc8deff, size: 0.032, sizeAttenuation: true })
   );
   scene.add(stars);
 
@@ -132,7 +112,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const cityLightRand = seededRandomFactory(45);
   const weatherRand = seededRandomFactory(46);
   const earthFallbackTexture = createEarthTexture(earthRand);
-  const earthTexture = isStaticMode ? earthFallbackTexture : createEarthTileTexture(earthFallbackTexture, 2);
+  const earthTexture = isStaticMode ? earthFallbackTexture : createEarthTileTexture(earthFallbackTexture, 3);
   const cloudTexture = createCloudTexture(cloudRand);
   const nightLightsTexture = createNightLightsTexture(earthFallbackTexture, cityLightRand);
   const weatherTexture = createWeatherTexture(weatherRand);
@@ -146,10 +126,10 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     new THREE.MeshStandardMaterial({
       map: earthTexture,
       emissiveMap: nightLightsTexture,
-      emissive: new THREE.Color(0xffc46a),
+      emissive: new THREE.Color(0xffa84a),
       emissiveIntensity: 0.02,
-      roughness: 0.72,
-      metalness: 0.11
+      roughness: 0.68,
+      metalness: 0.08
     })
   );
   worldGroup.add(globe);
@@ -157,12 +137,12 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const globeMaterial = globe.material as THREE.MeshStandardMaterial;
 
   const clouds = new THREE.Mesh(
-    new THREE.SphereGeometry(sceneConfig.globe.radius * 1.006, 80, 80),
+    new THREE.SphereGeometry(sceneConfig.globe.radius * 1.007, 96, 96),
     new THREE.MeshStandardMaterial({
       map: cloudTexture,
       transparent: true,
       depthWrite: false,
-      opacity: 0.58,
+      opacity: 0.55,
       roughness: 0.9,
       metalness: 0
     })
@@ -172,12 +152,12 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const cloudMaterial = clouds.material as THREE.MeshStandardMaterial;
 
   const weatherLayer = new THREE.Mesh(
-    new THREE.SphereGeometry(sceneConfig.globe.radius * 1.014, 80, 80),
+    new THREE.SphereGeometry(sceneConfig.globe.radius * 1.015, 80, 80),
     new THREE.MeshBasicMaterial({
       map: weatherTexture,
       transparent: true,
       depthWrite: false,
-      opacity: 0.16,
+      opacity: 0.14,
       blending: THREE.AdditiveBlending
     })
   );
@@ -185,68 +165,27 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
 
   const weatherMaterial = weatherLayer.material as THREE.MeshBasicMaterial;
 
-  const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(sceneConfig.atmosphere.radius, 84, 84),
-    new THREE.MeshBasicMaterial({
-      color: sceneConfig.atmosphere.color,
-      transparent: true,
-      opacity: sceneConfig.atmosphere.opacity,
-      side: THREE.BackSide
-    })
-  );
-  worldGroup.add(atmosphere);
+  // Atmosphere GLSL shader (replaces old BackSide glow spheres)
+  const atmoSystem = createAtmosphereMesh(sceneConfig.globe.radius);
+  worldGroup.add(atmoSystem.mesh);
+  const sunDirection = new THREE.Vector3();
 
-  const atmosphereMaterial = atmosphere.material as THREE.MeshBasicMaterial;
-
-  const atmosphereGlow = new THREE.Mesh(
-    new THREE.SphereGeometry(sceneConfig.atmosphere.radius * 1.06, 84, 84),
-    new THREE.MeshBasicMaterial({
-      color: 0x5ab8ff,
-      transparent: true,
-      opacity: 0.09,
-      side: THREE.FrontSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    })
-  );
-  worldGroup.add(atmosphereGlow);
-
-  const ambient = new THREE.HemisphereLight(0xc8dbff, 0x071325, 0.84);
+  const ambient = new THREE.HemisphereLight(0xc8dbff, 0x071325, 0.72);
   scene.add(ambient);
 
-  const sun = new THREE.DirectionalLight(0xffffff, 1.25);
+  const sun = new THREE.DirectionalLight(0xffeedd, 1.4);
   sun.position.set(3.8, 1.7, 1.2);
   scene.add(sun);
 
   const pinsGroup = new THREE.Group();
   worldGroup.add(pinsGroup);
 
-  const lookTarget = new THREE.Vector3(0, 0, 0);
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
 
-  const dragState: DragState = {
-    active: false,
-    moved: false,
-    lastX: 0,
-    lastY: 0,
-    startX: 0,
-    startY: 0,
-    selectionHandler: null
-  };
-
-  let flight: FlightState | null = null;
-  const dayCycleMs = 160000;
+  const dayCycleMs   = 160000;
   const baseUtcHours = new Date().getUTCHours() + new Date().getUTCMinutes() / 60;
-  const environmentState: EnvironmentState = {
-    utcTime: '--:-- UTC',
-    weather: 'Calm skies'
-  };
-
-  function requestRender(): void {
-    camera.lookAt(lookTarget);
-    render();
-  }
+  const environmentState: EnvironmentState = { utcTime: '--:-- UTC', weather: 'Calm skies' };
 
   function setPointerFromViewport(clientX: number, clientY: number): void {
     const bounds = renderer.domElement.getBoundingClientRect();
@@ -265,91 +204,34 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     const hit = intersectObjectsAtViewport(clientX, clientY, [pinsGroup]).find(
       (entry) => typeof entry.object.userData.pinId === 'string'
     );
-
-    return (hit?.object.userData.pinId as string | undefined) || null;
+    return (hit?.object.userData.pinId as string | undefined) ?? null;
   }
 
-  function onPointerDown(event: PointerEvent): void {
-    if (event.button !== 0) {
-      return;
+  // Selection handler set via bindViewportInteractions
+  let selectionHandler: ((pinId: string) => void) | null = null;
+
+  // Camera controls — orbital: camera orbits fixed globe at origin.
+  // Initial orbit matches legacy camera position (0, 0.35, 4.2).
+  const controls = createCameraControls(camera, renderer.domElement, {
+    theta: Math.PI / 2, phi: 0.083, radius: 4.215,
+    minRadius: 1.3, maxRadius: 14,
+    onTap: (e: PointerEvent) => {
+      if (!selectionHandler) return;
+      const pinId = pickPinFromViewport(e.clientX, e.clientY);
+      if (pinId) selectionHandler(pinId);
     }
+  });
 
-    dragState.active = true;
-    dragState.moved = false;
-    dragState.startX = event.clientX;
-    dragState.startY = event.clientY;
-    dragState.lastX = event.clientX;
-    dragState.lastY = event.clientY;
-    renderer.domElement.classList.add('is-dragging');
-    renderer.domElement.setPointerCapture(event.pointerId);
-  }
+  // WebXR
+  const xrSystem = createXrSystem(renderer, scene, worldGroup);
+  renderer.domElement.addEventListener('xr-squeeze-start', () => controls.zoomIn());
 
-  function onPointerMove(event: PointerEvent): void {
-    if (!dragState.active) {
-      return;
-    }
-
-    const deltaX = event.clientX - dragState.lastX;
-    const deltaY = event.clientY - dragState.lastY;
-    const movement = Math.abs(event.clientX - dragState.startX) + Math.abs(event.clientY - dragState.startY);
-
-    dragState.lastX = event.clientX;
-    dragState.lastY = event.clientY;
-
-    if (movement > 4) {
-      dragState.moved = true;
-    }
-
-    if (!dragState.moved) {
-      return;
-    }
-
-    flight = null;
-    worldGroup.rotation.y += deltaX * sceneConfig.scrapbook.rotationSpeed;
-    worldGroup.rotation.x = THREE.MathUtils.clamp(
-      worldGroup.rotation.x + deltaY * sceneConfig.scrapbook.rotationSpeed,
-      -sceneConfig.scrapbook.maxTilt,
-      sceneConfig.scrapbook.maxTilt
-    );
-
-    requestRender();
-  }
-
-  function onPointerUp(event: PointerEvent): void {
-    if (!dragState.active) {
-      return;
-    }
-
-    renderer.domElement.classList.remove('is-dragging');
-    renderer.domElement.releasePointerCapture(event.pointerId);
-
-    if (!dragState.moved && dragState.selectionHandler) {
-      const pinId = pickPinFromViewport(event.clientX, event.clientY);
-      if (pinId) {
-        dragState.selectionHandler(pinId);
-      }
-    }
-
-    dragState.active = false;
-  }
-
-  function onPointerCancel(event: PointerEvent): void {
-    if (!dragState.active) {
-      return;
-    }
-
-    renderer.domElement.classList.remove('is-dragging');
-    renderer.domElement.releasePointerCapture(event.pointerId);
-    dragState.active = false;
-  }
+  // 3D Tiles (silently disabled if token absent)
+  let tilesSystem: Awaited<ReturnType<typeof initTilesSystem>> = null;
+  void initTilesSystem(scene, camera, renderer, sceneConfig.globe.radius).then((sys) => { tilesSystem = sys; });
 
   function bindViewportInteractions({ onSelectPin }: ViewportInteractionHandlers): void {
-    dragState.selectionHandler = onSelectPin || null;
-
-    renderer.domElement.addEventListener('pointerdown', onPointerDown);
-    renderer.domElement.addEventListener('pointermove', onPointerMove);
-    renderer.domElement.addEventListener('pointerup', onPointerUp);
-    renderer.domElement.addEventListener('pointercancel', onPointerCancel);
+    selectionHandler = onSelectPin ?? null;
   }
 
   function render(): void {
@@ -357,136 +239,106 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   }
 
   function resize(): void {
-    const width = viewportEl.clientWidth;
+    const width  = viewportEl.clientWidth;
     const height = viewportEl.clientHeight;
-
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
   }
 
-  function flyToLatLon(lat: number, lon: number, options: { duration?: number; distance?: number } = {}): void {
-    const duration = options.duration ?? 1400;
-    const distance = options.distance ?? 0.78;
-
-    const point = latLonToCartesian(lat, lon, sceneConfig.globe.radius);
-    const normal = point.clone().normalize();
-
-    flight = {
-      startAt: performance.now(),
-      duration,
-      fromPosition: camera.position.clone(),
-      fromTarget: lookTarget.clone(),
-      toPosition: point.clone().add(normal.multiplyScalar(distance)),
-      toTarget: point
-    };
+  function flyToLatLon(
+    lat: number,
+    lon: number,
+    options: { duration?: number; distance?: number } = {}
+  ): void {
+    const targetRadius = sceneConfig.globe.radius + (options.distance ?? 0.78);
+    controls.flyTo(lat, lon, targetRadius, options.duration ?? 1400);
   }
 
   function update(time: number): void {
     const tDay = isStaticMode ? 0.37 : (time % dayCycleMs) / dayCycleMs;
     const simHours = (baseUtcHours + tDay * 24) % 24;
-    const simHourInt = Math.floor(simHours);
-    const simMinuteInt = Math.floor((simHours - simHourInt) * 60);
-    environmentState.utcTime = `${String(simHourInt).padStart(2, '0')}:${String(simMinuteInt).padStart(2, '0')} UTC`;
+    const simH = Math.floor(simHours);
+    const simM = Math.floor((simHours - simH) * 60);
+    environmentState.utcTime = `${String(simH).padStart(2, '0')}:${String(simM).padStart(2, '0')} UTC`;
 
     const sunTheta = tDay * Math.PI * 2;
-    sun.position.set(
-      Math.cos(sunTheta) * 4.2,
-      Math.sin(sunTheta) * 2.35,
-      Math.sin(sunTheta * 0.56) * 2.2
+    const sunPos = new THREE.Vector3(
+      Math.cos(sunTheta) * 4.8,
+      Math.sin(sunTheta) * 2.6,
+      Math.sin(sunTheta * 0.55) * 2.4
     );
-    const sunAltitude = THREE.MathUtils.clamp((sun.position.y + 2.35) / 4.7, 0, 1);
-    ambient.intensity = 0.42 + sunAltitude * 0.58;
-    sun.intensity = 0.45 + sunAltitude * 1.35;
-    globeMaterial.emissiveIntensity = THREE.MathUtils.clamp(1 - sunAltitude * 1.55, 0.02, 0.95);
+    sun.position.copy(sunPos);
+    sunDirection.copy(sunPos).normalize();
+
+    const sunAlt = THREE.MathUtils.clamp((sunPos.y + 2.6) / 5.2, 0, 1);
+    ambient.intensity  = 0.38 + sunAlt * 0.55;
+    sun.intensity      = 0.42 + sunAlt * 1.45;
+    globeMaterial.emissiveIntensity = THREE.MathUtils.clamp(1 - sunAlt * 1.62, 0.02, 0.96);
+
+    atmoSystem.updateSun(sunDirection);
+    atmoSystem.updateCamera(camera.position);
 
     const weatherBand = isStaticMode
       ? 0.46
       : 0.5 + Math.sin(time * 0.00009) * 0.22 + Math.sin(time * 0.000033 + 1.4) * 0.16;
 
     let weatherLabel = 'Calm skies';
-    if (weatherBand > 0.74) {
-      weatherLabel = 'Storm fronts';
-    } else if (weatherBand > 0.58) {
-      weatherLabel = 'Cloudy';
-    } else if (weatherBand < 0.34) {
-      weatherLabel = 'Clear';
-    }
-
+    if      (weatherBand > 0.74) weatherLabel = 'Storm fronts';
+    else if (weatherBand > 0.58) weatherLabel = 'Cloudy';
+    else if (weatherBand < 0.34) weatherLabel = 'Clear';
     environmentState.weather = weatherLabel;
-    const cloudOpacity = THREE.MathUtils.clamp(0.35 + weatherBand * 0.42, 0.3, 0.82);
-    cloudMaterial.opacity = cloudOpacity;
-    weatherMaterial.opacity = THREE.MathUtils.clamp(0.08 + weatherBand * 0.28, 0.08, 0.42);
-    atmosphereMaterial.opacity = THREE.MathUtils.clamp(0.14 + weatherBand * 0.14, 0.12, 0.32);
 
-    globe.rotation.y += 0.0014;
-    clouds.rotation.y += 0.0009;
-    weatherLayer.rotation.y += 0.0016;
-    atmosphere.rotation.y += 0.001;
-    stars.rotation.y += 0.00008;
+    cloudMaterial.opacity   = THREE.MathUtils.clamp(0.3  + weatherBand * 0.42, 0.25, 0.82);
+    weatherMaterial.opacity = THREE.MathUtils.clamp(0.07 + weatherBand * 0.26, 0.07, 0.38);
 
-    if (flight) {
-      const elapsed = time - flight.startAt;
-      const t = Math.min(1, elapsed / flight.duration);
-      const eased = t * t * (3 - 2 * t);
-
-      camera.position.lerpVectors(flight.fromPosition, flight.toPosition, eased);
-      lookTarget.lerpVectors(flight.fromTarget, flight.toTarget, eased);
-
-      if (t >= 1) {
-        flight = null;
-      }
-    } else if (!isStaticMode) {
-      camera.position.x = Math.sin(time * 0.00035) * 0.18;
-      worldGroup.rotation.y += sceneConfig.scrapbook.idleSpin;
-      lookTarget.set(0, 0, 0);
-    }
-
-    camera.lookAt(lookTarget);
-
-    render();
+    controls.tick(time);
+    xrSystem.tick();
+    tilesSystem?.update(camera, renderer);
+    renderer.render(scene, camera);
   }
 
   function raycastGlobeFromCamera(): THREE.Vector3 {
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const rc  = new THREE.Raycaster(camera.position.clone(), dir.normalize());
+    const hit = rc.intersectObject(globe, true)[0];
+    return hit ? hit.point : dir.multiplyScalar(sceneConfig.globe.radius);
+  }
 
-    const cameraRaycaster = new THREE.Raycaster(camera.position.clone(), direction.normalize());
-    const hit = cameraRaycaster.intersectObject(globe, true)[0];
-    if (hit) {
-      return hit.point;
-    }
-
-    return direction.multiplyScalar(-sceneConfig.globe.radius);
+  function getGlobeCoordAtPointer(
+    clientX: number,
+    clientY: number
+  ): { lat: number; lon: number } | null {
+    const hits = intersectObjectsAtViewport(clientX, clientY, [globe]);
+    if (hits.length === 0) return null;
+    const { lat, lon } = cartesianToLatLon(hits[0].point, sceneConfig.globe.radius);
+    return { lat, lon };
   }
 
   function startLoop(): void {
-    if (isStaticMode) {
-      update(performance.now());
-      return;
-    }
-
-    const animate = (time: number) => {
-      update(time);
-      window.requestAnimationFrame(animate);
-    };
-
-    window.requestAnimationFrame(animate);
+    if (isStaticMode) { update(performance.now()); return; }
+    renderer.setAnimationLoop((time) => update(time));
   }
 
   return {
     sceneConfig,
     globe,
     pinsGroup,
+    worldGroup,
     bindViewportInteractions,
     pickPinFromViewport,
     startLoop,
     resize,
     flyToLatLon,
     raycastGlobeFromCamera,
-    getEnvironmentState() {
-      return environmentState;
-    },
+    getGlobeCoordAtPointer,
+    getEnvironmentState() { return environmentState; },
+    zoomIn:     () => controls.zoomIn(),
+    zoomOut:    () => controls.zoomOut(),
+    getHeading: () => controls.getTheta(),
+    domElement: renderer.domElement,
+    xrButtons:  { vrButton: xrSystem.vrButton, arButton: xrSystem.arButton },
     render
   };
 }

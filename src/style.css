@@ -46,7 +46,38 @@ body {
   border-right: 1px solid var(--line);
   background: linear-gradient(180deg, var(--panel-a), var(--panel-b));
   backdrop-filter: blur(10px);
+  transition: width 0.28s ease, min-width 0.28s ease, padding 0.28s ease, border-color 0.28s ease;
+  position: relative;
 }
+
+#control-panel.collapsed {
+  width: 0;
+  min-width: 0 !important;
+  padding: 0;
+  overflow: hidden;
+  border-right-color: transparent;
+}
+
+/* Close button inside sidebar */
+.sidebar-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(30, 50, 90, 0.7);
+  border: 1px solid rgba(100, 140, 220, 0.4);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background 120ms;
+}
+.sidebar-close:hover { background: rgba(50, 80, 140, 0.85); }
 
 .panel-head {
   margin-bottom: 0.9rem;
@@ -340,10 +371,152 @@ body {
   min-height: 0;
   width: 100%;
   height: 100%;
+  position: relative;
 }
 
+/* -------------------------------------------------------------------------
+   Viewport HUD Overlays
+   ------------------------------------------------------------------------- */
+
+/* Sidebar open button — visible from the viewport when panel is collapsed */
+.sidebar-open {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 150;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 145, 230, 0.45);
+  background: rgba(8, 18, 40, 0.82);
+  color: #c8d8ff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  display: none; /* shown via JS when panel is collapsed */
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms;
+}
+.sidebar-open:hover { background: rgba(18, 38, 80, 0.92); }
+
+/* Lat/lon coordinate readout — bottom-left of viewport */
+#hud-coords {
+  position: absolute;
+  bottom: 52px;
+  left: 12px;
+  z-index: 120;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: #d4e4ff;
+  background: rgba(5, 12, 28, 0.72);
+  border: 1px solid rgba(90, 130, 215, 0.35);
+  border-radius: 8px;
+  padding: 0.28rem 0.55rem;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  min-width: 14ch;
+}
+
+/* Right HUD cluster: zoom + compass + XR */
+#hud-right {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 140;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+#hud-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(90, 130, 215, 0.38);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+#hud-zoom button {
+  width: 38px;
+  height: 38px;
+  background: rgba(8, 18, 40, 0.84);
+  border: none;
+  color: #c8d8ff;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: background 100ms;
+  font-weight: 300;
+}
+#hud-zoom button:hover { background: rgba(22, 46, 90, 0.92); }
+
+#hud-compass {
+  width: 44px;
+  height: 44px;
+  cursor: default;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+
+#hud-xr-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Three.js VRButton / ARButton styles override */
+#hud-xr-buttons button,
+#vr-button,
+#ar-button {
+  border-radius: 8px !important;
+  font-size: 0.72rem !important;
+  padding: 0.38rem 0.62rem !important;
+  border: 1px solid rgba(90, 130, 215, 0.45) !important;
+  background: rgba(8, 18, 40, 0.84) !important;
+  color: #c8d8ff !important;
+  backdrop-filter: blur(8px) !important;
+  cursor: pointer;
+  width: auto !important;
+  position: static !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+}
+
+/* Environment bar — thin pill at the bottom of viewport */
+#env-bar {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(5, 12, 30, 0.78);
+  border: 1px solid rgba(90, 130, 215, 0.35);
+  border-radius: 999px;
+  padding: 0.28rem 0.9rem;
+  font-size: 0.72rem;
+  color: #b8ccf2;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.env-bar-sep { opacity: 0.5; }
+
 #app {
-  position: relative;
+  position: absolute;
+  inset: 0;
 }
 
 #app::before {
@@ -383,4 +556,76 @@ body {
   .env-grid {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 767px) {
+  /* On mobile: sidebar becomes a slide-up bottom sheet */
+  #layout {
+    display: block;
+    height: 100%;
+  }
+
+  #viewport {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  #control-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 62vh;
+    overflow-y: auto;
+    border-right: none;
+    border-bottom: none;
+    border-top: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+    z-index: 300;
+    padding: 0.8rem 1rem 1.5rem;
+  }
+
+  #control-panel:not(.collapsed) {
+    transform: translateY(0);
+  }
+
+  .sidebar-close {
+    position: sticky;
+    top: 0;
+    right: 0;
+    float: right;
+    margin: 0 0 0.5rem 0.5rem;
+  }
+
+  /* Bottom-sheet drag handle visual */
+  #control-panel::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: rgba(140, 170, 230, 0.4);
+    border-radius: 2px;
+    margin: 0 auto 0.8rem;
+  }
+
+  .sidebar-open {
+    top: auto;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    font-size: 1.4rem;
+  }
+
+  #hud-coords { bottom: 72px; }
+  #env-bar    { bottom: 72px; }
 }

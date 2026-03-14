@@ -38,11 +38,6 @@ export interface SceneConfig {
     color: number;
     opacity: number;
   };
-  ring: {
-    radius: number;
-    tube: number;
-    color: number;
-  };
   scrapbook: {
     markerOffset: number;
     markerRadius: number;
@@ -70,15 +65,20 @@ export interface ViewportInteractionHandlers {
 export interface SceneSystem {
   sceneConfig: SceneConfig;
   pinsGroup: Group;
+  worldGroup: Group;
   bindViewportInteractions: (handlers: ViewportInteractionHandlers) => void;
+  pickPinFromViewport: (clientX: number, clientY: number) => string | null;
   startLoop: () => void;
   resize: () => void;
   flyToLatLon: (lat: number, lon: number, options?: { duration?: number; distance?: number }) => void;
   raycastGlobeFromCamera: () => Vector3;
-  getEnvironmentState: () => {
-    utcTime: string;
-    weather: string;
-  };
+  getGlobeCoordAtPointer: (clientX: number, clientY: number) => { lat: number; lon: number } | null;
+  getEnvironmentState: () => { utcTime: string; weather: string };
+  zoomIn: () => void;
+  zoomOut: () => void;
+  getHeading: () => number;
+  domElement: HTMLCanvasElement;
+  xrButtons: { vrButton: HTMLElement; arButton: HTMLElement };
   render: () => void;
 }
 

@@ -23,8 +23,18 @@ function getElementById<T extends HTMLElement>(id: string): T | null {
 const appEl = getElementByIdOrThrow<HTMLDivElement>('app');
 const viewportEl = getElementByIdOrThrow<HTMLElement>('viewport');
 const workflowListEl = getElementById<HTMLUListElement>('workflow-list');
-const envTimeEl = getElementById<HTMLElement>('env-time');
-const envWeatherEl = getElementById<HTMLElement>('env-weather');
+const envTimeEl       = getElementById<HTMLElement>('env-time');
+const envWeatherEl    = getElementById<HTMLElement>('env-weather');
+const envBarTimeEl    = getElementById<HTMLElement>('env-bar-time');
+const envBarWeatherEl = getElementById<HTMLElement>('env-bar-weather');
+const hudCoordsEl     = getElementById<HTMLElement>('hud-coords');
+const sidebarOpenBtn  = getElementById<HTMLButtonElement>('sidebar-open');
+const sidebarCloseBtn = getElementById<HTMLButtonElement>('sidebar-close');
+const controlPanelEl  = getElementById<HTMLElement>('control-panel');
+const compassSvgEl    = getElementById<HTMLElement>('compass-svg');
+const zoomInBtn       = getElementById<HTMLButtonElement>('zoom-in-btn');
+const zoomOutBtn      = getElementById<HTMLButtonElement>('zoom-out-btn');
+const xrButtonsEl     = getElementById<HTMLElement>('hud-xr-buttons');
 
 const elements: InputElements = {
   accountFormEl: getElementByIdOrThrow<HTMLFormElement>('account-form'),
@@ -49,11 +59,50 @@ if (workflowListEl) {
   renderWorkflowList(workflowListEl);
 }
 
+// -------------------------------------------------------------------------
+// Sidebar toggle (desktop: width collapse; mobile: bottom-sheet)
+// -------------------------------------------------------------------------
+function setSidebarCollapsed(collapsed: boolean): void {
+  controlPanelEl?.classList.toggle('collapsed', collapsed);
+  if (sidebarOpenBtn) {
+    sidebarOpenBtn.style.display = collapsed ? 'flex' : 'none';
+  }
+}
+
+sidebarCloseBtn?.addEventListener('click', () => setSidebarCollapsed(true));
+sidebarOpenBtn?.addEventListener('click',  () => setSidebarCollapsed(false));
+
+// On mobile (bottom-sheet mode) start with sidebar hidden so the globe is unobstructed.
+if (window.innerWidth < 768) {
+  setSidebarCollapsed(true);
+}
+
 const isStaticMode = new URLSearchParams(window.location.search).get('static') === '1';
 const sceneSystem = createSceneSystem({ mountEl: appEl, viewportEl, isStaticMode });
 const scrapbookSystem = createScrapbookSystem({
   sceneConfig: sceneSystem.sceneConfig,
   pinsGroup: sceneSystem.pinsGroup
+});
+
+// XR buttons into HUD container
+if (xrButtonsEl) {
+  xrButtonsEl.appendChild(sceneSystem.xrButtons.vrButton);
+  xrButtonsEl.appendChild(sceneSystem.xrButtons.arButton);
+}
+
+// Zoom HUD buttons
+zoomInBtn?.addEventListener('click',  () => sceneSystem.zoomIn());
+zoomOutBtn?.addEventListener('click', () => sceneSystem.zoomOut());
+
+// Lat/lon readout on pointer move over globe
+sceneSystem.domElement.addEventListener('pointermove', (e: PointerEvent) => {
+  if (!hudCoordsEl) return;
+  const coord = sceneSystem.getGlobeCoordAtPointer(e.clientX, e.clientY);
+  if (coord) {
+    const latStr = `${Math.abs(coord.lat).toFixed(4)}°${coord.lat >= 0 ? 'N' : 'S'}`;
+    const lonStr = `${Math.abs(coord.lon).toFixed(4)}°${coord.lon >= 0 ? 'E' : 'W'}`;
+    hudCoordsEl.textContent = `${latStr}  ${lonStr}`;
+  }
 });
 
 sceneSystem.bindViewportInteractions({
@@ -159,12 +208,15 @@ function refreshUI(journeyStatus: string): void {
   });
 
   const env = sceneSystem.getEnvironmentState();
-  if (envTimeEl) {
-    envTimeEl.textContent = env.utcTime;
-  }
+  if (envTimeEl)       envTimeEl.textContent    = env.utcTime;
+  if (envWeatherEl)    envWeatherEl.textContent  = env.weather;
+  if (envBarTimeEl)    envBarTimeEl.textContent  = env.utcTime;
+  if (envBarWeatherEl) envBarWeatherEl.textContent = env.weather;
 
-  if (envWeatherEl) {
-    envWeatherEl.textContent = env.weather;
+  // Rotate compass SVG to match camera heading
+  if (compassSvgEl) {
+    const headingDeg = (sceneSystem.getHeading() * 180) / Math.PI;
+    compassSvgEl.style.transform = `rotate(${-headingDeg}deg)`;
   }
 }
 
