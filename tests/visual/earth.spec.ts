@@ -1,6 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
-const seededScrapbookState = {
+import type { ScrapbookData } from '../../src/types';
+
+const seededScrapbookState: ScrapbookData = {
   'earth-operator': [
     {
       id: 'pin-reykjavik',
@@ -35,7 +38,7 @@ const seededScrapbookState = {
   ]
 };
 
-const seededInteractionState = {
+const seededInteractionState: ScrapbookData = {
   'earth-operator': [
     {
       id: 'pin-pacific',
@@ -60,6 +63,12 @@ const seededInteractionState = {
   ]
 };
 
+async function seedScrapbookState(page: Page, scrapbookState: ScrapbookData): Promise<void> {
+  await page.addInitScript((seededState: ScrapbookData) => {
+    localStorage.setItem('ci-earth-scrapbook', JSON.stringify(seededState));
+  }, scrapbookState);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.clear();
@@ -70,7 +79,6 @@ test('Companion Earth hero canvas is visually stable', async ({ page }) => {
   await page.goto('/?static=1');
   await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
 
-  // Allow one render cycle so animation settles and canvas is present.
   await page.waitForTimeout(800);
 
   await expect(page).toHaveScreenshot('companion-earth-control-deck.png', {
@@ -80,9 +88,7 @@ test('Companion Earth hero canvas is visually stable', async ({ page }) => {
 });
 
 test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
-  await page.addInitScript((scrapbookState) => {
-    localStorage.setItem('ci-earth-scrapbook', JSON.stringify(scrapbookState));
-  }, seededScrapbookState);
+  await seedScrapbookState(page, seededScrapbookState);
 
   await page.goto('/?static=1');
   await expect(page.locator('#pin-list .pin-item')).toHaveCount(3);
@@ -96,9 +102,7 @@ test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
 });
 
 test('Companion Earth selects a pin directly from the globe', async ({ page }) => {
-  await page.addInitScript((scrapbookState) => {
-    localStorage.setItem('ci-earth-scrapbook', JSON.stringify(scrapbookState));
-  }, seededInteractionState);
+  await seedScrapbookState(page, seededInteractionState);
 
   await page.goto('/?static=1');
   await expect(page.locator('#pin-detail-label')).toHaveValue('Pacific Archive');
