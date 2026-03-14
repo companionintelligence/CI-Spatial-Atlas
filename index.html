@@ -10,29 +10,10 @@
       <aside id="control-panel">
         <header class="panel-head">
           <h1>Companion Earth</h1>
-          <p class="sub">Planetary intelligence cockpit with account sessions, map memory, weather, and route playback.</p>
         </header>
 
         <section class="card">
-          <h2>Workflow Steps</h2>
-          <p class="card-note">Deterministic vibe loop: build, screenshot validation, and release gate.</p>
-          <ul id="workflow-list"></ul>
-        </section>
-
-        <section class="card">
-          <h2>New Account</h2>
-          <p class="card-note">Set or switch account scope before editing scrapbook memories.</p>
-          <form id="account-form">
-            <label for="account-name">Account Name</label>
-            <input id="account-name" name="accountName" value="earth-operator" maxlength="48" />
-            <button type="submit">Create Account Session</button>
-          </form>
-          <p id="account-status" aria-live="polite"></p>
-        </section>
-
-        <section class="card">
           <h2>Environment</h2>
-          <p class="card-note">Live simulated time and weather state for globe lighting and atmosphere behavior.</p>
           <dl class="env-grid">
             <div>
               <dt>Time</dt>
@@ -47,7 +28,6 @@
 
         <section class="card">
           <h2>Spatial Scrapbook</h2>
-          <p class="card-note">Drop a pin from the current viewport and manage your memory stack.</p>
           <form id="scrapbook-form">
             <label for="pin-label">Pin Label</label>
             <input id="pin-label" name="pinLabel" value="New Memory" maxlength="64" />
@@ -58,7 +38,6 @@
 
         <section class="card">
           <h2>Pin Details</h2>
-          <p class="card-note">Update selected pin metadata and media references.</p>
           <form id="pin-detail-form">
             <label for="pin-detail-label">Label</label>
             <input id="pin-detail-label" name="pinDetailLabel" maxlength="64" />
@@ -79,7 +58,6 @@
 
         <section class="card">
           <h2>Journeys</h2>
-          <p class="card-note">Playback memories in chronological order with auto-fly navigation.</p>
           <div class="row-actions">
             <button id="journey-start-btn" type="button">Play Journey</button>
             <button id="journey-next-btn" type="button">Next Stop</button>
