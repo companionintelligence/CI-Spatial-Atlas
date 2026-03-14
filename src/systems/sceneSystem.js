@@ -33,6 +33,21 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }) {
       radius: 1.45,
       tube: 0.02,
       color: 0x93ffe7
+    },
+    scrapbook: {
+      markerOffset: 0.04,
+      markerRadius: 0.026,
+      selectedMarkerRadius: 0.034,
+      stemRadius: 0.006,
+      stemLength: 0.08,
+      routeOffset: 0.055,
+      routeSegments: 52,
+      markerColor: 0xffb86f,
+      selectedMarkerColor: 0xffdb90,
+      stemColor: 0xffd78e,
+      routeColor: 0x7af5ff,
+      routeOpacity: 0.72,
+      haloColor: 0xfff2ba
     }
   };
 

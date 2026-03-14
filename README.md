@@ -6,7 +6,8 @@ Companion Earth is a browser-native, Three.js-powered planetary exploration prot
 
 - Declarative scene setup for globe rendering
 - Account session switching
-- Spatial scrapbook pin drops on the globe
+- Spatial scrapbook pin drops rendered as globe beacons
+- Chronological journey routes rendered across scrapbook memories
 - Account-scoped local persistence for scrapbook memories
 - Deterministic visual regression mode via `/?static=1`
 

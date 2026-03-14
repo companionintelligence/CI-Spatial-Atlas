@@ -8,6 +8,75 @@ import {
   setAccountPins
 } from '../scrapbook.js';
 
+function createPinMarker(pin, sceneConfig, isSelected) {
+  const visuals = sceneConfig.scrapbook;
+  const normal = latLonToCartesian(pin.lat, pin.lon, 1).normalize();
+  const anchorPoint = latLonToCartesian(pin.lat, pin.lon, sceneConfig.globe.radius);
+  const stemLength = visuals.stemLength + Math.max(pin.altitude || 0, 0) * 0.08;
+  const markerRadius = isSelected ? visuals.selectedMarkerRadius : visuals.markerRadius;
+  const markerPoint = anchorPoint
+    .clone()
+    .add(normal.clone().multiplyScalar(visuals.markerOffset + stemLength));
+
+  const group = new THREE.Group();
+
+  const stem = new THREE.Mesh(
+    new THREE.CylinderGeometry(visuals.stemRadius, visuals.stemRadius, stemLength, 10),
+    new THREE.MeshBasicMaterial({ color: visuals.stemColor, transparent: true, opacity: 0.9 })
+  );
+  stem.position.copy(anchorPoint).add(normal.clone().multiplyScalar((visuals.markerOffset + stemLength) * 0.5));
+  stem.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  group.add(stem);
+
+  const beacon = new THREE.Mesh(
+    new THREE.SphereGeometry(markerRadius, 18, 18),
+    new THREE.MeshBasicMaterial({
+      color: isSelected ? visuals.selectedMarkerColor : visuals.markerColor
+    })
+  );
+  beacon.position.copy(markerPoint);
+  group.add(beacon);
+
+  if (isSelected) {
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(markerRadius * 1.7, markerRadius * 0.2, 12, 36),
+      new THREE.MeshBasicMaterial({
+        color: visuals.haloColor,
+        transparent: true,
+        opacity: 0.85
+      })
+    );
+    halo.position.copy(markerPoint);
+    halo.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+    group.add(halo);
+  }
+
+  return group;
+}
+
+function createJourneyRoute(pins, sceneConfig) {
+  if (pins.length < 2) {
+    return null;
+  }
+
+  const visuals = sceneConfig.scrapbook;
+  const controlPoints = pins.map((pin) =>
+    latLonToCartesian(pin.lat, pin.lon, sceneConfig.globe.radius + visuals.routeOffset)
+  );
+  const curve = new THREE.CatmullRomCurve3(controlPoints, false, 'centripetal');
+  const sampledPoints = curve.getPoints(Math.max(visuals.routeSegments, controlPoints.length * 18));
+  const geometry = new THREE.BufferGeometry().setFromPoints(sampledPoints);
+
+  return new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({
+      color: visuals.routeColor,
+      transparent: true,
+      opacity: visuals.routeOpacity
+    })
+  );
+}
+
 export function createScrapbookSystem({ sceneConfig, pinsGroup }) {
   let scrapbookDb = loadAllScrapbookData();
   let activeAccount = 'earth-operator';
@@ -105,17 +174,14 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }) {
   function renderPinsInScene() {
     pinsGroup.clear();
 
+    const journeyRoute = createJourneyRoute(getJourneyPins(), sceneConfig);
+    if (journeyRoute) {
+      pinsGroup.add(journeyRoute);
+    }
+
     pins.forEach((pin) => {
-      const point = latLonToCartesian(pin.lat, pin.lon, sceneConfig.globe.radius + 0.04);
       const isSelected = pin.id === selectedPinId;
-
-      const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(isSelected ? 0.032 : 0.025, 14, 14),
-        new THREE.MeshBasicMaterial({ color: isSelected ? 0xffdb90 : 0xffb86f })
-      );
-
-      mesh.position.copy(point);
-      pinsGroup.add(mesh);
+      pinsGroup.add(createPinMarker(pin, sceneConfig, isSelected));
     });
   }
 
