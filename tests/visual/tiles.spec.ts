@@ -24,7 +24,7 @@ test('3D tiles system initialises and reports status', async ({ page }, testInfo
   const isMobile = testInfo.project.name === 'mobile-chrome';
 
   // Live mode: no ?static=1, so tiles are allowed to load from the API.
-  await page.goto('/');
+  await page.goto('/?imagery=live');
 
   // Page must render without throwing.
   await expect(page.locator('#app canvas')).toBeVisible({ timeout: 8000 });
@@ -34,6 +34,7 @@ test('3D tiles system initialises and reports status', async ({ page }, testInfo
   // 'disabled' → no API key configured (expected in keyless environments)
   // 'error'    → API rejected the request (key invalid / quota exceeded)
   const viewport = page.locator('#viewport');
+  await expect(viewport).toHaveAttribute('data-imagery-mode', 'live');
   await page
     .waitForSelector('#viewport[data-tiles]', { timeout: 20_000 })
     .catch(() => {
@@ -85,11 +86,12 @@ test('3D tiles do not crash the scrapbook system', async ({ page }) => {
     );
   });
 
-  await page.goto('/');
+  await page.goto('/?imagery=live');
 
   // Basic page load check.
   await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
   await expect(page.locator('#app canvas')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'live');
 
   // The scrapbook pin should render in the pin list.
   await expect(page.locator('#pin-list .pin-item')).toHaveCount(1, { timeout: 5000 });

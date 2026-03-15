@@ -3,7 +3,7 @@ import './style.css';
 import { createInputSystem } from './systems/inputSystem';
 import { createSceneSystem } from './systems/sceneSystem';
 import { createScrapbookSystem } from './systems/scrapbookSystem';
-import type { InputElements } from './types';
+import type { ImageryMode, InputElements } from './types';
 import { renderWorkflowList } from './workflow';
 
 function getElementByIdOrThrow<T extends HTMLElement>(id: string): T {
@@ -78,8 +78,20 @@ if (window.innerWidth < 768) {
   setSidebarCollapsed(true);
 }
 
-const isStaticMode = new URLSearchParams(window.location.search).get('static') === '1';
-const sceneSystem = createSceneSystem({ mountEl: appEl, viewportEl, isStaticMode });
+const searchParams = new URLSearchParams(window.location.search);
+const isStaticMode = searchParams.get('static') === '1';
+
+function resolveImageryMode(): ImageryMode {
+  const requestedMode = searchParams.get('imagery');
+  if (requestedMode === 'local' || requestedMode === 'live') {
+    return requestedMode;
+  }
+
+  return isStaticMode ? 'local' : 'live';
+}
+
+const imageryMode = resolveImageryMode();
+const sceneSystem = createSceneSystem({ mountEl: appEl, viewportEl, isStaticMode, imageryMode });
 const scrapbookSystem = createScrapbookSystem({
   sceneConfig: sceneSystem.sceneConfig,
   pinsGroup: sceneSystem.pinsGroup

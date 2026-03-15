@@ -5,6 +5,7 @@ Companion Earth is a browser-native, Three.js-powered planetary exploration prot
 ## Current Feature Set
 
 - Declarative scene setup for globe rendering
+- Selectable local-texture rendering mode with KTX2-backed Earth and sky assets
 - Desktop drag-to-rotate globe interaction
 - Account session switching
 - Spatial scrapbook pin drops rendered as globe beacons
@@ -16,11 +17,21 @@ Companion Earth is a browser-native, Three.js-powered planetary exploration prot
 ## Iterative Vibe Loop
 
 1. `npm install`
-2. `npm run vibe:dev`
-3. `npm run vibe:build`
-4. `npm run vibe:test`
-5. If UI changes are intentional: `npm run vibe:test:update` then `npm run vibe:test`
-6. Pre-merge gate: `npm run vibe:loop`
+2. `npm run textures:build`
+3. `npm run vibe:dev`
+4. `npm run vibe:build`
+5. `npm run vibe:test`
+6. If UI changes are intentional: `npm run vibe:test:update` then `npm run vibe:test`
+7. Pre-merge gate: `npm run vibe:loop`
+
+## Texture Assets
+
+- Source masters live in [materials](materials).
+- Derived runtime files are generated into [public/textures](public/textures) and [public/basis](public/basis).
+- Regenerate the texture set with `npm run textures:build`.
+- Static mode defaults to local textured rendering: `/?static=1`.
+- Force local textured rendering in normal browsing with `/?imagery=local`.
+- Force live provider imagery with `/?imagery=live`.
 
 ## New Account Session
 

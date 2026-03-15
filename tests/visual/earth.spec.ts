@@ -75,9 +75,17 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+async function waitForLocalTextures(page: Page): Promise<void> {
+  await expect(page.locator('#viewport')).toHaveAttribute('data-local-textures', 'ready', {
+    timeout: 10_000
+  });
+}
+
 test('Companion Earth hero canvas is visually stable', async ({ page }) => {
-  await page.goto('/?static=1');
+  await page.goto('/?static=1&imagery=local');
   await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
+  await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'local');
+  await waitForLocalTextures(page);
 
   await page.waitForTimeout(800);
 
@@ -90,8 +98,10 @@ test('Companion Earth hero canvas is visually stable', async ({ page }) => {
 test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
   await seedScrapbookState(page, seededScrapbookState);
 
-  await page.goto('/?static=1');
+  await page.goto('/?static=1&imagery=local');
   await expect(page.locator('#pin-list .pin-item')).toHaveCount(3);
+  await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'local');
+  await waitForLocalTextures(page);
 
   await page.waitForTimeout(800);
 
@@ -102,8 +112,10 @@ test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
 });
 
 test('Companion Earth closer zoom is visually stable', async ({ page }) => {
-  await page.goto('/?static=1');
+  await page.goto('/?static=1&imagery=local');
   await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
+  await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'local');
+  await waitForLocalTextures(page);
 
   await page.locator('#zoom-in-btn').click();
   await page.locator('#zoom-in-btn').click();
@@ -119,8 +131,10 @@ test('Companion Earth closer zoom is visually stable', async ({ page }) => {
 test('Companion Earth selects a pin directly from the globe', async ({ page }) => {
   await seedScrapbookState(page, seededInteractionState);
 
-  await page.goto('/?static=1');
+  await page.goto('/?static=1&imagery=local');
   await expect(page.locator('#pin-detail-label')).toHaveValue('Pacific Archive');
+  await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'local');
+  await waitForLocalTextures(page);
 
   const canvas = page.locator('#app canvas');
   const box = await canvas.boundingBox();

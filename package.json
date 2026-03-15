@@ -14,6 +14,7 @@
     "vibe:test": "playwright test --config=playwright.config.js",
     "vibe:test:update": "playwright test --config=playwright.config.js --update-snapshots",
     "vibe:loop": "npm run vibe:build && npm run vibe:test",
+    "textures:build": "tsx scripts/generate-textures.ts",
     "typecheck": "tsc --noEmit",
     "account:new": "tsx scripts/new-account.ts"
   },
@@ -21,10 +22,15 @@
     "3d-tiles-renderer": "^0.4.22",
     "three": "^0.183.0"
   },
+  "jpeg-js": "^0.4.4",
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^25.5.0",
+    "@types/pngjs": "^6.0.5",
     "@types/three": "^0.183.1",
+    "jpeg-js": "^0.4.4",
+    "ktx2-encoder": "^0.5.1",
+    "pngjs": "^7.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.5"

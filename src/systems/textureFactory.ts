@@ -1,5 +1,157 @@
 import * as THREE from 'three';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
+
 import { selectTileUrl } from './tileProvider';
+
+type LocalTextureName =
+  | 'earth-day'
+  | 'earth-night'
+  | 'earth-normal'
+  | 'earth-roughness'
+  | 'earth-clouds'
+  | 'stars-sky'
+  | 'sun'
+  | 'moon';
+
+type LocalTextureSize = '1024' | '2048' | '4096';
+export type LocalTextureDetail = 'static' | 'interactive';
+
+interface LocalTextureConfig {
+  rawExtension: 'jpg' | 'png';
+  colorSpace: THREE.ColorSpace;
+  wrapS?: THREE.Wrapping;
+}
+
+export interface LocalTexturePack {
+  day: THREE.Texture;
+  night: THREE.Texture;
+  normal: THREE.Texture;
+  roughness: THREE.Texture;
+  clouds: THREE.Texture;
+  sky: THREE.Texture;
+  sun: THREE.Texture;
+  moon: THREE.Texture;
+}
+
+const LOCAL_TEXTURE_CONFIG: Record<LocalTextureName, LocalTextureConfig> = {
+  'earth-day': { rawExtension: 'jpg', colorSpace: THREE.SRGBColorSpace, wrapS: THREE.RepeatWrapping },
+  'earth-night': { rawExtension: 'jpg', colorSpace: THREE.SRGBColorSpace, wrapS: THREE.RepeatWrapping },
+  'earth-normal': { rawExtension: 'png', colorSpace: THREE.NoColorSpace, wrapS: THREE.RepeatWrapping },
+  'earth-roughness': { rawExtension: 'png', colorSpace: THREE.NoColorSpace, wrapS: THREE.RepeatWrapping },
+  'earth-clouds': { rawExtension: 'png', colorSpace: THREE.NoColorSpace, wrapS: THREE.RepeatWrapping },
+  'stars-sky': { rawExtension: 'jpg', colorSpace: THREE.SRGBColorSpace, wrapS: THREE.RepeatWrapping },
+  sun: { rawExtension: 'jpg', colorSpace: THREE.SRGBColorSpace },
+  moon: { rawExtension: 'jpg', colorSpace: THREE.SRGBColorSpace }
+};
+
+const LOCAL_TEXTURE_DETAIL: Record<LocalTextureDetail, { surface: LocalTextureSize; sky: LocalTextureSize; body: LocalTextureSize }> = {
+  static: { surface: '2048', sky: '2048', body: '1024' },
+  interactive: { surface: '4096', sky: '4096', body: '2048' }
+};
+
+const textureCache = new Map<string, Promise<THREE.Texture>>();
+const rawTextureLoader = new THREE.TextureLoader();
+let ktx2Loader: KTX2Loader | null = null;
+
+function getKtx2Loader(renderer: THREE.WebGLRenderer): KTX2Loader {
+  if (!ktx2Loader) {
+    ktx2Loader = new KTX2Loader();
+    ktx2Loader.setTranscoderPath('/basis/');
+    ktx2Loader.detectSupport(renderer);
+  }
+
+  return ktx2Loader;
+}
+
+function getKtxPath(name: LocalTextureName, size: LocalTextureSize): string {
+  return `/textures/ktx2/${size}/${name}.ktx2`;
+}
+
+function getRawPath(name: LocalTextureName, size: LocalTextureSize): string {
+  return `/textures/raw/${size}/${name}.${LOCAL_TEXTURE_CONFIG[name].rawExtension}`;
+}
+
+function configureTexture(
+  texture: THREE.Texture,
+  renderer: THREE.WebGLRenderer,
+  name: LocalTextureName
+): THREE.Texture {
+  const config = LOCAL_TEXTURE_CONFIG[name];
+  texture.colorSpace = config.colorSpace;
+  texture.wrapS = config.wrapS ?? THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function loadKtxTexture(
+  renderer: THREE.WebGLRenderer,
+  url: string,
+  name: LocalTextureName
+): Promise<THREE.Texture> {
+  return new Promise((resolve, reject) => {
+    getKtx2Loader(renderer).load(
+      url,
+      (texture) => resolve(configureTexture(texture, renderer, name)),
+      undefined,
+      reject
+    );
+  });
+}
+
+function loadRawTexture(
+  renderer: THREE.WebGLRenderer,
+  url: string,
+  name: LocalTextureName
+): Promise<THREE.Texture> {
+  return new Promise((resolve, reject) => {
+    rawTextureLoader.load(
+      url,
+      (texture) => resolve(configureTexture(texture, renderer, name)),
+      undefined,
+      reject
+    );
+  });
+}
+
+export function loadLocalTexture(
+  renderer: THREE.WebGLRenderer,
+  name: LocalTextureName,
+  size: LocalTextureSize
+): Promise<THREE.Texture> {
+  const cacheKey = `${name}:${size}`;
+  const cached = textureCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = loadKtxTexture(renderer, getKtxPath(name, size), name).catch(() =>
+    loadRawTexture(renderer, getRawPath(name, size), name)
+  );
+
+  textureCache.set(cacheKey, promise);
+  return promise;
+}
+
+export async function loadLocalTexturePack(
+  renderer: THREE.WebGLRenderer,
+  detail: LocalTextureDetail = 'interactive'
+): Promise<LocalTexturePack> {
+  const resolution = LOCAL_TEXTURE_DETAIL[detail];
+  const [day, night, normal, roughness, clouds, sky, sun, moon] = await Promise.all([
+    loadLocalTexture(renderer, 'earth-day', resolution.surface),
+    loadLocalTexture(renderer, 'earth-night', resolution.surface),
+    loadLocalTexture(renderer, 'earth-normal', resolution.surface),
+    loadLocalTexture(renderer, 'earth-roughness', resolution.surface),
+    loadLocalTexture(renderer, 'earth-clouds', resolution.surface),
+    loadLocalTexture(renderer, 'stars-sky', resolution.sky),
+    loadLocalTexture(renderer, 'sun', resolution.body),
+    loadLocalTexture(renderer, 'moon', resolution.body)
+  ]);
+
+  return { day, night, normal, roughness, clouds, sky, sun, moon };
+}
 
 // ---------------------------------------------------------------------------
 // Shared noise primitives

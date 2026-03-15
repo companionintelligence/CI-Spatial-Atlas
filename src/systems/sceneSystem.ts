@@ -9,7 +9,8 @@ import {
   createEarthTileTexture,
   createNightLightsTexture,
   createOverlayTileTexture,
-  createWeatherTexture
+  createWeatherTexture,
+  loadLocalTexturePack
 } from './textureFactory';
 import { selectHillshadeTileUrl, selectLabelsTileUrl } from './tileProvider';
 import { createXrSystem } from './xrSystem';
@@ -30,7 +31,8 @@ function seededRandomFactory(seed: number): () => number {
   };
 }
 
-export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateSceneSystemOptions) {
+export function createSceneSystem({ mountEl, viewportEl, isStaticMode, imageryMode }: CreateSceneSystemOptions) {
+  const useLocalSurface = isStaticMode || imageryMode === 'local';
   const sceneConfig: SceneConfig = {
     camera: {
       fov: 52,
@@ -92,9 +94,22 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const worldGroup = new THREE.Group();
   scene.add(worldGroup);
 
+  viewportEl.dataset.imageryMode = useLocalSurface ? 'local' : 'live';
+  viewportEl.dataset.localTextures = 'pending';
+
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(78, 64, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0x030915,
+      side: THREE.BackSide,
+      toneMapped: false
+    })
+  );
+  scene.add(skyDome);
+
   const starRand = seededRandomFactory(42);
   const starGeometry = new THREE.BufferGeometry();
-  const starCount = 3200;
+  const starCount = 1400;
   const positions = new Float32Array(starCount * 3);
 
   for (let i = 0; i < starCount * 3; i += 3) {
@@ -108,7 +123,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
 
   const stars = new THREE.Points(
     starGeometry,
-    new THREE.PointsMaterial({ color: 0xd8e7ff, size: 0.05, sizeAttenuation: true, transparent: true, opacity: 0.9 })
+    new THREE.PointsMaterial({ color: 0xd8e7ff, size: 0.034, sizeAttenuation: true, transparent: true, opacity: 0.38 })
   );
   scene.add(stars);
 
@@ -117,7 +132,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   const cityLightRand = seededRandomFactory(45);
   const weatherRand = seededRandomFactory(46);
   const earthFallbackTexture = createEarthTexture(earthRand);
-  const earthTexture = isStaticMode ? earthFallbackTexture : createEarthTileTexture(earthFallbackTexture, 3);
+  const earthTexture = useLocalSurface ? earthFallbackTexture : createEarthTileTexture(earthFallbackTexture, 3);
   const cloudTexture = createCloudTexture(cloudRand);
   const nightLightsTexture = createNightLightsTexture(earthFallbackTexture, cityLightRand);
   const weatherTexture = createWeatherTexture(weatherRand);
@@ -133,8 +148,8 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       emissiveMap: nightLightsTexture,
       emissive: new THREE.Color(0xffa84a),
       emissiveIntensity: 0.02,
-      roughness: 0.58,
-      metalness: 0.05
+      roughness: 0.92,
+      metalness: 0.02
     })
   );
   worldGroup.add(globe);
@@ -148,7 +163,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
       transparent: true,
       depthWrite: false,
       opacity: 0.42,
-      roughness: 0.9,
+      roughness: 0.82,
       metalness: 0
     })
   );
@@ -219,6 +234,18 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   sun.position.set(3.8, 1.7, 1.2);
   scene.add(sun);
 
+  const sunBody = new THREE.Mesh(
+    new THREE.SphereGeometry(0.34, 28, 28),
+    new THREE.MeshBasicMaterial({ color: 0xffcb7f, toneMapped: false })
+  );
+  scene.add(sunBody);
+
+  const moonBody = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 28, 28),
+    new THREE.MeshBasicMaterial({ color: 0xbfc6d9, toneMapped: false })
+  );
+  scene.add(moonBody);
+
   const pinsGroup = new THREE.Group();
   worldGroup.add(pinsGroup);
 
@@ -272,6 +299,41 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
   let tilesSystem: Awaited<ReturnType<typeof initTilesSystem>> = null;
   void initTilesSystem(scene, camera, renderer, sceneConfig.globe.radius, viewportEl).then((sys) => { tilesSystem = sys; });
 
+  void loadLocalTexturePack(renderer, isStaticMode ? 'static' : 'interactive')
+    .then((texturePack) => {
+      if (useLocalSurface) {
+        globeMaterial.map = texturePack.day;
+      }
+      globeMaterial.emissiveMap = texturePack.night;
+      globeMaterial.normalMap = texturePack.normal;
+      globeMaterial.roughnessMap = texturePack.roughness;
+      globeMaterial.normalScale.set(0.72, 0.72);
+      globeMaterial.needsUpdate = true;
+
+      cloudMaterial.map = null;
+      cloudMaterial.alphaMap = texturePack.clouds;
+      cloudMaterial.color = new THREE.Color(0xf5f8ff);
+      cloudMaterial.needsUpdate = true;
+
+      const skyMaterial = skyDome.material as THREE.MeshBasicMaterial;
+      skyMaterial.map = texturePack.sky;
+      skyMaterial.needsUpdate = true;
+
+      const sunMaterial = sunBody.material as THREE.MeshBasicMaterial;
+      sunMaterial.map = texturePack.sun;
+      sunMaterial.needsUpdate = true;
+
+      const moonMaterial = moonBody.material as THREE.MeshBasicMaterial;
+      moonMaterial.map = texturePack.moon;
+      moonMaterial.needsUpdate = true;
+
+      viewportEl.dataset.localTextures = 'ready';
+      render();
+    })
+    .catch(() => {
+      viewportEl.dataset.localTextures = 'error';
+    });
+
   function bindViewportInteractions({ onSelectPin }: ViewportInteractionHandlers): void {
     selectionHandler = onSelectPin ?? null;
   }
@@ -312,6 +374,9 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode }: CreateS
     );
     sun.position.copy(sunPos);
     sunDirection.copy(sunPos).normalize();
+
+    sunBody.position.copy(sunDirection).multiplyScalar(18);
+    moonBody.position.copy(sunDirection).multiplyScalar(-14);
 
     const sunAlt = THREE.MathUtils.clamp((sunPos.y + 2.6) / 5.2, 0, 1);
     ambient.intensity  = 0.38 + sunAlt * 0.55;

@@ -19,6 +19,8 @@ export interface PinUpdates {
   mediaUrl: string;
 }
 
+export type ImageryMode = 'live' | 'local';
+
 export interface SceneConfig {
   camera: {
     fov: number;
@@ -88,6 +90,7 @@ export interface CreateSceneSystemOptions {
   mountEl: HTMLElement;
   viewportEl: HTMLElement;
   isStaticMode: boolean;
+  imageryMode: ImageryMode;
 }
 
 export interface CreateScrapbookSystemOptions {
