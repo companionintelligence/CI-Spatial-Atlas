@@ -1,0 +1,33 @@
+{
+  "name": "@companion/atlas-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Companion Atlas — containerized 3D processing server + MCP API that turns geodata, images, and video into shareable 4D scrapbook stories.",
+  "license": "CI-Commercial-1.0",
+  "bin": {
+    "atlas-mcp": "dist/mcp-stdio.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "mcp:stdio": "tsx src/mcp-stdio.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "exiftool-vendored": "^28.3.0",
+    "fastify": "^5.2.0",
+    "openid-client": "^6.1.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "comments": {
+    "note": "Heavy native reconstruction tools (COLMAP, OpenDroneMap/NodeODM, Nerfstudio, ffmpeg) are NOT npm dependencies. They run in the GPU worker container (docker/Dockerfile.worker) and are invoked by src/pipeline.ts over a job queue. This package only orchestrates them."
+  }
+}

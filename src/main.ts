@@ -1,5 +1,6 @@
 import './style.css';
 
+import { fetchStory, storyToPins } from './atlas/story';
 import { createInputSystem } from './systems/inputSystem';
 import { createSceneSystem } from './systems/sceneSystem';
 import { createScrapbookSystem } from './systems/scrapbookSystem';
@@ -243,6 +244,30 @@ function refreshUI(journeyStatus: string): void {
 
 refreshUI('Journey idle.');
 sceneSystem.startLoop();
+
+// -------------------------------------------------------------------------
+// Atlas story mode — `?story=<url>` loads a Companion Atlas 4D story document
+// and renders its time-ordered scenes as a scrapbook journey on the globe.
+// Inert without the param, so default rendering and visual baselines hold.
+// -------------------------------------------------------------------------
+const storyUrl = searchParams.get('story');
+if (storyUrl) {
+  void fetchStory(storyUrl).then((story) => {
+    if (!story) {
+      refreshUI('Story failed to load.');
+      return;
+    }
+
+    document.title = `${story.title} · Companion Atlas`;
+    scrapbookSystem.loadPins(storyToPins(story));
+    refreshUI(`Loaded story: ${story.title}`);
+
+    const first = scrapbookSystem.getSelectedPin();
+    if (first) {
+      sceneSystem.flyToLatLon(first.lat, first.lon, { duration: 1600, distance: 0.84 });
+    }
+  });
+}
 
 // -------------------------------------------------------------------------
 // Live HUD tick — update env-bar and compass independently of pin events

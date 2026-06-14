@@ -90,6 +90,7 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }: CreateScrapboo
   getPins: () => Pin[];
   getSelectedPin: () => Pin | null;
   selectPin: (pinId: string) => void;
+  loadPins: (nextPins: Pin[]) => void;
   addPinFromWorldPoint: (worldPoint: THREE.Vector3, labelText: string) => void;
   updateSelectedPin: (updates: PinUpdates) => void;
   deleteSelectedPin: () => void;
@@ -116,6 +117,17 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }: CreateScrapboo
 
   function selectPin(pinId: string): void {
     selectedPinId = pinId;
+    renderPinsInScene();
+  }
+
+  /**
+   * Replace the in-scene pins with an externally supplied set (e.g. an Atlas
+   * story timeline). These are view-only and are not written to account
+   * persistence, so a shared story never overwrites a user's own scrapbook.
+   */
+  function loadPins(nextPins: Pin[]): void {
+    pins = nextPins;
+    selectedPinId = pins[0]?.id || null;
     renderPinsInScene();
   }
 
@@ -211,6 +223,7 @@ export function createScrapbookSystem({ sceneConfig, pinsGroup }: CreateScrapboo
     getPins,
     getSelectedPin,
     selectPin,
+    loadPins,
     addPinFromWorldPoint,
     updateSelectedPin,
     deleteSelectedPin,
