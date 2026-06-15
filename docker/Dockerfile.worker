@@ -1,0 +1,31 @@
+# Companion Atlas — GPU reconstruction worker.
+#
+# Pulls reconstruction jobs from the queue and runs the image/video → 3D
+# pipeline, then converts results to streamable 3D Tiles and uploads them to
+# the object store. Requires an NVIDIA GPU at runtime
+# (`docker run --gpus all` / compose `deploy.resources.reservations.devices`).
+#
+# This is a scaffold: it lists the toolchain the pipeline (server/src/pipeline.ts)
+# shells out to. Pin exact versions before production.
+
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git cmake build-essential python3 python3-pip \
+        ffmpeg libimage-exiftool-perl \
+        colmap \
+    && rm -rf /var/lib/apt/lists/*
+
+# Structure-from-Motion + reconstruction backends:
+#   - Nerfstudio + gsplat   → Gaussian Splatting from images/video
+#   - OpenDroneMap (NodeODM) → georeferenced photogrammetry for aerial sets
+# Tiling:
+#   - py3dtiles / 3d-tiles-tools → meshes → 3D Tiles (b3dm/glTF)
+#   - splat-transform / SOGS     → splats → KHR_gaussian_splatting 3D Tiles
+RUN pip3 install --no-cache-dir nerfstudio gsplat py3dtiles
+
+# Job-runner entrypoint that the server enqueues against (Redis/BullMQ).
+# COPY worker/ ./worker/
+# CMD ["python3", "worker/run.py"]
+CMD ["bash", "-lc", "echo 'Atlas reconstruction worker image. Wire to the job queue (REDIS_URL) and mount the object store.' && sleep infinity"]

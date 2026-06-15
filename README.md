@@ -1,6 +1,32 @@
-# Companion Earth
+# Companion Earth → Companion Atlas
 
 Companion Earth is a browser-native, Three.js-powered planetary exploration prototype with an iterative vibe coding workflow.
+
+It is being reimagined as **Companion Atlas** — a containerized 3D processing
+server + web viewer that turns any image, set of images, or video into a
+shareable **4D (3D + time) scrapbook map** and storytelling timeline, created
+manually or automatically through an **MCP API** and wired into the Companion
+Intelligence suite (CI‑Server memory, OpenClaw, Hermes, Companion OIDC).
+
+**Start here:** [`REIMAGINE.md`](REIMAGINE.md) — vision, the open‑web‑GIS‑viewer
+research and recommendation, the 4D `Story` data model, architecture, and the
+migration roadmap. The MCP API is documented in [`docs/mcp-api.md`](docs/mcp-api.md).
+
+## Companion Atlas at a glance
+
+```
+media / memory ─▶ ingest ─▶ reconstruct (SfM → mesh | gaussian splat) ─▶ 3D Tiles
+   MCP / REST  ─▶ Atlas API ─▶ Story (4D doc) ─▶ publish ─▶ share URL ─▶ Viewer
+```
+
+- **Viewer** (`src/`, this app) — renders a published `Story`. Open one today on
+  the existing globe: `npm run vibe:dev` then visit
+  `/?imagery=local&story=/stories/sample-pacific-journey.json`.
+- **Processing server + MCP API** (`server/`) — see [`server/README.md`](server/README.md).
+- **Containerized stack** — `docker compose up viewer atlas-api minio postgres redis`
+  (add `--profile gpu up worker` for reconstruction). See [`docker-compose.yml`](docker-compose.yml).
+- **4D Story schema** — [`src/atlas/schema.ts`](src/atlas/schema.ts) (viewer types),
+  mirrored in [`server/src/schema.ts`](server/src/schema.ts) (runtime).
 
 ## Current Feature Set
 

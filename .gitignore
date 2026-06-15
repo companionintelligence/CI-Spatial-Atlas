@@ -4,3 +4,11 @@
 /.env.local
 /.env.development
 /.env.test
+# Nested Atlas server package
+/server/node_modules
+/server/dist
+
+# Test + build artifacts
+/test-results/earth-*
+/test-results/tiles-*
+/playwright-report
