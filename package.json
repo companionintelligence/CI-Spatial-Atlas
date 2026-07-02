@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Companion Atlas — 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
+  "license": "CI-Commercial-1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +18,8 @@
     "vibe:loop": "npm run vibe:build && npm run vibe:test",
     "textures:build": "tsx scripts/generate-textures.ts",
     "typecheck": "tsc --noEmit",
-    "account:new": "tsx scripts/new-account.ts"
+    "account:new": "tsx scripts/new-account.ts",
+    "docs:screenshots": "tsx scripts/capture-doc-screenshots.ts"
   },
   "dependencies": {
     "3d-tiles-renderer": "^0.4.22",
