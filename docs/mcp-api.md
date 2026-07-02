@@ -6,15 +6,30 @@ MCP‑capable app) or automatically (OpenClaw, Hermes, the CI agent). Every tool
 operates on a `companion.atlas/story@1` document (see
 [`../src/atlas/schema.ts`](../src/atlas/schema.ts)).
 
+See [`architecture.md` §10.1](architecture.md#101-auto-compose-flow-the-automatic-path)
+for a sequence diagram of the automatic recipe below end to end.
+
 ## Transports
 
 - **stdio** — local agents / editors:
   ```sh
   claude mcp add companion-atlas -- node /path/to/server/dist/mcp-stdio.js
   ```
+  or, equivalently, an `mcp.json`-style entry:
+  ```json
+  { "mcpServers": {
+      "companion-atlas": { "command": "node", "args": ["/path/to/server/dist/mcp-stdio.js"] }
+  } }
+  ```
 - **Streamable HTTP** — suite services, OIDC‑authenticated: `POST /mcp` on the
   `atlas-api` container. Send the Companion OIDC bearer token in
   `Authorization: Bearer <jwt>`.
+  ```json
+  { "mcpServers": {
+      "companion-atlas": { "url": "https://atlas.ci.computer/mcp",
+                            "headers": { "Authorization": "Bearer <jwt>" } }
+  } }
+  ```
 
 ## Tools
 

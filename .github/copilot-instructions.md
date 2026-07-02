@@ -1,4 +1,4 @@
-# Companion Earth Copilot Instructions
+# Companion Atlas Copilot Instructions
 
 This repository is optimized for iterative vibe coding.
 

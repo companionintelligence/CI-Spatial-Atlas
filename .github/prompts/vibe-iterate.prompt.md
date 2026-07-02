@@ -1,10 +1,10 @@
 ---
 mode: agent
 model: GPT-5.3-Codex
-description: "Iterate Companion Earth by adding one scoped feature, preserving declarative scene architecture and passing vibe loop checks."
+description: "Iterate Companion Atlas by adding one scoped feature, preserving declarative scene architecture and passing vibe loop checks."
 ---
 
-Add one incremental feature to Companion Earth.
+Add one incremental feature to Companion Atlas.
 
 Requirements:
 

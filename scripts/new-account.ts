@@ -34,7 +34,7 @@ function normalizeAccountPayload(value: unknown, fallbackName: string, now: stri
 const inputName = process.argv.slice(2).join(' ').trim();
 const accountName = inputName || 'earth-operator';
 
-const dbPath = resolve('.ci-earth-account.json');
+const dbPath = resolve('.companion-atlas-account.json');
 const now = new Date().toISOString();
 
 let payload: AccountPayload = {
