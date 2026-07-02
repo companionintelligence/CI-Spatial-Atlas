@@ -1,7 +1,8 @@
 {
-  "name": "ci-earth",
+  "name": "companion-atlas",
   "private": true,
   "version": "0.1.0",
+  "description": "Companion Atlas — 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,7 +1,9 @@
 # Companion Atlas — Reimagining CI‑Earth as the Spatial Storytelling Engine
 
-> Status: proposal / direction. Phase 0 scaffolding lands in this branch; the
-> renderer migration (Phase 2) is gated on sign‑off of this document.
+> Status: direction adopted. The product is now **Companion Atlas** — the viewer
+> H1, page title, and agent docs have been renamed. Phase 0 scaffolding is in
+> this branch; the renderer migration (Phase 2, CesiumJS) is gated on sign‑off
+> of that specific piece of this document.
 
 ## 1. The reimagining in one paragraph
 
@@ -200,12 +202,15 @@ path: a person adds scenes/layers and tweaks the timeline before publishing.
 `Story` schema; MCP‑first creation; OIDC subjects replace account names; splats
 streamed as 3D Tiles.
 
+**Resolved:** Product name is **Companion Atlas** (the LICENSE separately lists
+Hub/Core/Memory/Scan as other suite products — Atlas joins that family). The
+`CI‑Earth` GitHub repo name is unchanged; the viewer H1, page title, and all
+agent-facing docs now read "Companion Atlas" and Playwright baselines are
+re‑generated against it in this branch.
+
 **Open for the team:**
-1. Product name — "Companion Atlas" vs another suite name (the LICENSE lists
-   Hub/Core/Memory/Scan). The repo stays `CI‑Earth`; the viewer H1 stays
-   "Companion Earth" until we re‑baseline.
-2. CI‑Server memory contract — MCP tools vs REST, and the memory record shape
+1. CI‑Server memory contract — MCP tools vs REST, and the memory record shape
    for geotagged media (drives `connectors.ts`).
-3. OpenClaw/Hermes exact roles — confirm they should be MCP *clients* of Atlas.
-4. Hosting — self‑hosted MinIO/Postgres vs managed (S3/RDS) for production.
-5. GPU availability for the worker tier (cost/where it runs).
+2. OpenClaw/Hermes exact roles — confirm they should be MCP *clients* of Atlas.
+3. Hosting — self‑hosted MinIO/Postgres vs managed (S3/RDS) for production.
+4. GPU availability for the worker tier (cost/where it runs).

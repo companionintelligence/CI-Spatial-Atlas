@@ -1,12 +1,16 @@
-# Companion Earth → Companion Atlas
+# Companion Atlas
 
-Companion Earth is a browser-native, Three.js-powered planetary exploration prototype with an iterative vibe coding workflow.
+*(formerly Companion Earth — the `CI-Earth` repository name is unchanged)*
 
-It is being reimagined as **Companion Atlas** — a containerized 3D processing
-server + web viewer that turns any image, set of images, or video into a
-shareable **4D (3D + time) scrapbook map** and storytelling timeline, created
-manually or automatically through an **MCP API** and wired into the Companion
-Intelligence suite (CI‑Server memory, OpenClaw, Hermes, Companion OIDC).
+Companion Atlas is a containerized 3D processing server + web viewer that
+turns any image, set of images, or video into a shareable **4D (3D + time)
+scrapbook map** and storytelling timeline, created manually or automatically
+through an **MCP API** and wired into the Companion Intelligence suite
+(CI‑Server memory, OpenClaw, Hermes, Companion OIDC).
+
+The viewer in this repo started as a browser-native, Three.js-powered
+planetary exploration prototype built with an iterative vibe coding workflow;
+that renderer is being replaced by CesiumJS as part of the reimagining below.
 
 **Start here:** [`REIMAGINE.md`](REIMAGINE.md) — vision, the open‑web‑GIS‑viewer
 research and recommendation, the 4D `Story` data model, architecture, and the

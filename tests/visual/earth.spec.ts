@@ -81,21 +81,21 @@ async function waitForLocalTextures(page: Page): Promise<void> {
   });
 }
 
-test('Companion Earth hero canvas is visually stable', async ({ page }) => {
+test('Companion Atlas hero canvas is visually stable', async ({ page }) => {
   await page.goto('/?static=1&imagery=local');
-  await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
+  await expect(page.locator('#control-panel h1')).toHaveText('Companion Atlas');
   await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'local');
   await waitForLocalTextures(page);
 
   await page.waitForTimeout(800);
 
-  await expect(page).toHaveScreenshot('companion-earth-control-deck.png', {
+  await expect(page).toHaveScreenshot('companion-atlas-control-deck.png', {
     animations: 'disabled',
     fullPage: true
   });
 });
 
-test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
+test('Companion Atlas scrapbook route is visually stable', async ({ page }) => {
   await seedScrapbookState(page, seededScrapbookState);
 
   await page.goto('/?static=1&imagery=local');
@@ -105,15 +105,15 @@ test('Companion Earth scrapbook route is visually stable', async ({ page }) => {
 
   await page.waitForTimeout(800);
 
-  await expect(page).toHaveScreenshot('companion-earth-scrapbook-route.png', {
+  await expect(page).toHaveScreenshot('companion-atlas-scrapbook-route.png', {
     animations: 'disabled',
     fullPage: true
   });
 });
 
-test('Companion Earth closer zoom is visually stable', async ({ page }) => {
+test('Companion Atlas closer zoom is visually stable', async ({ page }) => {
   await page.goto('/?static=1&imagery=local');
-  await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
+  await expect(page.locator('#control-panel h1')).toHaveText('Companion Atlas');
   await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'local');
   await waitForLocalTextures(page);
 
@@ -122,13 +122,13 @@ test('Companion Earth closer zoom is visually stable', async ({ page }) => {
   await page.locator('#zoom-in-btn').click();
   await page.waitForTimeout(900);
 
-  await expect(page).toHaveScreenshot('companion-earth-close-zoom.png', {
+  await expect(page).toHaveScreenshot('companion-atlas-close-zoom.png', {
     animations: 'disabled',
     fullPage: true
   });
 });
 
-test('Companion Earth selects a pin directly from the globe', async ({ page }) => {
+test('Companion Atlas selects a pin directly from the globe', async ({ page }) => {
   await seedScrapbookState(page, seededInteractionState);
 
   await page.goto('/?static=1&imagery=local');

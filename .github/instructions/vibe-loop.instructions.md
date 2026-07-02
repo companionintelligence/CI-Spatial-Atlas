@@ -1,6 +1,6 @@
 ---
 applyTo: "src/**/*.js,index.html,src/**/*.css,tests/visual/**/*.js,playwright.config.js"
-description: "Use when iterating Companion Earth features under the declarative vibe workflow and visual regression loop."
+description: "Use when iterating Companion Atlas features under the declarative vibe workflow and visual regression loop."
 ---
 
 # Vibe Loop Instruction

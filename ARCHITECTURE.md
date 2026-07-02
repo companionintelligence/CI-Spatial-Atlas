@@ -1,16 +1,20 @@
-# Architectural Product Plan for 'Companion Earth': WebXR, WebGPU, and Planetary-Scale Open-Source Ecosystems
+# Architectural Product Plan for 'Companion Atlas': WebXR, WebGPU, and Planetary-Scale Open-Source Ecosystems
 
+> Historical planning doc, retained for its engine/rendering research. Superseded
+> as product direction by [`REIMAGINE.md`](REIMAGINE.md), which recommends
+> CesiumJS over the three.js/WebXR path outlined below. The product was renamed
+> from "Companion Earth" to "Companion Atlas" during that reimagining.
 
-The conceptualization and execution of 'Companion Earth' represent a formidable convergence of spatial computing, geographic information systems (GIS), and high-performance web graphics. As a cross-platform, planetary-scale immersive application, its architecture must reconcile the extreme computational demands of rendering a 1:1 scale Earth with the strict latency and framerate requirements of immersive headsets such as the Meta Quest 3, alongside graceful fallbacks for mobile and desktop browser environments. The strategic mandate of this product plan is to define a comprehensive technical blueprint explicitly optimized for an autonomous AI coding agent. This agent will be responsible for orchestrating the application's infrastructure, developing custom shading logic, and managing real-time geospatial data pipelines entirely within an open-source software (OSS) ecosystem.
+The conceptualization and execution of 'Companion Atlas' represent a formidable convergence of spatial computing, geographic information systems (GIS), and high-performance web graphics. As a cross-platform, planetary-scale immersive application, its architecture must reconcile the extreme computational demands of rendering a 1:1 scale Earth with the strict latency and framerate requirements of immersive headsets such as the Meta Quest 3, alongside graceful fallbacks for mobile and desktop browser environments. The strategic mandate of this product plan is to define a comprehensive technical blueprint explicitly optimized for an autonomous AI coding agent. This agent will be responsible for orchestrating the application's infrastructure, developing custom shading logic, and managing real-time geospatial data pipelines entirely within an open-source software (OSS) ecosystem.
 
 Designing a technology stack for an AI coding agent requires a fundamental shift in architectural priorities. Traditional 3D graphics development relies heavily on string-based shader languages (GLSL) and imperative, highly coupled object-oriented hierarchies. These paradigms introduce significant hallucination vectors and syntax error rates during Large Language Model (LLM) code generation. To maximize the AI agent's velocity, determinism, and debugging capabilities, the architecture must prioritize declarative frameworks, strongly typed APIs, Entity-Component-System (ECS) data structures, and node-based shading languages.
 
-This document provides an exhaustive, peer-level analysis of the necessary open-source technologies required to build 'Companion Earth'. The report systematically evaluates and recommends the core 3D rendering engine by comparing Three.js, Babylon.js, and CesiumJS. It details the complex mathematical solutions required for planetary-scale rendering via WebGPU, including floating origin implementations and atmospheric scattering. Furthermore, it outlines a robust cross-platform WebXR interaction model utilizing the Immersive Web SDK (IWSDK), formulates a strategy for streaming OGC 3D Tiles, and architects a highly scalable, serverless backend utilizing free mapping data from the Overture Maps Foundation and the United States Geological Survey (USGS). By adhering to this blueprint, the AI coding agent can autonomously construct, test, and deploy a seamless spatial computing experience.
+This document provides an exhaustive, peer-level analysis of the necessary open-source technologies required to build 'Companion Atlas'. The report systematically evaluates and recommends the core 3D rendering engine by comparing Three.js, Babylon.js, and CesiumJS. It details the complex mathematical solutions required for planetary-scale rendering via WebGPU, including floating origin implementations and atmospheric scattering. Furthermore, it outlines a robust cross-platform WebXR interaction model utilizing the Immersive Web SDK (IWSDK), formulates a strategy for streaming OGC 3D Tiles, and architects a highly scalable, serverless backend utilizing free mapping data from the Overture Maps Foundation and the United States Geological Survey (USGS). By adhering to this blueprint, the AI coding agent can autonomously construct, test, and deploy a seamless spatial computing experience.
 
 
 ## Comparative Analysis of Core Open-Source Rendering Engines
 
-The foundational layer of the 'Companion Earth' architecture relies on the selection of an open-source WebGL and WebGPU rendering engine. This engine must support massive geospatial datasets, handle immersive WebXR sessions seamlessly, and provide a programmatic interface that aligns with the code-generation strengths of an AI agent. The ecosystem is currently dominated by three primary frameworks: Three.js, Babylon.js, and CesiumJS. Each represents a divergent philosophy regarding library modularity, engine scalability, and domain specificity.
+The foundational layer of the 'Companion Atlas' architecture relies on the selection of an open-source WebGL and WebGPU rendering engine. This engine must support massive geospatial datasets, handle immersive WebXR sessions seamlessly, and provide a programmatic interface that aligns with the code-generation strengths of an AI agent. The ecosystem is currently dominated by three primary frameworks: Three.js, Babylon.js, and CesiumJS. Each represents a divergent philosophy regarding library modularity, engine scalability, and domain specificity.
 
 
 ## Architectural Philosophies and Engine Capabilities
@@ -82,7 +86,7 @@ The selection process requires evaluating how each engine manages the inherent c
 </table>
 
 
-The analysis of these engines reveals a critical architectural paradox for the 'Companion Earth' project. CesiumJS is unequivocally the most powerful tool for rendering a mathematically precise globe and streaming massive 3D photogrammetry.<sup>2</sup> However, its lack of native WebXR support and its delayed adoption of WebGPU fundamental disqualifies it as the primary rendering layer for a next-generation, high-performance Meta Quest 3 application.<sup>6</sup>
+The analysis of these engines reveals a critical architectural paradox for the 'Companion Atlas' project. CesiumJS is unequivocally the most powerful tool for rendering a mathematically precise globe and streaming massive 3D photogrammetry.<sup>2</sup> However, its lack of native WebXR support and its delayed adoption of WebGPU fundamental disqualifies it as the primary rendering layer for a next-generation, high-performance Meta Quest 3 application.<sup>6</sup>
 
 Babylon.js offers higher engine-level scalability and faster production workflows due to its integrated tooling and native WebXR integration.<sup>8</sup> Its useLargeWorldRendering flag provides an immediate solution to floating-point precision errors at planetary scales.<sup>12</sup> However, Babylon.js requires a heavier initial bundle load and utilizes a highly opinionated architecture that can sometimes restrict custom rendering pipelines.<sup>1</sup>
 
@@ -137,7 +141,7 @@ Furthermore, to combat severe Z-fighting at extreme render distances (e.g., dist
 
 ## Implementing Preetham Atmospheric Scattering via TSL
 
-A static texture map applied to a spherical geometry is insufficient for a high-fidelity 'Companion Earth' experience. To achieve photorealism, the AI agent must implement a volumetric atmospheric scattering model based on the rigorously defined Preetham and Nishita physical equations.<sup>29</sup>
+A static texture map applied to a spherical geometry is insufficient for a high-fidelity 'Companion Atlas' experience. To achieve photorealism, the AI agent must implement a volumetric atmospheric scattering model based on the rigorously defined Preetham and Nishita physical equations.<sup>29</sup>
 
 The atmosphere is modeled not as a solid boundary, but as a dense volume of particles that absorb, reflect, and scatter light based on the optical depth of the viewing ray. The agent's implementation must account for two primary physical phenomena:
 
@@ -166,7 +170,7 @@ Instead, the agent will architect a multi-pass GPU pipeline. Irregular grid data
 
 ## Cross-Platform WebXR Architecture: Mobile, Desktop, and Meta Quest 3
 
-Delivering 'Companion Earth' across mobile touchscreens, desktop mouse/keyboard configurations, and 6DoF (Degrees of Freedom) immersive headsets like the Meta Quest 3 requires a highly decoupled interaction architecture. The application must process high-frequency input data and render stereoscopic displays without bottlenecking the main WebGPU rendering thread.
+Delivering 'Companion Atlas' across mobile touchscreens, desktop mouse/keyboard configurations, and 6DoF (Degrees of Freedom) immersive headsets like the Meta Quest 3 requires a highly decoupled interaction architecture. The application must process high-frequency input data and render stereoscopic displays without bottlenecking the main WebGPU rendering thread.
 
 
 ## The Immersive Web SDK (IWSDK) Integration
@@ -198,7 +202,7 @@ For users accessing the application outside of a VR headset, the architecture gu
 
 ## 3D Tiles Streaming Infrastructure
 
-A digital twin of the Earth cannot load static assets directly into client memory; the geometric data is simply too vast. To visualize urban centers, intricate topography, and real-world photogrammetry, 'Companion Earth' requires a dynamic Level of Detail (LOD) streaming solution based on the Open Geospatial Consortium (OGC) 3D Tiles specification.<sup>48</sup>
+A digital twin of the Earth cannot load static assets directly into client memory; the geometric data is simply too vast. To visualize urban centers, intricate topography, and real-world photogrammetry, 'Companion Atlas' requires a dynamic Level of Detail (LOD) streaming solution based on the Open Geospatial Consortium (OGC) 3D Tiles specification.<sup>48</sup>
 
 
 ## Integrating the NASA-AMMOS Renderer
@@ -281,11 +285,11 @@ If an updated TSL shader configuration or a new monthly release of the Overture 
 
 ## Architectural Synthesis
 
-The product architecture for 'Companion Earth' represents a highly optimized convergence of state-of-the-art open-source technologies, structured specifically to enable an AI coding agent to operate autonomously at maximum velocity. By designating Three.js as the core rendering engine, the architecture avoids the constraints of opinionated game engines while empowering the AI to utilize the JavaScript-native Three.js Shading Language (TSL). TSL elegantly bypasses the inherent complexities and LLM hallucination risks of traditional string-based GLSL development, enabling sophisticated WebGPU compute workflows for parallel frustum culling and real-time atmospheric scattering.
+The product architecture for 'Companion Atlas' represents a highly optimized convergence of state-of-the-art open-source technologies, structured specifically to enable an AI coding agent to operate autonomously at maximum velocity. By designating Three.js as the core rendering engine, the architecture avoids the constraints of opinionated game engines while empowering the AI to utilize the JavaScript-native Three.js Shading Language (TSL). TSL elegantly bypasses the inherent complexities and LLM hallucination risks of traditional string-based GLSL development, enabling sophisticated WebGPU compute workflows for parallel frustum culling and real-time atmospheric scattering.
 
 The integration of Meta's Immersive Web SDK (IWSDK) provides the crucial Entity-Component-System framework and Web Worker-driven locomotion necessary to guarantee a frictionless, high-performance WebXR experience on the Meta Quest 3, while preserving logical fallbacks for mobile and desktop users.
 
-Furthermore, by deliberately decoupling the application from commercial mapping providers, 'Companion Earth' ensures long-term financial viability and unlimited scalability. Integrating the NASA-AMMOS 3D Tiles renderer with a fully serverless, self-hosted data pipeline—powered by Overture Maps GeoParquet datasets, DuckDB spatial processing, and AWS S3 static hosting—creates a free, globally comprehensive topographic backend. Operating within a closed-loop Playwright visual testing environment, the AI coding agent is equipped with both the declarative structural tools and the real-time visual feedback mechanisms required to continuously construct, deploy, and maintain a definitive planetary-scale spatial computing application.
+Furthermore, by deliberately decoupling the application from commercial mapping providers, 'Companion Atlas' ensures long-term financial viability and unlimited scalability. Integrating the NASA-AMMOS 3D Tiles renderer with a fully serverless, self-hosted data pipeline—powered by Overture Maps GeoParquet datasets, DuckDB spatial processing, and AWS S3 static hosting—creates a free, globally comprehensive topographic backend. Operating within a closed-loop Playwright visual testing environment, the AI coding agent is equipped with both the declarative structural tools and the real-time visual feedback mechanisms required to continuously construct, deploy, and maintain a definitive planetary-scale spatial computing application.
 
 
 #### Works cited

@@ -89,7 +89,7 @@ test('3D tiles do not crash the scrapbook system', async ({ page }) => {
   await page.goto('/?imagery=live');
 
   // Basic page load check.
-  await expect(page.locator('#control-panel h1')).toHaveText('Companion Earth');
+  await expect(page.locator('#control-panel h1')).toHaveText('Companion Atlas');
   await expect(page.locator('#app canvas')).toBeVisible({ timeout: 8000 });
   await expect(page.locator('#viewport')).toHaveAttribute('data-imagery-mode', 'live');
 
