@@ -1,6 +1,7 @@
 # Companion Atlas
 
-*(formerly Companion Earth — the `CI-Earth` repository name is unchanged)*
+*(formerly Companion Earth; the GitHub repository was renamed from `CI-Earth`
+to [`Companion-Atlas`](https://github.com/companionintelligence/Companion-Atlas))*
 
 Companion Atlas is a containerized 3D processing server + web viewer that
 turns any image, set of images, or video into a shareable **4D (3D + time)
