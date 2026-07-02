@@ -1,6 +1,6 @@
-# Companion Earth → Companion Atlas
+Companion Atlas
 
-Companion Earth is a browser-native, Three.js-powered planetary exploration prototype with an iterative vibe coding workflow.
+Companion Atlas is a browser-native, Three.js-powered planetary exploration prototype with an iterative vibe coding workflow.
 
 It is being reimagined as **Companion Atlas** — a containerized 3D processing
 server + web viewer that turns any image, set of images, or video into a
