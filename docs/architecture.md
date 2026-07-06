@@ -19,7 +19,7 @@ flowchart LR
     end
 
     subgraph Atlas["Companion Atlas"]
-        Viewer["Web viewer<br/>(three.js today → CesiumJS Phase 2)"]
+        Viewer["Web viewer<br/>(Cesium by default, three.js classic fallback)"]
         API["atlas-api<br/>REST + MCP server"]
         Worker["GPU reconstruction worker<br/>COLMAP / ODM / Nerfstudio"]
         Store[("Postgres + Redis + MinIO")]
@@ -36,35 +36,55 @@ flowchart LR
     API -- "share URL" --> Viewer
 ```
 
-Today's repo ships the **Viewer** (this three.js app, `src/`) and the
-**atlas-api** scaffold (`server/`) — see [`docker-compose.yml`](../docker-compose.yml)
-for how all five pieces run together in containers. `Worker`, `Store`, and the
-suite connectors are functional scaffolds (see [§10](#processing-server)); the
-viewer's `?story=` mode (below) lets you exercise the `Story` format end to end
-without any of that infrastructure running.
+Today's repo ships the **Viewer** (`src/`, two renderers — see
+[§6](#6-renderer-and-imagery-mode-resolution) and [§11](#11-cesium-renderer))
+and the **atlas-api** scaffold (`server/`) — see
+[`docker-compose.yml`](../docker-compose.yml) for how all five pieces run
+together in containers. `Worker`, `Store`, and the suite connectors are
+functional scaffolds (see [§10](#processing-server)); the viewer's `?story=`
+mode (below) lets you exercise the `Story` format end to end without any of
+that infrastructure running.
 
 ## 2. Viewer module map
 
 ```mermaid
 flowchart TD
     main["main.ts"]
-    sceneSystem["systems/sceneSystem.ts"]
-    scrapbookSystem["systems/scrapbookSystem.ts"]
+    journeyController["systems/journeyController.ts"]
     inputSystem["systems/inputSystem.ts"]
-    cameraControls["systems/cameraControls.ts"]
-    xrSystem["systems/xrSystem.ts"]
-    tilesSystem["systems/tilesSystem.ts"]
-    atmosphereSystem["systems/atmosphereSystem.ts"]
-    textureFactory["systems/textureFactory.ts"]
-    tileProvider["systems/tileProvider.ts"]
     scrapbook["scrapbook.ts"]
     atlasStory["atlas/story.ts"]
     atlasSchema["atlas/schema.ts"]
+
+    subgraph Classic["classic renderer"]
+        sceneSystem["systems/sceneSystem.ts"]
+        scrapbookSystem["systems/scrapbookSystem.ts"]
+        cameraControls["systems/cameraControls.ts"]
+        xrSystem["systems/xrSystem.ts"]
+        tilesSystem["systems/tilesSystem.ts"]
+        atmosphereSystem["systems/atmosphereSystem.ts"]
+        textureFactory["systems/textureFactory.ts"]
+        tileProvider["systems/tileProvider.ts"]
+    end
+
+    subgraph CesiumMode["cesium renderer"]
+        cesiumApp["cesium/cesiumApp.ts"]
+        cesiumScene["cesium/cesiumScene.ts"]
+        cesiumScrapbook["cesium/cesiumScrapbook.ts"]
+    end
 
     main --> sceneSystem
     main --> scrapbookSystem
     main --> inputSystem
     main --> atlasStory
+    main --> journeyController
+    main -. "renderer=cesium" .-> cesiumApp
+    cesiumApp --> cesiumScene
+    cesiumApp --> cesiumScrapbook
+    cesiumApp --> inputSystem
+    cesiumApp --> journeyController
+    cesiumApp --> atlasStory
+    cesiumScrapbook --> scrapbook
     sceneSystem --> cameraControls
     sceneSystem --> xrSystem
     sceneSystem --> tilesSystem
@@ -78,12 +98,22 @@ flowchart TD
     atlasStory --> atlasSchema
 ```
 
-`main.ts` is the composition root: it builds `sceneSystem` and
-`scrapbookSystem`, wires DOM elements into `inputSystem`'s handler callbacks,
-and owns the two `setInterval` loops (journey playback, 200ms HUD tick). No
-module reaches back into `main.ts` — data flows down, callbacks flow up.
+`main.ts` is the composition root for the classic renderer: it builds
+`sceneSystem` and `scrapbookSystem`, wires DOM elements into `inputSystem`'s
+handler callbacks, and owns the 200ms HUD tick loop (journey playback is
+`journeyController.ts`, shared with the Cesium path). When
+[renderer resolution](#6-renderer-and-imagery-mode-resolution) picks Cesium,
+`main.ts` instead delegates the equivalent wiring to `cesium/cesiumApp.ts`,
+which reuses the same renderer-agnostic `inputSystem.ts`, `scrapbook.ts`
+storage, `atlas/story.ts`, and `journeyController.ts` — only the rendering
+layer (`sceneSystem`/`scrapbookSystem` vs `cesiumScene`/`cesiumScrapbook`) is
+renderer-specific. No module reaches back into its composition root — data
+flows down, callbacks flow up.
 
 ## 3. Render loop
+
+Specific to the classic three.js renderer (`sceneSystem.ts`) — Cesium drives
+its own internal render loop via `Viewer` + `Clock` (see [§11](#11-cesium-renderer)).
 
 ```mermaid
 sequenceDiagram
@@ -113,6 +143,10 @@ reproducible.
 
 ## 4. Camera interaction model
 
+Specific to the classic renderer's `cameraControls.ts` — Cesium uses its own
+native camera controls as-is (orbit/tilt/zoom gestures are similar, but there
+is no equivalent hand-rolled state machine; see [§11](#11-cesium-renderer)).
+
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
@@ -124,9 +158,15 @@ stateDiagram-v2
     Zooming --> Idle: settled
     Idle --> Flying: flyTo() — Fly To Pin, journey step, or ?story= load
     Flying --> Idle: eased interpolation completes (t ≥ 1)
-    Flying --> Orbiting: user drags mid-flight (flight cancelled)
+    Flying --> Orbiting: left-drag mid-flight
+    Flying --> Tilting: right-drag mid-flight
+    Flying --> Zooming: wheel / pinch / double-click mid-flight
     Idle --> Idle: click without drag → onTap (pin hit-test)
 ```
+
+Any of orbit, tilt, or zoom input cancels an in-progress flight — every
+`onPointerMove`/`onWheel`/`onDblClick`/pinch handler sets `flight = null`
+unconditionally as its first step, not just the orbit-drag path.
 
 `cameraControls.ts` (`src/systems/cameraControls.ts`) is the single owner of
 orbit state (`theta`, `phi`, `radius`). Every caller — HUD zoom buttons, Fly To
@@ -137,44 +177,93 @@ clamps radius to `[1.15, 14]` and phi to `±0.488π`.
 <a id="pin-lifecycle"></a>
 ## 5. Pin lifecycle
 
+`inputSystem.ts` only forwards DOM events to caller-supplied handler
+callbacks — it never imports `sceneSystem`/`scrapbookSystem` directly. The
+actual orchestration (raycast → create pin → refresh UI) lives in `main.ts`,
+the composition root, matching [§2](#2-viewer-module-map)'s description of how
+`main.ts` wires DOM elements into `inputSystem`'s handlers.
+
 ```mermaid
 sequenceDiagram
     actor User
     participant UI as inputSystem
-    participant Scrapbook as scrapbookSystem
+    participant Main as main.ts
     participant Scene as sceneSystem
+    participant Scrapbook as scrapbookSystem
     participant Storage as localStorage
 
     User->>UI: submit "Drop Pin At Viewpoint"
-    UI->>Scene: raycastGlobeFromCamera()
-    Scene-->>UI: world point (Vector3)
-    UI->>Scrapbook: addPinFromWorldPoint(point, label)
+    UI->>Main: handlers.onCreatePin(label)
+    Main->>Scene: raycastGlobeFromCamera()
+    Scene-->>Main: world point (Vector3)
+    Main->>Scrapbook: addPinFromWorldPoint(point, label)
     Scrapbook->>Scrapbook: cartesianToLatLon(point)
     Scrapbook->>Storage: persist() — write ci-earth-scrapbook[account]
     Scrapbook->>Scrapbook: renderPinsInScene() — rebuild pin meshes + route curve
-    Scrapbook-->>UI: pins, selectedPin
-    UI->>UI: renderState() — pin list, Pin Details form, journey status
+    Scrapbook-->>Main: pins, selectedPin
+    Main->>UI: renderState() — pin list, Pin Details form, journey status
 ```
 
 The journey route (`createJourneyRoute` in `scrapbookSystem.ts`) is rebuilt on
 **every** pin CRUD operation, not just when a journey is playing — it's a pure
 function of the current pin set, sorted by `createdAt`.
 
-## 6. Imagery mode resolution
+The Cesium renderer follows the identical pattern with `cesium/cesiumApp.ts`
+standing in for `main.ts` and `cesium/cesiumScene.ts` /
+`cesium/cesiumScrapbook.ts` standing in for `sceneSystem`/`scrapbookSystem` —
+see [§11](#11-cesium-renderer).
+
+## 6. Renderer and imagery mode resolution
+
+`main.ts` resolves two independent things from the URL on every load: which
+**renderer** runs (classic three.js vs Cesium) and, for the classic renderer,
+which **imagery mode** it uses.
 
 ```mermaid
 flowchart TD
-    Start(["Page load"]) --> CheckStatic{"?static=1 present?"}
-    CheckStatic -- yes --> Local["imagery = local"]
-    CheckStatic -- no --> CheckImagery{"?imagery= present?"}
-    CheckImagery -- local --> Local
-    CheckImagery -- live --> Live["imagery = live"]
-    CheckImagery -- absent --> Live
-    Local --> LocalTex["Procedural + KTX2 textures only<br/>zero network tile fetches"]
-    Live --> TileProvider["tileProvider.ts priority:<br/>Mapbox → ESRI → Google → OSM"]
+    Start(["Page load"]) --> CheckRendererParam{"?renderer= present?"}
+    CheckRendererParam -- "cesium or classic" --> UseExplicit["use that renderer"]
+    CheckRendererParam -- absent --> CheckStaticR{"?static=1 present?"}
+    CheckStaticR -- yes --> ForceClassic["renderer = classic<br/>(baselines are captured against it;<br/>real ion imagery isn't diffable)"]
+    CheckStaticR -- no --> CheckToken{"CESIUM_ION_TOKEN configured?"}
+    CheckToken -- yes --> UseCesium["renderer = cesium (default)"]
+    CheckToken -- no --> FallbackClassic["renderer = classic (fallback)"]
+```
+
+Imagery mode only applies once the classic renderer is selected —
+`resolveImageryMode()` checks `?imagery=` **before** `?static=1`, not after:
+an explicit `?imagery=` always wins, and `isStaticMode` is only the fallback
+when `?imagery=` is absent or invalid.
+
+```mermaid
+flowchart TD
+    StartI(["Classic renderer selected"]) --> CheckImagery{"?imagery= present and valid?"}
+    CheckImagery -- "local or live" --> UseParam["use that value directly"]
+    CheckImagery -- "absent / invalid" --> CheckStaticI{"?static=1 present?"}
+    CheckStaticI -- yes --> Local["imagery = local"]
+    CheckStaticI -- no --> Live["imagery = live"]
+    UseParam --> Done(["imagery mode"])
+    Local --> Done
+    Live --> Done
+```
+
+"Local" is **not** zero-network in general — it only skips network tile
+fetches under `?static=1`. `imagery=local` on its own still constructs the
+hillshade and borders/labels overlay layers (gated solely on `isStaticMode`,
+not on imagery mode) and fetches their ESRI tiles over the network; only the
+base globe texture is guaranteed local in that case.
+
+```mermaid
+flowchart LR
+    LiveTiles["imagery = live"] --> TileProvider["tileProvider.ts priority:<br/>Mapbox → ESRI → Google → OSM"]
+    LocalStatic["imagery = local<br/>+ static=1"] --> ZeroNetwork["Procedural + KTX2 textures only<br/>zero network tile fetches"]
+    LocalLive["imagery = local<br/>(static=1 absent)"] --> PartialNetwork["Local base texture,<br/>but hillshade/labels overlays still fetch ESRI tiles"]
 ```
 
 ## 7. WebXR interaction
+
+Classic renderer only — Cesium has no WebXR support today, so its XR button
+slot instead links back to `?renderer=classic` (see [§11](#11-cesium-renderer)).
 
 ```mermaid
 sequenceDiagram
@@ -183,6 +272,8 @@ sequenceDiagram
     participant XRSess as WebXR session
     participant XR as xrSystem
     participant World as worldGroup
+    participant Dom as renderer.domElement
+    participant Cam as cameraControls
 
     User->>Btn: click "Enter VR"
     Btn->>XRSess: requestSession()
@@ -194,8 +285,8 @@ sequenceDiagram
     User->>XR: controller selectend
     XR->>XR: grabbing = false
     User->>XR: controller squeezestart
-    XR->>XR: dispatch "xr-squeeze-start" DOM event
-    XR-->>Btn: cameraControls.zoomIn() (listened on renderer.domElement)
+    XR->>Dom: dispatch "xr-squeeze-start" CustomEvent
+    Dom->>Cam: zoomIn() (listener registered in sceneSystem.ts)
 ```
 
 ## 8. Texture pipeline
@@ -204,20 +295,27 @@ sequenceDiagram
 flowchart LR
     subgraph BuildTime["npm run textures:build"]
         Materials["materials/ source masters"] --> Gen["scripts/generate-textures.ts"]
-        Gen --> Raw["public/textures/raw/*.jpg,png"]
-        Gen --> Ktx2["public/basis/*.ktx2"]
+        Gen --> Raw["public/textures/raw/{size}/*.jpg,png"]
+        Gen --> Ktx2["public/textures/ktx2/{size}/*.ktx2"]
+        Gen --> Transcoder["public/basis/basis_transcoder.{js,wasm}<br/>(copied once, not per-texture)"]
     end
 
     subgraph RunTime["Runtime — textureFactory.ts"]
         Load["loadLocalTexturePack()"] --> TryKtx{"KTX2 supported?"}
         TryKtx -- yes --> Ktx2
         TryKtx -- "no / load fails" --> Raw
+        Transcoder -. "setTranscoderPath('/basis/')" .-> TryKtx
         Procedural["createEarthTexture / createCloudTexture /<br/>createWeatherTexture / createNightLightsTexture<br/>(seeded value-noise, fully deterministic)"] --> GlobeMat["Globe / cloud / weather / night-lights materials"]
         Ktx2 --> GlobeMat
         Raw --> GlobeMat
         LiveTiles["createEarthTileTexture / createOverlayTileTexture<br/>fetch provider tiles, remap Mercator → equirectangular"] --> GlobeMat
     end
 ```
+
+`public/basis/` holds only the two Basis Universal transcoder library files
+(`basis_transcoder.js`/`.wasm`, copied once from three.js) — it is the KTX2
+**decoder's** location, not where generated textures live. Every individual
+generated KTX2 file is under `public/textures/ktx2/{size}/{name}.ktx2`.
 
 The procedural generators (`createEarthTexture`, `createCloudTexture`, etc.)
 take a seeded PRNG (`seededRandomFactory`, a linear congruential generator in
@@ -232,8 +330,8 @@ erDiagram
     STORY ||--o{ MEDIA_ITEM : contains
     STORY ||--o{ SCENE : contains
     STORY ||--o{ LAYER : contains
-    STORY ||--|| TIMELINE : has
-    STORY ||--|| BASEMAP : has
+    STORY ||--o| TIMELINE : has
+    STORY ||--o| BASEMAP : has
     SCENE }o--o{ MEDIA_ITEM : references
     SCENE }o--o{ LAYER : references
     MEDIA_ITEM ||--o| DERIVED3D : "may have"
@@ -380,12 +478,82 @@ every request runs as a single dev subject.
 | `OpenClawConnector` | `OPENCLAW_URL` | Notified when a story publishes (`notifyStoryReady`) |
 | `HermesConnector` | `HERMES_URL` | Delivers a published story link to a channel/recipient (`deliver`) |
 
-All three are no-ops when their URL is unset (`configured === false`) — the
-server runs standalone without the rest of the suite.
+All three are unconditional stubs today regardless of configuration (see
+[§13](#13-known-gaps--deliberately-out-of-scope-today)) — the server runs
+standalone without the rest of the suite either way.
 
-## 11. Reference tables
+## 11. Cesium renderer
 
-### 11.1 npm scripts — root (`package.json`)
+The default renderer whenever `CESIUM_ION_TOKEN` is configured and
+`?static=1` isn't set (see [§6](#6-renderer-and-imagery-mode-resolution)).
+Replaces the procedural globe with real Cesium ion World Imagery, World
+Terrain, and OSM 3D Buildings — addressing the core "the map doesn't look/work
+right" motivation for adding it (see [`REIMAGINE.md`](../REIMAGINE.md)).
+
+| Module | Classic equivalent | Responsibility |
+|---|---|---|
+| `cesium/cesiumApp.ts` | `main.ts` (classic branch) | Composition root: builds the scene + scrapbook, wires `inputSystem`, HUD tick, journey controller, story loading |
+| `cesium/cesiumScene.ts` | `sceneSystem.ts` | Cesium `Viewer` construction, ion resource loading, raycasting, fly-to, layer toggles, environment/heading readouts |
+| `cesium/cesiumScrapbook.ts` | `scrapbookSystem.ts` | Pins as Cesium `Entity` billboards (via `PinBuilder`) + a glowing polyline journey route, same `Pin[]`/localStorage data model |
+
+### 11.1 Ion resource loading and offline fallback
+
+Imagery, terrain, and buildings load **independently** — one ion outage
+(invalid token, rate limit, restricted network) must not blank out the
+others. Imagery additionally falls back to Cesium's bundled offline Natural
+Earth II raster (ships in `Assets/Textures/`, zero network required) rather
+than leaving zero imagery layers: an empty imagery-layer collection was found
+to make `scene.globe.pick()` unreliable, which broke pin creation's
+raycast-from-viewport-center entirely whenever ion was unreachable.
+
+```mermaid
+flowchart TD
+    Imagery["createWorldImageryAsync()"] -- fails --> OfflineImagery["TileMapServiceImageryProvider.fromUrl(<br/>buildModuleUrl('Assets/Textures/NaturalEarthII'))"]
+    Terrain["createWorldTerrainAsync()"] -- fails --> FlatEllipsoid["default EllipsoidTerrainProvider<br/>(Cesium's built-in flat fallback)"]
+    Buildings["createOsmBuildingsAsync()"] -- fails --> NoBuildings["buildings tileset omitted"]
+```
+
+### 11.2 Ion assets used
+
+| Asset | ion ID | Purpose |
+|---|---|---|
+| Cesium World Imagery | 2 (via `createWorldImageryAsync()`) | Base satellite/aerial imagery |
+| Cesium World Terrain | 1 (via `createWorldTerrainAsync()`) | Global elevation mesh |
+| Cesium OSM Buildings | 96188 (via `createOsmBuildingsAsync()`) | Global 3D building footprints |
+
+### 11.3 Layer toggle remapping
+
+The sidebar's Layers card checkboxes are repurposed for real Cesium data
+rather than the classic renderer's procedural overlays:
+
+| Checkbox | Classic renderer | Cesium renderer |
+|---|---|---|
+| Terrain Hillshade | ESRI hillshade overlay texture | Real elevation on/off (`terrainProvider` swapped to a flat `EllipsoidTerrainProvider` when unchecked) |
+| Borders & Labels | ESRI boundaries/labels overlay texture | OSM 3D Buildings tileset visibility |
+| Clouds / Weather | Procedural texture layers | Disabled (`cb.disabled = true`) — no Cesium equivalent shipped yet |
+
+### 11.4 What's genuinely more accurate than the classic renderer
+
+- **Altitude** (`camera.positionCartographic.height`) is real meters above the
+  WGS84 ellipsoid, not the classic renderer's `(orbitRadius - globeRadius) ×
+  (6371 / globeRadius)` approximation against a 1.24-unit toy globe.
+- **Heading/compass** comes directly from `camera.heading`.
+- **Sun lighting** (`globe.enableLighting`) is computed from the real system
+  clock via Cesium's actual ephemeris, not a scripted day/night cycle.
+
+### 11.5 Deliberate omissions
+
+- **No WebXR.** Cesium has no WebXR support (see [`REIMAGINE.md`](../REIMAGINE.md)
+  and the prior `ARCHITECTURE.md` research) — the XR button slot links to
+  `?renderer=classic` instead of silently disappearing.
+- **No pixel-diff visual regression.** Real ion imagery can change
+  server-side independent of this app's code, so `cesium.spec.ts` asserts on
+  `data-cesium-status` reaching a terminal state (`ready` or `error`) rather
+  than screenshots — see [`docs/ui-guide.md`](ui-guide.md).
+
+## 12. Reference tables
+
+### 12.1 npm scripts — root (`package.json`)
 
 | Script | Command | Purpose |
 |---|---|---|
@@ -398,10 +566,11 @@ server runs standalone without the rest of the suite.
 | `test:visual:update` / `vibe:test:update` | `playwright test --update-snapshots` | Regenerate baseline screenshots |
 | `vibe:loop` | `vibe:build && vibe:test` | Pre-merge gate |
 | `textures:build` | `tsx scripts/generate-textures.ts` | Regenerate `public/textures` + `public/basis` from `materials/` |
+| `cesium:assets` | `tsx scripts/copy-cesium-assets.ts` | Copy Cesium's Workers/ThirdParty/Assets/Widgets into `public/cesium/` (gitignored; re-run after a Cesium version bump) |
 | `docs:screenshots` | `tsx scripts/capture-doc-screenshots.ts` | Regenerate `docs/screenshots/*.png` (needs `vibe:dev` running) |
 | `account:new` | `tsx scripts/new-account.ts` | Write a local `.companion-atlas-account.json` |
 
-### 11.2 npm scripts — server (`server/package.json`)
+### 12.2 npm scripts — server (`server/package.json`)
 
 | Script | Command | Purpose |
 |---|---|---|
@@ -411,7 +580,7 @@ server runs standalone without the rest of the suite.
 | `start` | `node dist/index.js` | Run the compiled server |
 | `typecheck` | `tsc -p tsconfig.json --noEmit` | Type-only check |
 
-### 11.3 Environment variables (`.env.default`)
+### 12.3 Environment variables (`.env.default`)
 
 | Group | Variables |
 |---|---|
@@ -421,7 +590,15 @@ server runs standalone without the rest of the suite.
 | Suite connectors | `CI_MEMORY_URL`, `OPENCLAW_URL`, `HERMES_URL` |
 | Companion OIDC | `COMPANION_OIDC_ISSUER`, `COMPANION_OIDC_AUDIENCE`, `COMPANION_OIDC_CLIENT_ID`, `COMPANION_OIDC_CLIENT_SECRET`, `ATLAS_DEV_SUBJECT` |
 
-### 11.4 Docker Compose services (`docker-compose.yml`)
+`CESIUM_ION_TOKEN` does double duty in the viewer: it's what makes Cesium the
+default renderer at all (see [§6](#6-renderer-and-imagery-mode-resolution)),
+and separately it's read by the classic renderer's `tilesSystem.ts` to stream
+Cesium ion World Terrain into the procedural globe. The classic renderer skips
+that entirely under `?static=1` regardless of whether the token is set (see
+[§3](#3-render-loop)) — a real token must not make "deterministic" test runs
+start making network calls.
+
+### 12.4 Docker Compose services (`docker-compose.yml`)
 
 | Service | Image / build | Purpose | Profile |
 |---|---|---|---|
@@ -437,11 +614,19 @@ docker compose up viewer atlas-api minio postgres redis   # app tier
 docker compose --profile gpu up worker                     # + reconstruction
 ```
 
-## 12. Known gaps / deliberately out of scope today
+## 13. Known gaps / deliberately out of scope today
 
-- **Auth is not enforced by default.** With `COMPANION_OIDC_ISSUER` unset, the
-  server treats every request as one dev subject (`ATLAS_DEV_SUBJECT`). This
-  is intentional for local development, not a production posture.
+- **Auth does not verify signatures — at all, not just when unconfigured.**
+  With `COMPANION_OIDC_ISSUER` unset, the server treats every request as one
+  dev subject (`ATLAS_DEV_SUBJECT`), which is intentional for local
+  development. But even *with* an issuer configured, `verifyBearer()` in
+  `server/src/auth.ts` only base64url-decodes the JWT payload and trusts
+  whatever `sub` claim is present — it never checks the signature, issuer, or
+  expiry. Any client can forge a token with an arbitrary `sub` and read that
+  subject's private stories. The source comments already flag this ("DO NOT
+  ship it as-is"; `jose`/`openid-client` are declared as dependencies but
+  never imported), but it's worth stating plainly here too: this is not
+  production-ready auth in either configuration state.
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all
   data on restart — see [`REIMAGINE.md` Phase 1](../REIMAGINE.md#8-migration-roadmap)
   for the Postgres/Redis/MinIO migration.
@@ -449,5 +634,14 @@ docker compose --profile gpu up worker                     # + reconstruction
   `reconstruct()` in `server/src/pipeline.ts` return well-typed placeholder
   results; they do not yet shell out to COLMAP/ODM/Nerfstudio. The Dockerfile
   for the worker installs the real toolchain in anticipation of this.
-- **The viewer renderer is still three.js**, not the CesiumJS recommended in
-  `REIMAGINE.md` §3–4 — `?story=` mode is a bridge, not the final experience.
+- **Suite connectors are unconditional stubs**, not just no-ops when
+  unconfigured — every method on `CiMemoryConnector`, `OpenClawConnector`, and
+  `HermesConnector` (`server/src/connectors.ts`) returns immediately with a
+  `// TODO` comment regardless of whether its URL is set. Same category of gap
+  as the reconstruction pipeline above.
+- **The classic three.js renderer is still around, not fully replaced.**
+  Cesium ([§11](#11-cesium-renderer)) is now the default live renderer, which
+  substantially delivers on `REIMAGINE.md`'s Phase 2 recommendation, but the
+  classic renderer remains for `?static=1` (deterministic testing) and
+  `?renderer=classic` (WebXR, which Cesium doesn't support) — it was not a
+  full replace-and-delete migration.

@@ -208,6 +208,27 @@ async function main(): Promise<void> {
     await page.close();
   }
 
+  // 6b. Cesium renderer (real ion imagery — not deterministic, illustrative only)
+  {
+    const page = await desktop.newPage();
+    await page.goto(`${BASE_URL}/?renderer=cesium`);
+    await page
+      .waitForFunction(
+        () => {
+          const s = document.getElementById('viewport')?.getAttribute('data-cesium-status');
+          return s === 'ready' || s === 'error';
+        },
+        { timeout: 20_000 }
+      )
+      .catch(() => {
+        // Fall through to the screenshot regardless — illustrative capture,
+        // not a pass/fail gate (see cesium.spec.ts for the actual test).
+      });
+    await page.waitForTimeout(4000); // let imagery/terrain/buildings stream in
+    await page.screenshot({ path: `${OUT_DIR}/cesium-renderer.png`, fullPage: true });
+    await page.close();
+  }
+
   // 7. Sidebar collapsed (desktop)
   {
     const page = await desktop.newPage();

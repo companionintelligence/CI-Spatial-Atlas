@@ -295,9 +295,13 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode, imageryMo
   const xrSystem = createXrSystem(renderer, scene, worldGroup);
   renderer.domElement.addEventListener('xr-squeeze-start', () => controls.zoomIn());
 
-  // 3D Tiles (silently disabled if no token present)
+  // 3D Tiles (silently disabled if no token present). Skipped entirely under
+  // ?static=1 — a "deterministic" test mode must never make network calls,
+  // regardless of whether a token happens to be configured.
   let tilesSystem: Awaited<ReturnType<typeof initTilesSystem>> = null;
-  void initTilesSystem(scene, camera, renderer, sceneConfig.globe.radius, viewportEl).then((sys) => { tilesSystem = sys; });
+  if (!isStaticMode) {
+    void initTilesSystem(scene, camera, renderer, sceneConfig.globe.radius, viewportEl).then((sys) => { tilesSystem = sys; });
+  }
 
   void loadLocalTexturePack(renderer, isStaticMode ? 'static' : 'interactive')
     .then((texturePack) => {

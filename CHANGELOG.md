@@ -8,6 +8,17 @@ pending a first tagged release).
 ## Unreleased
 
 ### Added
+- **Cesium renderer** (`src/cesium/`) — real Cesium ion World Imagery, World
+  Terrain, and OSM 3D Buildings, now the default live-mode renderer behind
+  `?renderer=cesium|classic` (see [`docs/architecture.md` §11](docs/architecture.md#11-cesium-renderer)).
+  Pins render as proper map-pin icons with a glowing journey route; real
+  meters/heading replace the classic renderer's approximated altitude and a
+  scripted day/night cycle. Each ion resource (imagery/terrain/buildings)
+  degrades independently, with imagery falling back to Cesium's bundled
+  offline Natural Earth II raster rather than leaving the globe unpickable.
+  `journeyController.ts` extracts the shared journey-playback logic so both
+  renderers stay in sync. `cesium.spec.ts` covers it with status-based
+  (not pixel-diff) smoke tests, since real ion imagery isn't deterministic.
 - Comprehensive documentation set: [`docs/ui-guide.md`](docs/ui-guide.md)
   (every screen/panel/button, with screenshots), [`docs/architecture.md`](docs/architecture.md)
   (mermaid diagrams + reference tables), and a [`docs/README.md`](docs/README.md) index.
@@ -15,6 +26,19 @@ pending a first tagged release).
   the documentation screenshot set against the running dev server.
 - `LICENSE.md` reference and an accurate, non-open-source license section in
   the root `README.md`.
+
+### Fixed
+- The sidebar Environment card's time/weather no longer freeze between pin
+  events — the 200ms HUD tick now updates them, matching the environment bar.
+- The lat/lon HUD readout now clears on pointer-leave instead of showing a
+  stale coordinate after the pointer leaves the globe (fixed on both renderers).
+- `?static=1` no longer lets a configured `CESIUM_ION_TOKEN` trigger network
+  calls into the classic renderer's `tilesSystem.ts` — deterministic test runs
+  must not depend on network access, token validity, or ion quota.
+- 14 accuracy/completeness issues found by an independent documentation audit
+  (wrong diagram precedence, mislabeled file paths, incorrect ER cardinality,
+  misattributed sequence-diagram participants, and an understated auth gap)
+  were corrected in `docs/ui-guide.md` and `docs/architecture.md`.
 
 ### Changed
 - Product renamed from **Companion Earth** to **Companion Atlas** throughout
