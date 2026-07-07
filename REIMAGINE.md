@@ -30,8 +30,8 @@ can open via a link.
 
 | Capability | Today | Disposition |
 |---|---|---|
-| Renderer | bespoke three.js sphere + texture layers (`src/systems/*`) | **Replace** with CesiumJS for true 4D (Phase 2); keep three.js as a light fallback |
-| 3D Tiles | NASA‑AMMOS `3d-tiles-renderer` (Google/Cesium ion) `tilesSystem.ts` | Concepts carry over; Cesium has this natively |
+| Renderer | **Done.** Cesium (`src/cesium/`) is the default; bespoke three.js (`src/systems/*`) remains for `?static=1` tests and WebXR | Project `Story` → CZML + `Clock` for full timeline scrubbing (open) |
+| 3D Tiles | NASA‑AMMOS `3d-tiles-renderer` (Google/Cesium ion) `tilesSystem.ts`, classic renderer only | Superseded by Cesium's native 3D Tiles/terrain support in the default renderer |
 | Scrapbook | localStorage pins per "account" `scrapbookSystem.ts` | **Generalize** into the `Story`/`Scene`/`MediaItem` schema |
 | Journeys | `setInterval` auto‑fly between pins (`main.ts`) | **Generalize** into a timeline‑driven clock |
 | Accounts | ad‑hoc account name string | **Replace** with Companion OIDC subjects |
@@ -190,9 +190,14 @@ path: a person adds scenes/layers and tweaks the timeline before publishing.
   Existing vibe loop stays green; no visual baselines change.
 - **Phase 1 — live backend.** Real Postgres/Redis/MinIO, Companion OIDC
   verification, CI‑Server memory connector; viewer loads stories from the API.
-- **Phase 2 — CesiumJS viewer.** Replace the renderer; project `Story` → CZML +
-  Clock; native 3D Tiles, terrain, and Gaussian‑splat layers; retire/keep
-  three.js as fallback. Re‑baseline Playwright against the Cesium canvas.
+- **Phase 2 — CesiumJS viewer. Substantially delivered.** Cesium (ion World
+  Imagery + World Terrain + OSM Buildings, `src/cesium/`) is now the default
+  live renderer behind `?renderer=cesium|classic` — see
+  [`docs/architecture.md` §11](docs/architecture.md#11-cesium-renderer). Still
+  open: projecting `Story` → CZML + `Clock` for full timeline scrubbing, and
+  Gaussian‑splat layers. three.js remains — not as a deprecated fallback, but
+  because `?static=1` visual regression needs a pixel‑diffable renderer and
+  WebXR has no Cesium equivalent yet.
 - **Phase 3 — reconstruction at scale.** GPU worker live (COLMAP + ODM +
   Nerfstudio), splat → 3D Tiles, `auto_compose`, sharing + Hermes delivery.
 

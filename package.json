@@ -19,10 +19,12 @@
     "textures:build": "tsx scripts/generate-textures.ts",
     "typecheck": "tsc --noEmit",
     "account:new": "tsx scripts/new-account.ts",
-    "docs:screenshots": "tsx scripts/capture-doc-screenshots.ts"
+    "docs:screenshots": "tsx scripts/capture-doc-screenshots.ts",
+    "cesium:assets": "tsx scripts/copy-cesium-assets.ts"
   },
   "dependencies": {
     "3d-tiles-renderer": "^0.4.22",
+    "cesium": "^1.143.0",
     "three": "^0.183.0"
   },
   "jpeg-js": "^0.4.4",

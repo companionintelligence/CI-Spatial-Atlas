@@ -15,13 +15,13 @@ Companion OIDC).
 |---|---|
 | **License** | [Commercial Standard License](LICENSE.md) — proprietary, not open source (see [§ License](#license)) |
 | **Status** | Active reimagining — see [`REIMAGINE.md`](REIMAGINE.md) for the roadmap |
-| **Stack** | TypeScript · three.js (viewer) · Fastify + MCP SDK (server) · Docker Compose |
+| **Stack** | TypeScript · **CesiumJS** (default renderer) + three.js (classic/WebXR fallback) · Fastify + MCP SDK (server) · Docker Compose |
 
 ## Documentation
 
 | Doc | What's in it |
 |---|---|
-| [`REIMAGINE.md`](REIMAGINE.md) | **Start here.** Vision, the open-web-GIS-viewer research and recommendation (→ CesiumJS), the 4D `Story` data model, architecture, migration roadmap |
+| [`REIMAGINE.md`](REIMAGINE.md) | **Start here.** Vision, the open-web-GIS-viewer research behind choosing CesiumJS (now live — see [`docs/architecture.md` §11](docs/architecture.md#11-cesium-renderer)), the 4D `Story` data model, architecture, migration roadmap |
 | [`docs/ui-guide.md`](docs/ui-guide.md) | Every screen, panel, and button in the viewer, with screenshots and interaction tables |
 | [`docs/architecture.md`](docs/architecture.md) | Mermaid diagrams of the system, render loop, camera model, pin lifecycle, texture pipeline, the `Story` schema, and the processing server, plus reference tables |
 | [`docs/mcp-api.md`](docs/mcp-api.md) | The MCP tool reference for creating and publishing stories, manually or by an agent |
@@ -46,29 +46,42 @@ media / memory ─▶ ingest ─▶ reconstruct (SfM → mesh | gaussian splat) 
 
 ## Feature set
 
-- Declarative three.js scene: procedural + KTX2-backed Earth, sky, cloud, and night-lights rendering
-- Live imagery layers (terrain hillshade, borders/labels, clouds, weather) with per-layer toggles
-- Desktop drag-to-orbit, right-drag tilt, wheel/pinch zoom, double-click zoom-in
-- WebXR entry (VR grab-to-rotate, squeeze-to-zoom; AR passthrough)
-- Optional Google/Cesium 3D Tiles streaming (`src/systems/tilesSystem.ts`)
-- Spatial scrapbook: drop pins from the current viewpoint, edit metadata, fly to a pin, delete
-- Chronological journey playback across pins, with an auto-drawn route curve
-- Account-scoped local persistence for scrapbook memories
-- **New:** load any [`companion.atlas/story@1`](src/atlas/schema.ts) document via `?story=<url>` — a preview of the shareable 4D format ahead of the CesiumJS viewer
-- **New:** a containerized processing server (`server/`) exposing the same capability as an **MCP API** — `atlas_create_story`, `atlas_ingest_media`, `atlas_auto_compose`, `atlas_publish_story`, and more (see [`docs/mcp-api.md`](docs/mcp-api.md))
-- Deterministic visual regression mode via `/?static=1`
+- **Cesium renderer** (default): real Cesium ion World Imagery, World Terrain,
+  and OSM 3D Buildings — with graceful, independent fallback per resource
+  (offline basemap included) when ion is unreachable. See
+  [`docs/architecture.md` §11](docs/architecture.md#11-cesium-renderer).
+- **Classic three.js renderer**: procedural + KTX2-backed Earth/sky/cloud
+  rendering, live imagery layers, optional Google/Cesium 3D Tiles streaming
+  (`src/systems/tilesSystem.ts`) — kept for `?static=1` visual regression and
+  **WebXR** (VR grab-to-rotate, squeeze-to-zoom; AR passthrough), which Cesium
+  doesn't support yet. Switch explicitly with `?renderer=classic`.
+- Spatial scrapbook on either renderer: drop pins from the current viewpoint,
+  edit metadata, fly to a pin, delete — same data model, same `localStorage`.
+- Chronological journey playback across pins, with an auto-drawn route curve.
+- Load any [`companion.atlas/story@1`](src/atlas/schema.ts) document via
+  `?story=<url>` — a preview of the shareable 4D format.
+- A containerized processing server (`server/`) exposing the same capability
+  as an **MCP API** — `atlas_create_story`, `atlas_ingest_media`,
+  `atlas_auto_compose`, `atlas_publish_story`, and more (see
+  [`docs/mcp-api.md`](docs/mcp-api.md)).
+- Deterministic visual regression mode via `/?static=1`.
 
 ## Quickstart — local viewer
 
 ```sh
 npm install
 npm run textures:build
+npm run cesium:assets   # copies Cesium's static assets into public/cesium/
 npm run vibe:dev
 ```
 
-Visit `http://127.0.0.1:4173`. Force a specific imagery mode with
-`?imagery=local` or `?imagery=live`, or load a sample 4D story with
-`?story=/stories/sample-pacific-journey.json`.
+Get a free [Cesium ion](https://ion.cesium.com/) access token and put it in
+`.env` as `CESIUM_ION_TOKEN=...` (see [`.env.default`](.env.default)) to see
+the real-imagery Cesium renderer; without a token the app falls back to the
+classic three.js renderer automatically. Visit `http://127.0.0.1:4173`. Force
+a specific renderer with `?renderer=cesium` or `?renderer=classic`, a specific
+classic-mode imagery source with `?imagery=local` or `?imagery=live`, or load
+a sample 4D story with `?story=/stories/sample-pacific-journey.json`.
 
 ## Quickstart — processing server + MCP API
 
@@ -94,20 +107,22 @@ docker compose --profile gpu up worker
 
 | | |
 |---|---|
-| ![Mobile view](docs/screenshots/hero-mobile.png) | ![A 4D story loaded via ?story=](docs/screenshots/story-mode.png) |
+| ![The Cesium renderer with real imagery/terrain and pins](docs/screenshots/cesium-renderer.png) | ![Mobile view](docs/screenshots/hero-mobile.png) |
+| ![A 4D story loaded via ?story=](docs/screenshots/story-mode.png) | |
 
 See [`docs/ui-guide.md`](docs/ui-guide.md) for the full annotated set — every
-card, HUD element, and interaction state.
+card, HUD element, renderer, and interaction state.
 
 ## Iterative vibe loop (viewer development)
 
 1. `npm install`
 2. `npm run textures:build`
-3. `npm run vibe:dev`
-4. `npm run vibe:build`
-5. `npm run vibe:test`
-6. If UI changes are intentional: `npm run vibe:test:update` then `npm run vibe:test`
-7. Pre-merge gate: `npm run vibe:loop`
+3. `npm run cesium:assets`
+4. `npm run vibe:dev`
+5. `npm run vibe:build`
+6. `npm run vibe:test`
+7. If UI changes are intentional: `npm run vibe:test:update` then `npm run vibe:test`
+8. Pre-merge gate: `npm run vibe:loop`
 
 Deterministic screenshot testing uses `/?static=1` to disable animation drift
 (see [`docs/architecture.md` §3](docs/architecture.md#3-render-loop)). After a

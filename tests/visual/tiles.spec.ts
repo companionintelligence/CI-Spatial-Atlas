@@ -1,5 +1,12 @@
 /**
- * 3D Tiles integration smoke tests.
+ * 3D Tiles integration smoke tests — for the CLASSIC three.js renderer's
+ * NASA-AMMOS tilesSystem.ts (Google/Cesium ion terrain streamed into the
+ * procedural globe). Explicitly pinned to `&renderer=classic`: since a real
+ * CESIUM_ION_TOKEN now makes Cesium the default live-mode renderer (see
+ * docs/architecture.md §6), these tests would otherwise silently start
+ * testing the Cesium renderer instead of the classic-path tiles integration
+ * they're named for. The Cesium renderer has its own smoke test in
+ * cesium.spec.ts.
  *
  * These tests run against the live dev server (not ?static=1) so real API
  * calls can be made using the keys injected via .env.
@@ -24,7 +31,8 @@ test('3D tiles system initialises and reports status', async ({ page }, testInfo
   const isMobile = testInfo.project.name === 'mobile-chrome';
 
   // Live mode: no ?static=1, so tiles are allowed to load from the API.
-  await page.goto('/?imagery=live');
+  // renderer=classic pins this to the three.js path (see file header comment).
+  await page.goto('/?imagery=live&renderer=classic');
 
   // Page must render without throwing.
   await expect(page.locator('#app canvas')).toBeVisible({ timeout: 8000 });
@@ -86,7 +94,7 @@ test('3D tiles do not crash the scrapbook system', async ({ page }) => {
     );
   });
 
-  await page.goto('/?imagery=live');
+  await page.goto('/?imagery=live&renderer=classic');
 
   // Basic page load check.
   await expect(page.locator('#control-panel h1')).toHaveText('Companion Atlas');

@@ -4,6 +4,10 @@
 /.env.local
 /.env.development
 /.env.test
+# Cesium static assets, copied from node_modules via `npm run cesium:assets`
+# (scripts/copy-cesium-assets.ts) — do not commit, do not hand-edit.
+/public/cesium
+
 # Nested Atlas server package
 /server/node_modules
 /server/dist

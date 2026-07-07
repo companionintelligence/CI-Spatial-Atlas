@@ -87,8 +87,8 @@ The pin-creation form and the pin list.
 
 | Element | id | Behavior |
 |---|---|---|
-| Label input | `#pin-label` | Defaults to "New Memory"; trimmed on submit |
-| Submit button | inside `#scrapbook-form` | Raycasts from the camera through the screen center onto the globe (`sceneSystem.raycastGlobeFromCamera`) and creates a pin at the hit point |
+| Label input | `#pin-label` | Shows "New Memory" as placeholder-like default text, but submitting with the field fully cleared does **not** produce that value or an empty label — it silently falls back to "Untitled Memory" instead (`label.trim() || 'Untitled Memory'` in `inputSystem.ts`) |
+| Submit button | inside `#scrapbook-form` | Raycasts from the camera through the screen center onto the globe (`sceneSystem.raycastGlobeFromCamera`, or `cesiumScene.raycastGroundFromCenter` in [Cesium mode](#9-renderers)) and creates a pin at the hit point |
 | Pin list | `#pin-list` | Rendered by `renderPinList()` (`src/scrapbook.ts`); newest pin first; click or `Enter`/`Space` selects a pin |
 
 Creating a pin does **not** require clicking the globe — it always drops at
@@ -108,8 +108,8 @@ fields and disables both action buttons.
 | Notes | `#pin-detail-notes` | Multi-line textarea |
 | Media URL | `#pin-detail-media-url` | Free text; rendered as "Media attached" in the pin list when non-empty |
 | Save | submit on `#pin-detail-form` | `scrapbookSystem.updateSelectedPin()` — persists to `localStorage` |
-| Fly To Pin | `#pin-fly-btn` | Animates the camera to the pin's lat/lon (`sceneSystem.flyToLatLon`, 1400ms, orbit radius `0.84`) |
-| Delete Pin | `#pin-delete-btn` | Removes the pin; selection falls back to the next pin in storage order, or none |
+| Fly To Pin | `#pin-fly-btn` | Animates the camera to the pin's lat/lon over 1400ms. Classic: orbit radius becomes `globe.radius (1.24) + distance (0.84) = 2.08` units, not `0.84` itself — `distance` is an offset added on top of the globe radius. Cesium: `range: 4500` meters above the pin |
+| Delete Pin | `#pin-delete-btn` | Removes the pin; selection resets to `pins[0]` — the **oldest** remaining pin by storage order, not necessarily the one adjacent to the one just deleted |
 
 ### 2.6 Journeys card
 
@@ -158,7 +158,7 @@ Overlaid on the 3D canvas (`#app`), all positioned `absolute` within
 | Coordinate readout | `#hud-coords` | bottom-left | Lat/lon under the pointer, updated on `pointermove` over the canvas; blank when the pointer isn't over the globe |
 | Zoom controls | `#hud-zoom` (`#zoom-in-btn`, `#zoom-out-btn`) | top-right | Steps camera radius by ×0.78 / ×1.28 |
 | Compass | `#hud-compass` | top-right, below zoom | SVG rotated by `-heading` in the 200ms tick loop; heading derives from the camera's orbit angle |
-| XR entry buttons | `#hud-xr-buttons` | top-right, below compass | Three.js `VRButton`/`ARButton`; read "not supported" outside a WebXR-capable browser |
+| XR entry buttons | `#hud-xr-buttons` | top-right, below compass | Classic renderer: three.js `VRButton`/`ARButton`, reading "not supported" outside a WebXR-capable browser. Cesium renderer: a single "VR / AR (classic renderer)" link back to `?renderer=classic` instead — Cesium has no WebXR support (see [§9](#9-renderers)) |
 | Environment bar | `#env-bar` | bottom-center | Pill showing time · weather · altitude, ticked every 200ms |
 
 ![HUD right cluster: zoom, compass, XR buttons](screenshots/hud-right-cluster.png)
@@ -171,9 +171,12 @@ depending on magnitude (`formatAltitude()` in `main.ts`).
 
 ## 4. Globe interactions
 
-All pointer/touch/wheel handling lives in `src/systems/cameraControls.ts`; it
-owns an orbital camera (`theta`/`phi`/`radius`) around a fixed globe at the
-origin.
+Classic renderer only. All pointer/touch/wheel handling lives in
+`src/systems/cameraControls.ts`; it owns an orbital camera
+(`theta`/`phi`/`radius`) around a fixed globe at the origin. The Cesium
+renderer ([§9](#9-renderers)) uses Cesium's own built-in camera controls
+instead — left-drag/right-drag/wheel gestures feel similar, but there is no
+equivalent hand-rolled state machine to document here.
 
 | Input | Effect |
 |---|---|
@@ -223,11 +226,9 @@ recomputed on every pin CRUD operation, not just during playback.
 
 Passing `?story=<url-to-story.json>` fetches a
 [`companion.atlas/story@1`](../src/atlas/schema.ts) document and renders its
-scenes as pins, ordered by scene time — a preview of how a published Atlas
-story looks before the CesiumJS viewer (Phase 2, see
-[`REIMAGINE.md`](../REIMAGINE.md)) lands. It does not touch the signed-in
-account's own scrapbook (`scrapbookSystem.loadPins()` is view-only). Try it
-locally:
+scenes as pins, ordered by scene time — on either renderer (see
+[§9](#9-renderers)). It does not touch the signed-in account's own scrapbook
+(`loadPins()` is view-only, never written to `localStorage`). Try it locally:
 
 ```
 /?imagery=local&story=/stories/sample-pacific-journey.json
@@ -237,11 +238,48 @@ locally:
 
 | Param | Values | Effect |
 |---|---|---|
-| `static` | `1` | Freezes the render loop to a single deterministic frame (no day/night cycle, no `requestAnimationFrame` loop) — used by Playwright visual tests |
-| `imagery` | `local` \| `live` | Forces local procedural/KTX2 textures vs. live tile providers (Mapbox/ESRI/Google/OSM, see `src/systems/tileProvider.ts`) |
+| `static` | `1` | Freezes the render loop to a single deterministic frame and forces the classic renderer regardless of `renderer=` (see [§9](#9-renderers)) — used by Playwright visual tests |
+| `renderer` | `cesium` \| `classic` | Explicitly picks the renderer. Defaults to `cesium` when `CESIUM_ION_TOKEN` is configured (and `static` isn't set), otherwise `classic` — see [§9](#9-renderers) |
+| `imagery` | `local` \| `live` | Classic renderer only. Forces local procedural/KTX2 textures vs. live tile providers (Mapbox/ESRI/Google/OSM, see `src/systems/tileProvider.ts`). Checked *before* `static`, so an explicit `imagery=` always wins |
 | `story` | a URL to a `Story` JSON document | Loads and renders that story's scenes as a pin journey (§7) |
 
-`static=1` implies `imagery=local` unless `imagery` is explicitly set.
+An explicit `imagery=` always wins over `static=1`; `static=1` is only the
+fallback default (`local`) when `imagery=` is absent or invalid. "Local"
+imagery is not fully offline outside of `static=1` — see
+[`docs/architecture.md` §6](architecture.md#6-renderer-and-imagery-mode-resolution)
+for the precise resolution order.
+
+## 9. Renderers
+
+![The Cesium renderer: real ion imagery/terrain, pins, and a journey route](screenshots/cesium-renderer.png)
+
+*(Above: the Cesium renderer with three pins and a journey route loaded. When
+Cesium ion is unreachable — no token, network restrictions, rate limits — the
+globe falls back to Cesium's bundled offline Natural Earth II imagery rather
+than going blank; this screenshot may show either depending on network
+conditions when it was captured. See
+[`docs/architecture.md` §11.1](architecture.md#111-ion-resource-loading-and-offline-fallback).)*
+
+Companion Atlas ships two complete renderers behind `?renderer=cesium|classic`
+(see [§8](#8-url-query-parameters) and
+[`docs/architecture.md` §6](architecture.md#6-renderer-and-imagery-mode-resolution)):
+
+| | Classic (three.js) | Cesium |
+|---|---|---|
+| Default when | `?static=1`, or no `CESIUM_ION_TOKEN` configured | `CESIUM_ION_TOKEN` configured and not `?static=1` |
+| Base imagery | Procedural texture or live Mapbox/ESRI/Google/OSM tiles | Real Cesium ion World Imagery (with an offline fallback) |
+| Terrain | Flat sphere, optional NASA-AMMOS 3D Tiles overlay | Real Cesium ion World Terrain elevation mesh |
+| Buildings | None | Cesium OSM Buildings (toggled by "Borders & Labels") |
+| Pins | three.js sphere beacons + halo | Cesium `PinBuilder` map-pin icons + label |
+| Camera controls | Hand-rolled (`cameraControls.ts`, see [§4](#4-globe-interactions)) | Cesium's native controls |
+| Altitude / heading | Approximated from a 1.24-unit toy globe | Real WGS84 meters / `camera.heading` |
+| WebXR (VR/AR) | ✅ | ❌ — links back to `?renderer=classic` |
+| Layer toggles | Procedural hillshade/labels/clouds/weather overlays | Hillshade → real terrain on/off; Labels → 3D buildings on/off; Clouds/Weather → disabled |
+| Visual regression tested | ✅ (`earth.spec.ts`, `tiles.spec.ts`) | Status-only (`cesium.spec.ts`) — real ion imagery isn't pixel-diffable |
+
+Everything else in this guide — the sidebar cards, pin CRUD, journeys, story
+mode, responsive layout — behaves identically on both renderers; they share
+the same `inputSystem.ts`, `scrapbook.ts` storage, and `journeyController.ts`.
 
 ## Known gaps
 

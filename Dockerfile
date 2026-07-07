@@ -16,7 +16,7 @@ ENV CESIUM_ION_TOKEN=$CESIUM_ION_TOKEN \
     GOOGLE_MAP_PLATFORM=$GOOGLE_MAP_PLATFORM \
     MAPBOX_API_KEY=$MAPBOX_API_KEY \
     ESRI_API_KEY=$ESRI_API_KEY
-RUN npm run textures:build && npm run build
+RUN npm run textures:build && npm run cesium:assets && npm run build
 
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
