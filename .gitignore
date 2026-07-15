@@ -16,3 +16,4 @@
 /test-results/earth-*
 /test-results/tiles-*
 /playwright-report
+capture/
