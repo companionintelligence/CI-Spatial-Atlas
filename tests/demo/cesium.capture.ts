@@ -16,15 +16,24 @@ async function cesiumTerminal(page: Page): Promise<string | null> {
   return page.locator('#viewport').getAttribute('data-cesium-status');
 }
 
-async function probe(page: Page): Promise<Record<string, string | null>> {
+async function probe(page: Page): Promise<Record<string, unknown>> {
   return page.evaluate(() => {
+    const h = (el: Element | null) => (el ? Math.round((el as HTMLElement).clientHeight) : null);
     const v = document.getElementById('viewport');
+    const canvas = document.querySelector('#app canvas') as HTMLCanvasElement | null;
     return {
       renderer: v?.getAttribute('data-renderer') ?? null,
       cesiumStatus: v?.getAttribute('data-cesium-status') ?? null,
-      imageryMode: v?.getAttribute('data-imagery-mode') ?? null,
       tiles: v?.getAttribute('data-tiles') ?? null,
-      localTextures: v?.getAttribute('data-local-textures') ?? null,
+      H: {
+        layout: h(document.getElementById('layout')),
+        viewport: h(v),
+        app: h(document.getElementById('app')),
+        cesiumViewer: h(document.querySelector('.cesium-viewer')),
+        cesiumWidget: h(document.querySelector('.cesium-widget')),
+        canvasClient: canvas ? Math.round(canvas.clientHeight) : null,
+        canvasAttr: canvas ? canvas.height : null,
+      },
     };
   });
 }
