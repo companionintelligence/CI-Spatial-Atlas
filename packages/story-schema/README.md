@@ -23,8 +23,9 @@ test suite.
   → validate), `storyEntities(story)` (the merged renderable entity list),
   `timelineBounds`, `normalizeCamera`.
 - **`czml.ts`** — `storyToCzml(story)` → `{ czml, tilesets }` for CesiumJS
-  `Clock` playback (splats/3D-Tiles returned separately to load as
-  `Cesium3DTileset`s). This is what makes "4D" actually wired.
+  `Clock` playback (tilesets de-duplicated by URL; splats/3D-Tiles returned
+  separately to load as `Cesium3DTileset`s). This is the **data layer** the
+  viewer's Phase-2 work wires the Cesium `Clock` to.
 - **`memory.ts`** — `mediaItemsFromMemory(graphqlResult)` + `LOCATED_MEDIA_QUERY`:
   CI-Server Companion Memory → canonical `MediaItem[]` (ported from CI-Earth-2's
   live PR #8 integration — the only working Memory wiring across either build).

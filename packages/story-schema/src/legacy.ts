@@ -57,7 +57,7 @@ export interface LegacyScrapbook {
   /** Earth-2 items already match the canonical `Item` union shape. */
   items: Array<Record<string, unknown>>;
   scenes: LegacyScrapbookScene[];
-  source?: { kind?: string; memoryId?: string; query?: string; importedAt?: string };
+  source?: { kind?: string; memoryId?: string; query?: string; importedAt?: string; [k: string]: unknown };
 }
 
 /** ---- Companion-Atlas `Story` (src/atlas/schema.ts) ---- */

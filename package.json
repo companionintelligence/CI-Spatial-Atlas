@@ -28,7 +28,6 @@
     "cesium": "^1.143.0",
     "three": "^0.183.0"
   },
-  "jpeg-js": "^0.4.4",
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^25.5.0",

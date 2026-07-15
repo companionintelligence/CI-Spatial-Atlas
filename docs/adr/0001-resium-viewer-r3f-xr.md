@@ -1,6 +1,9 @@
 # ADR 0001 — Resium (React + Cesium) viewer, R3F for WebXR, one Story schema
 
-- **Status:** Accepted (2026-07-14)
+- **Status:** Accepted, **pending the Resium spike** (2026-07-14). If the spike
+  fails, the accepted fallback is a thin React shell over the existing vanilla-TS
+  Cesium viewer (keep Cesium; add React only at the shell), with R3F still owning
+  WebXR — so a failed spike never strands the consolidation.
 - **Context:** Consolidating two parallel builds of the same product — CI-Earth-2
   (React + React-Three-Fiber, working WebXR, Vitest, live Companion Memory
   wiring) and Companion-Atlas (vanilla-TS + CesiumJS default renderer, Playwright

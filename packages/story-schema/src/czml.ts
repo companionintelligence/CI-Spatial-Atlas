@@ -42,7 +42,8 @@ export interface CzmlResult {
 }
 
 function iso(d: string): string {
-  return new Date(d).toISOString();
+  const t = new Date(d);
+  return Number.isNaN(t.getTime()) ? d : t.toISOString();
 }
 
 /** A TimeSpec → CZML availability interval, defaulting to the doc interval. */
@@ -81,20 +82,20 @@ export function storyToCzml(story: Story): CzmlResult {
       case 'photo':
       case 'video': {
         const pos = item.position;
+        const img = item.type === 'photo' ? item.media.thumbnailUrl ?? item.media.url : item.media.posterUrl ?? item.media.thumbnailUrl;
         czml.push({
           id: item.id,
           name: item.title ?? item.id,
           description: mediaCardHtml(item),
           availability: availability(item.time, docInterval),
           position: { cartographicDegrees: [pos.lon, pos.lat, pos.height ?? 0] },
-          billboard: {
-            image: item.type === 'photo' ? item.media.thumbnailUrl ?? item.media.url : item.media.posterUrl ?? item.media.thumbnailUrl,
-            scale: 0.5,
-            verticalOrigin: 'BOTTOM',
-          },
+          // A billboard needs an image; without one, still place the entity as a point.
+          ...(img
+            ? { billboard: { image: img, scale: 0.5, verticalOrigin: 'BOTTOM' } }
+            : { point: { pixelSize: 10, color: cssToRgba('#39c0ff') } }),
         });
-        // A 2D capture may carry a linked reconstruction.
-        if (item.type !== 'video' && item.derived3d) {
+        // Either a photo or a video may carry a linked reconstruction.
+        if (item.derived3d) {
           tilesets.push({
             id: `${item.id}#derived`,
             url: item.derived3d.uri,
@@ -127,13 +128,17 @@ export function storyToCzml(story: Story): CzmlResult {
         break;
       }
       case 'track': {
-        const first = iso(item.path[0].time);
-        const last = iso(item.path[item.path.length - 1].time);
+        // Don't trust input order; sort a copy by time before sampling.
+        const path = [...item.path].sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+        const first = iso(path[0]!.time);
+        // A single-sample track has no span — extend availability to the doc stop
+        // so the entity stays visible instead of flashing for zero seconds.
+        const last = path.length > 1 ? iso(path[path.length - 1]!.time) : iso(bounds.stop);
         czml.push({
           id: item.id,
           name: item.title ?? item.id,
           availability: `${first}/${last}`,
-          position: { epoch: first, cartographicDegrees: relativeSamples(item.path) },
+          position: { epoch: first, cartographicDegrees: relativeSamples(path) },
           path: { material: { solidColor: { color: cssToRgba(item.color ?? '#39c0ff') } }, width: 3, leadTime: 0 },
           point: { pixelSize: 8, color: cssToRgba(item.color ?? '#39c0ff') },
         });
@@ -179,7 +184,13 @@ export function storyToCzml(story: Story): CzmlResult {
     }
   }
 
-  return { czml, tilesets };
+  // Deduplicate tilesets by URL: a media reconstruction and an authored layer can
+  // point at the same tileset.json/.splat — loading it twice causes z-fighting and
+  // doubled VRAM. Keep the first occurrence.
+  const seenUrls = new Set<string>();
+  const dedupedTilesets = tilesets.filter((t) => (seenUrls.has(t.url) ? false : (seenUrls.add(t.url), true)));
+
+  return { czml, tilesets: dedupedTilesets };
 }
 
 /** CZML sampled positions are [secondsFromEpoch, lon, lat, height, …]. */

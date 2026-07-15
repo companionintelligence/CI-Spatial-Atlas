@@ -27,8 +27,8 @@
 - `src/story/useStory.ts` — fetch `?story=<url>` → `loadStory` (accepts legacy
   Atlas *and* Earth-2 documents).
 - `src/renderers/CesiumStoryViewer.tsx` — Resium `<Viewer>` + `<CzmlDataSource>`
-  from `storyToCzml`, plus `<Cesium3DTileset>` per returned tileset. Real 4D
-  scrubbing via the CZML clock.
+  from `storyToCzml`, plus `<Cesium3DTileset>` per returned tileset. **Intended**
+  to give real 4D scrubbing via the CZML clock once built.
 - `src/renderers/XRStoryScene.tsx` — R3F `<Canvas><XR>` globe rendering
   `storyEntities(story)` as pins; ports CI-Earth-2's working WebXR path.
 - `src/renderers/rendererForDevice.ts` — `immersive-vr` support check → renderer.

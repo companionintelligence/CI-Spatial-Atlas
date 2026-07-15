@@ -22,10 +22,13 @@ import { z } from 'zod';
 
 export const STORY_SCHEMA_ID = 'companion.atlas/story@1' as const;
 
-/** ISO-8601 / RFC-3339 timestamp, e.g. "2026-03-14T09:00:00Z". Kept as a
- *  permissive string so legacy documents (which are not all strict RFC-3339)
- *  still validate; use `parseInstant` when you need a number. */
-export const Iso8601 = z.string().min(1);
+/** ISO-8601 / RFC-3339 timestamp, e.g. "2026-03-14T09:00:00Z". Permissive on
+ *  format (legacy docs are not all strict RFC-3339) but must be **parseable** by
+ *  `Date` — otherwise the CZML converter (`new Date(x).toISOString()`) would
+ *  throw on a document that validated. */
+export const Iso8601 = z.string().min(1).refine((v) => !Number.isNaN(Date.parse(v)), {
+  message: 'must be a parseable date/time',
+});
 
 /** WGS84 geographic point. `height` is metres above the ellipsoid. */
 export const GeoPoint = z.object({
@@ -230,10 +233,11 @@ export const Story = z
     scenes: z.array(Scene),
     access: z.object({ visibility: Visibility, oidcSubject: z.string().optional() }).optional(),
     provenance: Provenance.extend({ source: z.string().optional(), memoryQuery: z.string().optional(), agent: z.string().optional() }).partial().optional(),
-  })
-  .refine((s) => (s.media && s.media.length) || (s.items && s.items.length), {
-    message: 'a story needs at least one of `media` or `items`',
   });
+// NOTE: no "must have media or items" refine — content may live only in `layers`
+// (a guided tour of imagery/3D-Tiles) or `scenes` (a narrated flythrough), and
+// the server builds a story incrementally from an empty draft. `storyEntities`
+// simply returns [] when there are none.
 
 // ---- inferred canonical types (the single source of truth) -----------------
 

@@ -108,10 +108,28 @@ export function fromScrapbook(sb: LegacyScrapbook): Record<string, unknown> {
       : undefined,
     items: sb.items,
     scenes,
-    provenance: sb.source
-      ? { kind: sb.source.kind, memoryId: sb.source.memoryId, query: sb.source.query, importedAt: sb.source.importedAt }
-      : undefined,
+    // Spread to preserve any extra provenance keys (the model is passthrough on
+    // both sides) — not just the four well-known ones.
+    provenance: sb.source ? { ...sb.source } : undefined,
   };
+}
+
+/** Read a scene's narration regardless of legacy spelling (`narrative`/`caption`). */
+export function sceneNarrative(scene: Scene): string | undefined {
+  return scene.narrative ?? scene.caption;
+}
+
+/** Read a scene's highlighted entity ids regardless of legacy spelling. */
+export function sceneHighlightIds(scene: Scene): string[] {
+  return scene.itemIds ?? scene.items ?? scene.mediaIds ?? [];
+}
+
+/** Keep the two legacy visibility spellings in sync so consumers can read either. */
+function reconcileVisibility(s: StoryT): void {
+  const v = s.visibility ?? s.access?.visibility;
+  if (!v) return;
+  if (!s.visibility) s.visibility = v;
+  if (!s.access) s.access = { visibility: v };
 }
 
 /** Detect the format, normalize, and validate. Throws on an invalid document. */
@@ -134,6 +152,7 @@ export function loadStory(doc: unknown): StoryT {
     const msg = parsed.error.issues.map((i) => `${i.path.join('.') || '/'}: ${i.message}`).join('; ');
     throw new Error(`Invalid story (${fmt}): ${msg}`);
   }
+  reconcileVisibility(parsed.data);
   return parsed.data;
 }
 
@@ -154,7 +173,8 @@ export function mediaToEntities(m: MediaItem): Item[] {
   } else if (m.kind === 'model3d') {
     out.push({ id: m.id, type: 'model', position: m.location, time, source, gltf: m.derived3d?.uri ?? m.uri });
   } else if (m.kind === 'audio') {
-    out.push({ id: m.id, type: 'marker', position: m.location, time, source, title: m.caption });
+    // Preserve the audio uri on the projected entity so a renderer can reach it.
+    out.push({ id: m.id, type: 'marker', position: m.location, time, source, title: m.caption, description: m.uri });
   } else {
     // image | image-set | pano360 → photo. Its reconstruction (if any) is
     // emitted below as a distinct entity, so it is NOT attached inline here
