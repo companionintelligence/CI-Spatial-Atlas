@@ -8,6 +8,21 @@ pending a first tagged release).
 ## Unreleased
 
 ### Added
+- **Consolidation with CI-Earth-2** — Companion Atlas is now the single home for
+  the product; the parallel CI-Earth-2 build is superseded and slated for archive.
+  See [`docs/CONSOLIDATION.md`](docs/CONSOLIDATION.md) and
+  [`docs/adr/0001-resium-viewer-r3f-xr.md`](docs/adr/0001-resium-viewer-r3f-xr.md).
+  - **`@companion-atlas/story`** (`packages/story-schema`) — the unified, canonical
+    4D `Story` schema (Zod source of truth → generated JSON Schema), consolidating
+    this repo's `Story` and CI-Earth-2's `Scrapbook`. Includes normalizers that
+    load **either** legacy document shape, the ported **CZML converter**
+    (`storyToCzml`, real Cesium `Clock` playback), and `mediaItemsFromMemory`
+    (CI-Server Companion Memory → `MediaItem`, ported from CI-Earth-2 PR #8).
+    Verified: `tsc` clean + 13 Vitest tests (both historical samples round-trip).
+  - **`viewer-react/`** — scaffold of the consolidated viewer (Resium/Cesium for
+    desktop+mobile, React-Three-Fiber + `@react-three/xr` for WebXR), consuming the
+    unified schema. Not yet built; the vanilla-TS viewer keeps shipping until parity.
+  - Root **npm workspaces** (`packages/*`, `viewer-react`).
 - **Cesium renderer** (`src/cesium/`) — real Cesium ion World Imagery, World
   Terrain, and OSM 3D Buildings, now the default live-mode renderer behind
   `?renderer=cesium|classic` (see [`docs/architecture.md` §11](docs/architecture.md#11-cesium-renderer)).

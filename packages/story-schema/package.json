@@ -1,0 +1,32 @@
+{
+  "name": "@companion-atlas/story",
+  "version": "0.1.0",
+  "description": "Canonical 4D Story schema + normalizers + CZML converter for Companion Atlas. Consolidates the Companion-Atlas Story and CI-Earth-2 Scrapbook data models into one Zod-sourced package.",
+  "license": "CI-Commercial-1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema.json": "./schema/story.schema.json"
+  },
+  "files": ["dist", "schema", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "gen:schema": "npm run build && node scripts/gen-schema.mjs"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^2.1.0",
+    "zod-to-json-schema": "^3.24.0"
+  }
+}

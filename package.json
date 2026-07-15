@@ -5,6 +5,7 @@
   "description": "Companion Atlas — 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
   "license": "CI-Commercial-1.0",
   "type": "module",
+  "workspaces": ["packages/*", "viewer-react"],
   "scripts": {
     "dev": "vite",
     "vibe:dev": "vite --host 127.0.0.1 --port 4173",

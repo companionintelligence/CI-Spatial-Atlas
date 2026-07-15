@@ -1,0 +1,881 @@
+{
+  "$ref": "#/definitions/CompanionAtlasStory",
+  "definitions": {
+    "CompanionAtlasStory": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "companion.atlas/story@1"
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "avatarUrl": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updatedAt": {
+          "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "private",
+            "unlisted",
+            "public"
+          ]
+        },
+        "cover": {
+          "type": "string"
+        },
+        "timeline": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+            },
+            "stop": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+            },
+            "end": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+            },
+            "current": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+            },
+            "multiplier": {
+              "type": "number"
+            },
+            "loop": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "start"
+          ],
+          "additionalProperties": false
+        },
+        "basemap": {
+          "type": "object",
+          "properties": {
+            "imagery": {
+              "type": "string"
+            },
+            "terrain": {
+              "type": "boolean"
+            },
+            "provider": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "view": {
+          "type": "object",
+          "properties": {
+            "camera": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "lat": {
+                      "type": "number"
+                    },
+                    "lon": {
+                      "type": "number"
+                    },
+                    "height": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lat",
+                    "lon"
+                  ],
+                  "additionalProperties": false
+                },
+                "lon": {
+                  "type": "number"
+                },
+                "lat": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "heading": {
+                  "type": "number"
+                },
+                "pitch": {
+                  "type": "number"
+                },
+                "roll": {
+                  "type": "number"
+                },
+                "range": {
+                  "type": "number"
+                },
+                "durationMs": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            },
+            "basemap": {
+              "type": "string"
+            },
+            "terrain": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "image",
+                  "image-set",
+                  "video",
+                  "pano360",
+                  "gaussian-splat",
+                  "model3d",
+                  "pointcloud",
+                  "audio"
+                ]
+              },
+              "uri": {
+                "type": "string"
+              },
+              "thumbnailUri": {
+                "type": "string"
+              },
+              "caption": {
+                "type": "string"
+              },
+              "capturedAt": {
+                "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+              },
+              "location": {
+                "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+              },
+              "heading": {
+                "type": "number"
+              },
+              "exif": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "derived3d": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "3d-tiles",
+                      "gaussian-splat",
+                      "gltf",
+                      "pointcloud"
+                    ]
+                  },
+                  "uri": {
+                    "type": "string"
+                  },
+                  "job": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "uri"
+                ],
+                "additionalProperties": false
+              },
+              "sourceMemoryId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "uri"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "time": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                          },
+                          "start": {
+                            "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                          },
+                          "end": {
+                            "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                          },
+                          "stop": {
+                            "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "manual",
+                          "upload",
+                          "ci-memory",
+                          "hermes",
+                          "openclaw",
+                          "import"
+                        ]
+                      },
+                      "memoryId": {
+                        "type": "string"
+                      },
+                      "query": {
+                        "type": "string"
+                      },
+                      "importedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "photo"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+                  },
+                  "media": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string"
+                      },
+                      "mimeType": {
+                        "type": "string"
+                      },
+                      "thumbnailUrl": {
+                        "type": "string"
+                      },
+                      "posterUrl": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      },
+                      "durationSec": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "heading": {
+                    "type": "number"
+                  },
+                  "derived3d": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/media/items/properties/derived3d"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "media"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/id"
+                  },
+                  "title": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/title"
+                  },
+                  "description": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/description"
+                  },
+                  "tags": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/tags"
+                  },
+                  "time": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+                  },
+                  "source": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "video"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+                  },
+                  "media": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/media"
+                  },
+                  "derived3d": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/media/items/properties/derived3d"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "media"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/id"
+                  },
+                  "title": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/title"
+                  },
+                  "description": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/description"
+                  },
+                  "tags": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/tags"
+                  },
+                  "time": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+                  },
+                  "source": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "marker"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+                  },
+                  "icon": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "position"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/id"
+                  },
+                  "title": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/title"
+                  },
+                  "description": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/description"
+                  },
+                  "tags": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/tags"
+                  },
+                  "time": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+                  },
+                  "source": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "note"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/id"
+                  },
+                  "title": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/title"
+                  },
+                  "description": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/description"
+                  },
+                  "tags": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/tags"
+                  },
+                  "time": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+                  },
+                  "source": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "track"
+                  },
+                  "path": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "lon": {
+                          "type": "number"
+                        },
+                        "lat": {
+                          "type": "number"
+                        },
+                        "height": {
+                          "type": "number"
+                        },
+                        "time": {
+                          "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                        }
+                      },
+                      "required": [
+                        "lon",
+                        "lat",
+                        "time"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "path"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/id"
+                  },
+                  "title": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/title"
+                  },
+                  "description": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/description"
+                  },
+                  "tags": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/tags"
+                  },
+                  "time": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+                  },
+                  "source": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "model"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+                  },
+                  "gltf": {
+                    "type": "string"
+                  },
+                  "scale": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "gltf"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/id"
+                  },
+                  "title": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/title"
+                  },
+                  "description": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/description"
+                  },
+                  "tags": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/tags"
+                  },
+                  "time": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+                  },
+                  "source": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "splat"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+                  },
+                  "tileset": {
+                    "type": "string"
+                  },
+                  "splatUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/id"
+                  },
+                  "title": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/title"
+                  },
+                  "description": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/description"
+                  },
+                  "tags": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/tags"
+                  },
+                  "time": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+                  },
+                  "source": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tileset"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera/properties/location"
+                  },
+                  "tileset": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "tileset"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "imagery",
+                  "terrain",
+                  "3d-tiles",
+                  "gaussian-splat",
+                  "geojson",
+                  "model",
+                  "pin"
+                ]
+              },
+              "uri": {
+                "type": "string"
+              },
+              "style": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "availability": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                  },
+                  "stop": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                  },
+                  "end": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
+                  }
+                },
+                "required": [
+                  "start"
+                ],
+                "additionalProperties": false
+              },
+              "opacity": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "scenes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "narrative": {
+                "type": "string"
+              },
+              "caption": {
+                "type": "string"
+              },
+              "time": {
+                "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/time"
+              },
+              "camera": {
+                "$ref": "#/definitions/CompanionAtlasStory/properties/view/properties/camera"
+              },
+              "itemIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "mediaIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "layerIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "transition": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "fly",
+                      "flyTo",
+                      "cut"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "flyTo",
+                      "cut"
+                    ]
+                  },
+                  "durationMs": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "layout": {
+                "type": "string",
+                "enum": [
+                  "card-left",
+                  "card-right",
+                  "card-bottom",
+                  "fullscreen",
+                  "split"
+                ]
+              },
+              "audioUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "access": {
+          "type": "object",
+          "properties": {
+            "visibility": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/visibility"
+            },
+            "oidcSubject": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "visibility"
+          ],
+          "additionalProperties": false
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source/properties/kind"
+            },
+            "memoryId": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source/properties/memoryId"
+            },
+            "query": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source/properties/query"
+            },
+            "importedAt": {
+              "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source/properties/importedAt"
+            },
+            "source": {
+              "type": "string"
+            },
+            "memoryQuery": {
+              "type": "string"
+            },
+            "agent": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "title",
+        "scenes"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
