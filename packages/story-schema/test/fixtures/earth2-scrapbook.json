@@ -1,0 +1,112 @@
+{
+  "version": "0.1.0",
+  "id": "sb_lisbon_weekend",
+  "title": "A Weekend in Lisbon",
+  "description": "Auto-assembled from geotagged photos + a walking track. A worked example of the 4D Scrapbook format.",
+  "author": { "id": "liam", "name": "Liam" },
+  "createdAt": "2026-05-10T09:00:00Z",
+  "updatedAt": "2026-05-10T09:00:00Z",
+  "visibility": "unlisted",
+  "cover": "ph_alfama_sunset",
+  "timeline": {
+    "start": "2026-05-09T08:00:00Z",
+    "end": "2026-05-10T20:00:00Z",
+    "clock": { "currentTime": "2026-05-09T08:00:00Z", "multiplier": 3600, "loop": true }
+  },
+  "view": {
+    "camera": { "lon": -9.1393, "lat": 38.7223, "height": 4000, "heading": 20, "pitch": -35 },
+    "basemap": "google-photoreal",
+    "terrain": "cesium-world-terrain"
+  },
+  "items": [
+    {
+      "id": "ph_comercio",
+      "type": "photo",
+      "title": "Praça do Comércio",
+      "description": "Morning light on the big square.",
+      "position": { "lon": -9.1366, "lat": 38.7077 },
+      "time": { "at": "2026-05-09T09:14:00Z" },
+      "heading": 200,
+      "media": {
+        "url": "https://cdn.example/lisbon/comercio.jpg",
+        "thumbnailUrl": "https://cdn.example/lisbon/comercio_thumb.jpg",
+        "mimeType": "image/jpeg",
+        "width": 4032,
+        "height": 3024
+      },
+      "source": { "kind": "ci-memory", "memoryId": "mem_8842" }
+    },
+    {
+      "id": "trk_walk_day1",
+      "type": "track",
+      "title": "Walk through Baixa & Alfama",
+      "color": "#39c0ff",
+      "path": [
+        { "lon": -9.1366, "lat": 38.7077, "time": "2026-05-09T09:20:00Z" },
+        { "lon": -9.1349, "lat": 38.7106, "time": "2026-05-09T09:45:00Z" },
+        { "lon": -9.1300, "lat": 38.7117, "time": "2026-05-09T10:20:00Z" },
+        { "lon": -9.1281, "lat": 38.7129, "time": "2026-05-09T11:05:00Z" }
+      ],
+      "source": { "kind": "ci-memory", "memoryId": "mem_8850" }
+    },
+    {
+      "id": "ph_alfama_sunset",
+      "type": "photo",
+      "title": "Alfama rooftops at sunset",
+      "position": { "lon": -9.1281, "lat": 38.7129, "height": 40 },
+      "time": { "at": "2026-05-09T19:42:00Z" },
+      "media": {
+        "url": "https://cdn.example/lisbon/alfama.jpg",
+        "thumbnailUrl": "https://cdn.example/lisbon/alfama_thumb.jpg",
+        "mimeType": "image/jpeg"
+      },
+      "source": { "kind": "ci-memory", "memoryId": "mem_8871" }
+    },
+    {
+      "id": "note_pastel",
+      "type": "note",
+      "position": { "lon": -9.2030, "lat": 38.6970 },
+      "time": { "at": "2026-05-10T11:00:00Z" },
+      "text": "Pastéis de Belém — worth the queue."
+    },
+    {
+      "id": "splat_jeronimos",
+      "type": "splat",
+      "title": "Jerónimos cloister (captured on phone)",
+      "position": { "lon": -9.2065, "lat": 38.6979 },
+      "time": { "at": "2026-05-10T11:40:00Z" },
+      "tileset": "https://cdn.example/lisbon/jeronimos_splat/tileset.json",
+      "source": { "kind": "upload" }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "sc_intro",
+      "title": "Arrival",
+      "caption": "We landed Saturday morning and headed straight for the river.",
+      "camera": { "lon": -9.1366, "lat": 38.7077, "height": 1200, "heading": 200, "pitch": -30, "durationMs": 3000 },
+      "time": { "at": "2026-05-09T09:14:00Z" },
+      "items": ["ph_comercio"],
+      "layout": "card-left"
+    },
+    {
+      "id": "sc_walk",
+      "title": "Into Alfama",
+      "caption": "A slow wander uphill through the old town as the day went on.",
+      "camera": { "lon": -9.1300, "lat": 38.7117, "height": 900, "heading": 60, "pitch": -40, "durationMs": 3500 },
+      "time": { "start": "2026-05-09T09:20:00Z", "end": "2026-05-09T19:42:00Z" },
+      "items": ["trk_walk_day1", "ph_alfama_sunset"],
+      "layout": "card-right"
+    },
+    {
+      "id": "sc_belem",
+      "title": "Belém",
+      "caption": "Sunday: monastery, pastries, and a phone-captured 3D splat of the cloister.",
+      "camera": { "lon": -9.2065, "lat": 38.6979, "height": 300, "heading": 120, "pitch": -25, "durationMs": 3500 },
+      "time": { "at": "2026-05-10T11:40:00Z" },
+      "items": ["note_pastel", "splat_jeronimos"],
+      "layout": "split"
+    }
+  ],
+  "source": { "kind": "ci-memory", "query": "photos near Lisbon 2026-05-09..2026-05-10", "importedAt": "2026-05-10T09:00:00Z" }
+}

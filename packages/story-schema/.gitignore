@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+package-lock.json
+test/_probe*
+test/_scratch*
