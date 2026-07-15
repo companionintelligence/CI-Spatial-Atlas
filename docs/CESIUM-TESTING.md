@@ -36,6 +36,20 @@ Goal: track parity with Google Earth across the real streamed sources.
   without a Google key — `cesium-03-tiles-classic.png`.
 - Clouds/Weather layer toggles are inert on Cesium (no Cesium equivalent), as designed.
 
+## Verified **with** a Cesium ion token (2026-07-15)
+
+With `CESIUM_ION_TOKEN` set, all three ion sources render:
+
+- **World Imagery** — real photoreal satellite basemap replaces Natural Earth II
+  (`cesium-01-default.png`).
+- **World Terrain + OSM Buildings** — flying to a pin ("Fly To Pin" → oblique −45°
+  at ~4.5 km) over Manhattan and zooming in shows streamed **3D buildings** on real
+  terrain at ~900 m (`cesium-05-oblique.png`). Confirmed Google-Earth-class.
+- The classic 3D-tiles path flips from `disabled` to **`loading`** (ion World
+  Terrain tileset becomes available).
+
+Still needs `GOOGLE_MAP_PLATFORM` for Google Photorealistic 3D Tiles (source #4).
+
 ## Run it
 
 ```sh

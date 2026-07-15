@@ -56,6 +56,54 @@ test('cesium — with a seeded scrapbook pin (billboards render on the Cesium gl
   await page.screenshot({ path: `${SHOTS}/cesium-02-pins.png`, fullPage: true });
 });
 
+test('cesium — fly to a city (real imagery + terrain + 3D buildings when token set)', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'ci-earth-scrapbook',
+      JSON.stringify({ 'earth-operator': [
+        { id: 'sf', label: 'San Francisco', notes: '', mediaUrl: '', lat: 37.7749, lon: -122.4194, altitude: 0, createdAt: '2026-03-14T12:00:00.000Z' },
+      ] }),
+    );
+  });
+  await page.goto('/?renderer=cesium');
+  await cesiumTerminal(page);
+  await expect(page.locator('#pin-list .pin-item')).toHaveCount(1, { timeout: 8000 });
+  await page.locator('#pin-list .pin-item').first().click().catch(() => {}); // fly-to
+  await page.waitForTimeout(4000);
+  for (let i = 0; i < 4; i++) {
+    await page.locator('#zoom-in-btn').click().catch(() => {});
+    await page.waitForTimeout(1200);
+  }
+  await page.waitForTimeout(4000); // let terrain + 3D buildings stream in
+  console.log(`[cesium-city] probe=${JSON.stringify(await probe(page))}`);
+  await page.screenshot({ path: `${SHOTS}/cesium-04-city-closeup.png`, fullPage: true });
+});
+
+test('cesium — oblique low-altitude over Manhattan (3D buildings + terrain)', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'ci-earth-scrapbook',
+      JSON.stringify({ 'earth-operator': [
+        { id: 'nyc', label: 'Manhattan', notes: '', mediaUrl: '', lat: 40.7484, lon: -73.9857, altitude: 0, createdAt: '2026-03-14T12:00:00.000Z' },
+      ] }),
+    );
+  });
+  await page.goto('/?renderer=cesium');
+  await cesiumTerminal(page);
+  await page.locator('#pin-list .pin-item').first().click().catch(() => {}); // select the pin
+  await expect(page.locator('#pin-detail-label')).toHaveValue('Manhattan', { timeout: 5000 });
+  // "Fly To Pin" sets an oblique -45° view at ~4.5 km range over the target.
+  await page.locator('#pin-fly-btn').click().catch(() => {});
+  await page.waitForTimeout(6500); // fly + OSM buildings + World Terrain stream in
+  // Gently get closer while keeping the oblique pitch (camera.zoomIn preserves it).
+  await page.locator('#zoom-in-btn').click().catch(() => {});
+  await page.waitForTimeout(2200);
+  await page.locator('#zoom-in-btn').click().catch(() => {});
+  await page.waitForTimeout(5500); // let 3D buildings tile in at the closer range
+  console.log(`[cesium-oblique] probe=${JSON.stringify(await probe(page))}`);
+  await page.screenshot({ path: `${SHOTS}/cesium-05-oblique.png`, fullPage: true });
+});
+
 test('classic 3D-tiles path — status without tokens (graceful degradation)', async ({ page }) => {
   await page.goto('/?imagery=live&renderer=classic');
   const tiles = await page
