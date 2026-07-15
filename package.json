@@ -19,6 +19,7 @@
     "vibe:loop": "npm run vibe:build && npm run vibe:test",
     "textures:build": "tsx scripts/generate-textures.ts",
     "typecheck": "tsc --noEmit",
+    "lint:canon": "node scripts/lint-canon.mjs .",
     "account:new": "tsx scripts/new-account.ts",
     "docs:screenshots": "tsx scripts/capture-doc-screenshots.ts",
     "cesium:assets": "tsx scripts/copy-cesium-assets.ts"

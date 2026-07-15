@@ -1,0 +1,27 @@
+{
+  "$comment": "CI-Hub dynamic compose (dynamicComposeSchema). The viewer is the user-facing app (port 8080); companion-atlas-api hosts the REST + MCP surface the Hub wires to via agents.mcp. Validate against CI-Hub/packages/common/src/schemas/dynamic-compose.ts before publishing.",
+  "services": [
+    {
+      "name": "companion-atlas",
+      "image": "ghcr.io/companionintelligence/companion-atlas-viewer:latest",
+      "internalPort": 8080,
+      "isMain": true,
+      "environment": {
+        "VITE_ATLAS_API": "http://companion-atlas-api:8787/api"
+      },
+      "dependsOn": ["companion-atlas-api"]
+    },
+    {
+      "name": "companion-atlas-api",
+      "image": "ghcr.io/companionintelligence/companion-atlas-api:latest",
+      "internalPort": 8787,
+      "environment": {
+        "PORT": "8787",
+        "COMPANION_OIDC_ISSUER": "${COMPANION_OIDC_ISSUER}",
+        "COMPANION_OIDC_AUDIENCE": "companion-atlas",
+        "CI_MEMORY_URL": "${CI_MEMORY_URL}",
+        "CI_MEMORY_TOKEN": "${CI_MEMORY_TOKEN}"
+      }
+    }
+  ]
+}

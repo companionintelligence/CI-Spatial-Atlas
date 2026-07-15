@@ -1,0 +1,57 @@
+{
+  "$comment": "CI-Hub app manifest (AppInfo). Validate against CI-Hub/packages/common/src/schemas/app-info.ts + agent-config.ts before publishing. Install fastest via the Hub custom-app (_user) path; publish to the ci-marketplace store for distribution.",
+  "id": "companion-atlas",
+  "urn": "companion-atlas:ci-marketplace",
+  "name": "Companion Atlas",
+  "short_desc": "Turn your located memories into a shareable 4D (3D + time) scrapbook map.",
+  "description": "Companion Atlas is a CesiumJS + WebXR globe viewer and MCP processing server that turns geotagged photos and videos from Companion Memory into shareable 4D storytelling maps — created by hand or automatically by an agent.",
+  "version": "0.1.0",
+  "author": "Companion Intelligence",
+  "source": "https://github.com/companionintelligence/Companion-Atlas",
+  "categories": ["companion-intelligence", "ai"],
+  "port": 8080,
+  "https": true,
+  "exposable": true,
+  "supported_architectures": ["amd64", "arm64"],
+  "hub_integration": {
+    "oidc": { "issuer_env": "COMPANION_OIDC_ISSUER", "issuer_path": "/api/auth" },
+    "memory": { "url_env": "CI_MEMORY_URL", "token_env": "CI_MEMORY_TOKEN", "url_style": "origin" }
+  },
+  "agents": {
+    "mcp": { "transport": "sse", "url": "http://companion-atlas-api:8787/mcp", "container": "companion-atlas-api" },
+    "intents": [
+      {
+        "name": "atlas.create-story",
+        "domain": "atlas",
+        "title": "Create a 4D story",
+        "description": "Build a shareable 4D scrapbook map from the user's located memories in a time/area.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "startTime": { "type": "string", "description": "ISO 8601" },
+            "endTime": { "type": "string", "description": "ISO 8601" },
+            "bbox": { "type": "array", "items": { "type": "number" }, "description": "[minLon,minLat,maxLon,maxLat]" }
+          }
+        },
+        "privacy": { "access": "read", "sensitivity": "personal", "destructive": false, "external": false },
+        "phrases": ["make a map of my trip", "build a 4D story of last weekend"],
+        "binding": { "kind": "mcp", "tool": "atlas_auto_compose" }
+      },
+      {
+        "name": "atlas.publish-story",
+        "domain": "atlas",
+        "title": "Publish a story",
+        "description": "Publish a story and return a shareable viewer link, saving it back to memory.",
+        "parameters": {
+          "type": "object",
+          "properties": { "storyId": { "type": "string" } },
+          "required": ["storyId"]
+        },
+        "privacy": { "access": "write", "sensitivity": "personal", "destructive": false, "external": false },
+        "phrases": ["publish that map", "share my trip story"],
+        "binding": { "kind": "mcp", "tool": "atlas_publish_story" }
+      }
+    ]
+  }
+}
