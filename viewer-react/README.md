@@ -1,12 +1,17 @@
-# viewer-react — the consolidated Companion Atlas viewer (Phase-1 scaffold)
+# viewer-react — the consolidated Companion Atlas viewer
 
-> **Status: scaffold.** These files implement the ADR-0001 architecture
-> (Resium/Cesium viewer + React-Three-Fiber for WebXR, one `Story` model) as a
-> concrete starting point. They are **not yet built/verified** — `npm install`
-> pulls Cesium + React + R3F, which are heavy and not installed in the authoring
-> sandbox. The existing vanilla-TS viewer in `../src` remains the shipping viewer
-> until this one reaches Playwright visual-regression parity (see
-> `docs/CONSOLIDATION.md`, Phases 1–2), at which point the old viewer is removed.
+> **Status: Resium spike PASSED (2026-07-15).** These files implement the
+> ADR-0001 architecture (Resium/Cesium viewer + React-Three-Fiber for WebXR, one
+> `Story` model). **Verified:** `tsc --noEmit` clean and `vite build` succeeds —
+> Cesium + React + Resium + R3F + `@companion-atlas/story` all compile and bundle
+> together; `vite-plugin-cesium` copies the Cesium runtime assets (Assets, Widgets
+> incl. `widgets.css`, Workers) so there's no viewport-height issue here. The
+> biggest ADR risk (React+Cesium composition) is retired.
+>
+> **Still to do for parity:** wire the ion token (`Cesium.Ion.defaultAccessToken`),
+> port the vanilla viewer's UI panels + scrapbook, and add Playwright visual
+> regression — then the vanilla `../src` viewer is removed. The existing vanilla-TS
+> viewer remains the shipping viewer until then (`docs/CONSOLIDATION.md`, Phases 1–2).
 
 ## Architecture
 
