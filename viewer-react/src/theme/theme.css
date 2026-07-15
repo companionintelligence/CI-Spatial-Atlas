@@ -1,0 +1,45 @@
+/*
+ * Companion Atlas theme entry — Companion Intelligence canonical tokens.
+ *
+ * Tracks @companionintelligence/tokens (CI-Common). `tokens.css`/`tokens.json`
+ * are vendored copies (the sanctioned offline consumption path); keep them in
+ * sync and keep `--primary` canonical (CI teal #0f717a / #abd4d8) — enforced by
+ * `npm run lint:canon`. Montserrat is loaded self-hosted via @fontsource.
+ */
+@import '@fontsource/montserrat/200.css';
+@import '@fontsource/montserrat/400.css';
+@import '@fontsource/montserrat/500.css';
+@import '@fontsource/montserrat/600.css';
+@import '@fontsource/montserrat/700.css';
+@import './tokens.css';
+
+:root {
+  --font-sans: 'Montserrat', system-ui, -apple-system, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* App shell states (AtlasApp) */
+.atlas-loading,
+.atlas-error,
+.atlas-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.atlas-error {
+  color: var(--destructive);
+}
