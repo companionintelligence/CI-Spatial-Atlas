@@ -12,7 +12,9 @@ export function useStory(): { story: Story | null; error: string | null; loading
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const url = new URLSearchParams(window.location.search).get('story');
+    // Default to the bundled sample story so the viewer renders out of the box;
+    // `?story=<url>` overrides it (and accepts legacy Atlas + Earth-2 documents).
+    const url = new URLSearchParams(window.location.search).get('story') ?? '/stories/sample-pacific-journey.json';
     if (!url) {
       setLoading(false);
       return;

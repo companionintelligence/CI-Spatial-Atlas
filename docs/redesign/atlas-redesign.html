@@ -1,0 +1,454 @@
+<style>
+  /* ————————————————————————————————————————————————————————————————
+     Companion Atlas — redesign mockup
+     A deliberately single-world dark "night-space time machine": the whole
+     concept is an immersive globe against space, so it commits to dark (like a
+     planetarium), not a naive light inversion. Palette + type are CI-Common.
+     ———————————————————————————————————————————————————————————————— */
+  @font-face { font-family: 'Montserrat'; src: local('Montserrat'), local('Montserrat-Regular'); font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'Montserrat'; src: local('Montserrat SemiBold'), local('Montserrat-SemiBold'); font-weight: 600; font-display: swap; }
+  @font-face { font-family: 'Montserrat'; src: local('Montserrat Bold'), local('Montserrat-Bold'); font-weight: 700; font-display: swap; }
+
+  :root {
+    --bg: #041620;          --bg-2: #06202c;
+    --card: #0a222e;        --glass: rgba(9, 32, 43, .66);
+    --line: #163a44;        --line-2: #2c676d;
+    --fg: #d7e6e6;          --fg-dim: #93aaaa;        --fg-hi: #f3f9f9;
+    --teal: #abd4d8;        --teal-600: #0f717a;      --aqua: #00a9a7;
+    --aqua-light: #72ddd4;  --mint: #58ebbf;          --teal-mid: #409b9b;
+    --dusk: #ffb27a;        --coral: #ff8d6e;         --violet: #b79cff;
+    --radius: 0.625rem;
+    --sans: 'Montserrat', 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'SFMono-Regular', 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+    --shadow: 0 18px 50px rgba(0,0,0,.55), 0 2px 0 rgba(114,221,212,.04) inset;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .app {
+    position: fixed; inset: 0;
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    grid-template-rows: 54px 1fr;
+    grid-template-areas: "rail top" "rail stage";
+  }
+
+  /* —— background: starfield canvas + aurora glow —— */
+  #stars { position: fixed; inset: 0; z-index: 0; }
+  .aurora {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(120% 80% at 50% -12%, rgba(64,155,155,.30), transparent 58%),
+      radial-gradient(90% 60% at 12% 8%, rgba(0,169,167,.14), transparent 60%),
+      radial-gradient(70% 70% at 92% 96%, rgba(114,221,212,.10), transparent 62%);
+  }
+
+  /* —— left icon rail —— */
+  .rail {
+    grid-area: rail; z-index: 4;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 0;
+    background: linear-gradient(180deg, rgba(6,25,34,.9), rgba(4,18,26,.86));
+    border-right: 1px solid var(--line);
+    backdrop-filter: blur(14px);
+  }
+  .brand-mark { width: 34px; height: 34px; margin-bottom: 12px; }
+  .rail-btn {
+    width: 42px; height: 42px; border-radius: 11px;
+    display: grid; place-items: center; color: var(--fg-dim);
+    border: 1px solid transparent; background: transparent; cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s;
+  }
+  .rail-btn:hover { color: var(--teal); background: rgba(64,155,155,.10); }
+  .rail-btn.active { color: var(--teal); background: rgba(64,155,155,.16); border-color: rgba(114,221,212,.28); box-shadow: 0 0 0 1px rgba(114,221,212,.12) inset; }
+  .rail-btn svg { width: 21px; height: 21px; }
+  .rail-spacer { flex: 1; }
+  .rail-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--teal-600), var(--aqua)); display: grid; place-items: center; color: #04121a; font-weight: 700; font-size: 13px; margin-top: 6px; }
+
+  /* —— top bar —— */
+  .top {
+    grid-area: top; z-index: 4;
+    display: flex; align-items: center; gap: 16px; padding: 0 16px;
+    background: linear-gradient(180deg, rgba(7,28,38,.86), rgba(5,22,30,.62));
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(14px);
+  }
+  .wordmark { display: flex; flex-direction: column; line-height: 1; }
+  .wordmark b { font-weight: 700; letter-spacing: .2px; color: var(--fg-hi); font-size: 15px; }
+  .wordmark span { font-size: 10.5px; color: var(--fg-dim); letter-spacing: .28px; margin-top: 3px; text-transform: uppercase; }
+
+  .switch { display: flex; gap: 2px; padding: 3px; background: rgba(4,18,26,.7); border: 1px solid var(--line); border-radius: 999px; }
+  .switch button {
+    display: flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 999px;
+    border: 0; background: transparent; color: var(--fg-dim); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    transition: color .15s, background .15s;
+  }
+  .switch button svg { width: 15px; height: 15px; }
+  .switch button:hover { color: var(--fg); }
+  .switch button.active { color: #04121a; background: linear-gradient(135deg, var(--teal), var(--aqua-light)); box-shadow: 0 0 18px rgba(114,221,212,.28); }
+
+  .grow { flex: 1; }
+  .search {
+    display: flex; align-items: center; gap: 9px; width: min(340px, 34vw);
+    padding: 8px 12px; border-radius: 10px; color: var(--fg-dim);
+    background: rgba(4,18,26,.6); border: 1px solid var(--line); cursor: text;
+  }
+  .search svg { width: 15px; height: 15px; }
+  .search .kbd { margin-left: auto; font: 600 10px/1 var(--mono); color: var(--fg-dim); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 5px; }
+  .icon-btn { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: var(--fg-dim); background: transparent; border: 1px solid transparent; cursor: pointer; }
+  .icon-btn:hover { color: var(--teal); background: rgba(64,155,155,.10); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* —— stage (the globe scene) —— */
+  .stage { grid-area: stage; position: relative; overflow: hidden; }
+  .grid-horizon { position: absolute; left: 0; right: 0; bottom: 0; height: 42%; z-index: 1; pointer-events: none; opacity: .55; -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 92%); mask-image: linear-gradient(to top, #000 0%, transparent 92%); }
+  .globe-wrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; }
+  #globe { width: min(64vh, 620px); height: min(64vh, 620px); filter: drop-shadow(0 0 60px rgba(0,169,167,.22)); }
+
+  .place-chip {
+    position: absolute; z-index: 3; left: 50%; top: 15%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; padding: 7px 13px;
+    background: var(--glass); border: 1px solid var(--line-2); border-radius: 999px; backdrop-filter: blur(10px);
+    font-size: 12.5px; color: var(--fg-hi); box-shadow: var(--shadow);
+  }
+  .place-chip svg { width: 14px; height: 14px; color: var(--teal); }
+  .place-chip .coord { font: 500 11px/1 var(--mono); color: var(--fg-dim); }
+
+  /* floating scrapbook frames */
+  .scrap { position: absolute; z-index: 3; width: 132px; border-radius: 12px; overflow: hidden; background: var(--card); border: 1px solid rgba(114,221,212,.22); box-shadow: var(--shadow), 0 0 0 4px rgba(114,221,212,.05); }
+  .scrap .ph { height: 92px; }
+  .scrap .cap { padding: 7px 9px 9px; }
+  .scrap .cap b { display: block; font-size: 11.5px; color: var(--fg-hi); font-weight: 600; }
+  .scrap .cap span { display: block; font: 500 9.5px/1.3 var(--mono); color: var(--fg-dim); margin-top: 3px; }
+  .scrap.a { top: 30%; left: 30%; transform: rotate(-6deg); }
+  .scrap.b { top: 25%; left: 44%; transform: rotate(3deg); z-index: 4; }
+  .scrap.c { top: 45%; left: 40%; transform: rotate(-2deg); }
+  .thread { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
+
+  /* stat ribbon */
+  .stats { position: absolute; z-index: 3; left: 18px; top: 16px; display: flex; gap: 10px; }
+  .stat { background: var(--glass); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(10px); min-width: 96px; }
+  .stat b { display: block; font-size: 20px; font-weight: 700; color: var(--fg-hi); letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--fg-dim); }
+
+  /* —— right inspector drawer —— */
+  .inspector {
+    position: absolute; z-index: 5; top: 14px; right: 14px; bottom: 118px; width: 322px;
+    background: var(--glass); border: 1px solid var(--line-2); border-radius: 16px;
+    backdrop-filter: blur(18px); box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .insp-hero { height: 172px; position: relative; }
+  .insp-hero .tint { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(9,32,43,.9)); }
+  .insp-hero .now { position: absolute; top: 10px; left: 10px; display: flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; background: rgba(4,18,26,.55); border: 1px solid rgba(255,178,122,.4); font-size: 10.5px; color: var(--dusk); backdrop-filter: blur(6px); }
+  .insp-hero .now svg { width: 13px; height: 13px; }
+  .insp-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 13px; overflow: auto; }
+  .insp-title { font-size: 16px; font-weight: 700; color: var(--fg-hi); line-height: 1.2; text-wrap: balance; }
+  .meta-row { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--fg); }
+  .meta-row svg { width: 14px; height: 14px; color: var(--teal); flex: none; }
+  .meta-row .m { font: 500 11px/1 var(--mono); color: var(--fg-dim); margin-left: auto; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 11px; padding: 4px 9px; border-radius: 999px; background: rgba(64,155,155,.14); border: 1px solid rgba(114,221,212,.22); color: var(--teal); }
+  .divider { height: 1px; background: var(--line); }
+  .insp-actions { display: flex; gap: 8px; margin-top: 2px; }
+  .btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px; border-radius: 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid var(--line-2); background: rgba(4,18,26,.4); color: var(--fg); }
+  .btn svg { width: 15px; height: 15px; }
+  .btn.primary { background: linear-gradient(135deg, var(--teal-600), var(--aqua)); border-color: transparent; color: #04121a; box-shadow: 0 6px 22px rgba(0,169,167,.28); }
+  .insp-label { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--fg-dim); }
+  .related { display: flex; gap: 8px; }
+  .rel { width: 54px; }
+  .rel .ph { height: 42px; border-radius: 8px; border: 1px solid var(--line); }
+  .rel small { display: block; font-size: 9px; color: var(--fg-dim); margin-top: 4px; text-align: center; }
+
+  /* —— bottom time machine —— */
+  .timemachine {
+    position: absolute; z-index: 5; left: 14px; right: 14px; bottom: 14px; height: 92px;
+    background: linear-gradient(180deg, rgba(8,30,40,.82), rgba(5,22,30,.9));
+    border: 1px solid var(--line-2); border-radius: 16px; backdrop-filter: blur(18px);
+    box-shadow: var(--shadow); display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding: 0 16px;
+  }
+  .tm-controls { display: flex; align-items: center; gap: 6px; }
+  .tm-play { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; border: 0; cursor: pointer; color: #04121a; background: linear-gradient(135deg, var(--teal), var(--aqua-light)); box-shadow: 0 0 22px rgba(114,221,212,.3); }
+  .tm-play svg { width: 20px; height: 20px; }
+  .tm-btn { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--fg-dim); background: transparent; border: 1px solid transparent; cursor: pointer; }
+  .tm-btn:hover { color: var(--teal); background: rgba(64,155,155,.1); }
+  .tm-btn svg { width: 17px; height: 17px; }
+
+  .tm-track { position: relative; height: 100%; }
+  #histogram { position: absolute; left: 0; right: 0; bottom: 26px; top: 14px; width: 100%; }
+  .tm-axis { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: space-between; font: 500 10px/1 var(--mono); color: var(--fg-dim); }
+  .tm-axis span.hot { color: var(--teal); }
+  .playhead { position: absolute; top: 8px; bottom: 22px; width: 2px; background: linear-gradient(180deg, var(--mint), rgba(88,235,191,.1)); box-shadow: 0 0 14px 2px rgba(88,235,191,.5); left: 61%; }
+  .playhead::before { content: ""; position: absolute; top: -5px; left: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 12px 2px rgba(88,235,191,.7); }
+
+  .tm-readout { text-align: right; min-width: 150px; }
+  .tm-readout .date { font-size: 15px; font-weight: 700; color: var(--fg-hi); font-variant-numeric: tabular-nums; letter-spacing: -.2px; }
+  .tm-readout .sub { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font: 500 11px/1 var(--mono); color: var(--dusk); margin-top: 5px; }
+  .tm-readout .sub svg { width: 13px; height: 13px; }
+
+  /* —— command palette (floating, illustrating ⌘K) —— */
+  .cmd { position: absolute; z-index: 6; left: 50%; top: 88px; transform: translateX(-50%); width: min(520px, 62vw); background: var(--glass); border: 1px solid var(--line-2); border-radius: 14px; backdrop-filter: blur(22px); box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden; }
+  .cmd-in { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--fg); }
+  .cmd-in svg { width: 17px; height: 17px; color: var(--teal); }
+  .cmd-in input { flex: 1; background: transparent; border: 0; outline: 0; color: var(--fg-hi); font: inherit; font-size: 14px; }
+  .cmd-in input::placeholder { color: var(--fg-dim); }
+  .cmd-grp { padding: 8px; }
+  .cmd-grp .h { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--fg-dim); padding: 6px 10px; }
+  .cmd-item { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 9px; font-size: 13px; color: var(--fg); cursor: pointer; }
+  .cmd-item:hover, .cmd-item.sel { background: rgba(64,155,155,.14); }
+  .cmd-item .ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: rgba(4,18,26,.5); border: 1px solid var(--line); color: var(--teal); }
+  .cmd-item .ic svg { width: 15px; height: 15px; }
+  .cmd-item .t { display: flex; flex-direction: column; gap: 2px; }
+  .cmd-item .t small { color: var(--fg-dim); font: 500 10.5px/1 var(--mono); }
+  .cmd-item .cnt { margin-left: auto; font: 600 11px/1 var(--mono); color: var(--fg-dim); }
+
+  .legend { position: absolute; z-index: 3; left: 18px; bottom: 122px; display: flex; flex-direction: column; gap: 7px; font-size: 11px; color: var(--fg-dim); }
+  .legend .row { display: flex; align-items: center; gap: 8px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 8px 1px currentColor; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  @media (max-width: 920px) { .inspector, .cmd, .stats, .legend { display: none; } }
+</style>
+
+<canvas id="stars"></canvas>
+<div class="aurora"></div>
+
+<div class="app">
+  <!-- LEFT RAIL -->
+  <nav class="rail">
+    <svg class="brand-mark" viewBox="0 0 100 100" aria-label="Companion Intelligence">
+      <defs><linearGradient id="bm" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#066c80"/><stop offset=".55" stop-color="#00a9a7"/><stop offset="1" stop-color="#72ddd4"/>
+      </linearGradient></defs>
+      <circle cx="50" cy="50" r="46" fill="none" stroke="url(#bm)" stroke-width="6"/>
+      <circle cx="50" cy="50" r="20" fill="none" stroke="url(#bm)" stroke-width="6"/>
+      <circle cx="50" cy="50" r="5" fill="#72ddd4"/>
+    </svg>
+    <button class="rail-btn active" title="Globe">${G_GLOBE}</button>
+    <button class="rail-btn" title="Places">${G_PIN}</button>
+    <button class="rail-btn" title="People">${G_PEOPLE}</button>
+    <button class="rail-btn" title="Collections">${G_LAYERS}</button>
+    <button class="rail-btn" title="Search">${G_SPARK}</button>
+    <div class="rail-spacer"></div>
+    <button class="rail-btn" title="Settings">${G_GEAR}</button>
+    <div class="rail-avatar">LB</div>
+  </nav>
+
+  <!-- TOP BAR -->
+  <header class="top">
+    <div class="wordmark"><b>Companion&nbsp;Atlas</b><span>your memories in space &amp; time</span></div>
+    <div class="switch" role="tablist">
+      <button class="active">${G_GLOBE}Globe</button>
+      <button>${G_IMAGES}Gallery</button>
+      <button>${G_CLOCK}Timeline</button>
+      <button>${G_GRAPH}Graph</button>
+    </div>
+    <div class="grow"></div>
+    <div class="search">${G_SEARCH}<span>Jump to a place, date, person…</span><span class="kbd">⌘K</span></div>
+    <button class="icon-btn" title="Share view">${G_SHARE}</button>
+    <button class="icon-btn" title="Theme">${G_MOON}</button>
+  </header>
+
+  <!-- STAGE -->
+  <main class="stage">
+    <svg class="grid-horizon" viewBox="0 0 1000 320" preserveAspectRatio="none" aria-hidden="true"><g id="grid"></g></svg>
+
+    <div class="stats">
+      <div class="stat"><b>1,284</b><span>Memories</span></div>
+      <div class="stat"><b>37</b><span>Places</span></div>
+      <div class="stat"><b>12</b><span>Years</span></div>
+    </div>
+
+    <div class="globe-wrap"><svg id="globe" viewBox="0 0 600 600" aria-label="Memory globe"></svg></div>
+    <svg class="thread" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M 486 300 C 470 250, 440 210, 415 205" fill="none" stroke="rgba(114,221,212,.5)" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <path d="M 486 300 C 500 250, 470 190, 452 168" fill="none" stroke="rgba(114,221,212,.5)" stroke-width="1.5" stroke-dasharray="4 4"/>
+    </svg>
+
+    <div class="place-chip">${G_PIN}Malibu, California&nbsp; <span class="coord">34.0259°N&nbsp;118.7798°W</span></div>
+
+    <!-- floating scrapbook frames anchored to the focused place -->
+    <figure class="scrap a"><div class="ph" style="background:linear-gradient(135deg,#0d5f67,#1c8791 60%,#72ddd4)"></div><figcaption class="cap"><b>Sunset surf</b><span>Jun 17 2019 · 7:41 PM</span></figcaption></figure>
+    <figure class="scrap b"><div class="ph" style="background:linear-gradient(150deg,#123, #ff8d6e 130%)"></div><figcaption class="cap"><b>PCH drive</b><span>Jun 17 2019 · 5:03 PM</span></figcaption></figure>
+    <figure class="scrap c"><div class="ph" style="background:linear-gradient(135deg,#0a222e,#2c676d,#abd4d8)"></div><figcaption class="cap"><b>Point Dume</b><span>Jun 17 2019 · 6:20 PM</span></figcaption></figure>
+
+    <div class="legend">
+      <div class="row"><span class="dot" style="color:#72ddd4"></span> Photo &amp; video</div>
+      <div class="row"><span class="dot" style="color:#b79cff"></span> Place</div>
+      <div class="row"><span class="dot" style="color:#ff8d6e"></span> Focused moment</div>
+      <div class="row" style="margin-top:2px;color:var(--fg-dim)"><span style="width:16px;height:0;border-top:1.5px dashed rgba(114,221,212,.6)"></span> Journey (time-ordered)</div>
+    </div>
+
+  </main>
+</div>
+
+<!-- INSPECTOR (memory selected) -->
+<aside class="inspector">
+  <div class="insp-hero">
+    <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0d5f67,#1c8791 55%,#ffb27a 150%)"></div>
+    <div class="tint"></div>
+    <div class="now">${G_SUN}Dusk · sky set to 7:42 PM</div>
+  </div>
+  <div class="insp-body">
+    <div class="insp-title">Sunset surf at Point Dume</div>
+    <div class="meta-row">${G_PIN}Malibu, California <span class="m">34.00°N 118.81°W</span></div>
+    <div class="meta-row">${G_CLOCK}Mon, Jun 17 2019 <span class="m">7:41 PM</span></div>
+    <div class="meta-row">${G_CAMERA}Photo · iPhone 11 Pro <span class="m">4032×3024</span></div>
+    <div class="tags"><span class="tag">beach</span><span class="tag">golden hour</span><span class="tag">surfing</span><span class="tag">roadtrip</span></div>
+    <div class="divider"></div>
+    <div class="insp-label">In this collection</div>
+    <div class="related">
+      <div class="rel"><div class="ph" style="background:linear-gradient(135deg,#0d5f67,#72ddd4)"></div><small>5:03 PM</small></div>
+      <div class="rel"><div class="ph" style="background:linear-gradient(135deg,#123,#ff8d6e)"></div><small>6:20 PM</small></div>
+      <div class="rel"><div class="ph" style="background:linear-gradient(135deg,#0a222e,#abd4d8)"></div><small>7:41 PM</small></div>
+      <div class="rel"><div class="ph" style="background:linear-gradient(135deg,#2c676d,#ffb27a)"></div><small>8:07 PM</small></div>
+    </div>
+    <div class="insp-actions">
+      <button class="btn primary">${G_PLANE}Fly here</button>
+      <button class="btn">${G_PLUS}Collect</button>
+    </div>
+  </div>
+</aside>
+
+<!-- TIME MACHINE -->
+<div class="timemachine">
+  <div class="tm-controls">
+    <button class="tm-btn" title="Step back">${G_PREV}</button>
+    <button class="tm-play" title="Play through time">${G_PLAY}</button>
+    <button class="tm-btn" title="Step forward">${G_NEXT}</button>
+  </div>
+  <div class="tm-track">
+    <canvas id="histogram"></canvas>
+    <div class="playhead"></div>
+    <div class="tm-axis"><span>2012</span><span>2014</span><span>2016</span><span>2018</span><span class="hot">2019</span><span>2021</span><span>2024</span></div>
+  </div>
+  <div class="tm-readout">
+    <div class="date">Jun 17, 2019</div>
+    <div class="sub">${G_SUN}7:42 PM · dusk over Malibu</div>
+  </div>
+</div>
+
+<script>
+  // ————— icon set (inline; injected via template placeholders above) —————
+  // Defined here and swapped into the DOM to keep the markup readable.
+  const I = {
+    G_GLOBE:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg>',
+    G_PIN:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    G_PEOPLE:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3 3-4.6 5.5-4.6S13.9 16 14.5 19"/><path d="M16 5.2A3 3 0 0 1 16 11M20.5 19c-.3-2-1.3-3.4-2.8-4.2"/></svg>',
+    G_LAYERS:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="M3 13l9 5 9-5M3 16.5l9 5 9-5" opacity=".5"/></svg>',
+    G_SPARK:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>',
+    G_GEAR:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>',
+    G_IMAGES:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="14" height="12" rx="2"/><path d="M3 14l3.5-3 4 3.5M20 8v11H9"/><circle cx="9.5" cy="9" r="1.2"/></svg>',
+    G_CLOCK:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>',
+    G_GRAPH:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="16" cy="18" r="2.2"/><circle cx="7" cy="16" r="2.2"/><path d="M8 8l8-1M7.6 14 15 17M8 15l8-8" opacity=".7"/></svg>',
+    G_SEARCH:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>',
+    G_SHARE:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="m8 11 8-4M8 13l8 4"/></svg>',
+    G_MOON:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>',
+    G_SUN:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
+    G_CAMERA:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13.5" r="3.4"/></svg>',
+    G_PLANE:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M10.5 13.5 3 11l18-7-7 18-2.5-7.5L10.5 13.5z"/></svg>',
+    G_PLUS:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>',
+    G_PLAY:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
+    G_PREV:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM19 5 9 12l10 7z"/></svg>',
+    G_NEXT:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM5 5l10 7L5 19z"/></svg>',
+  };
+  // swap ${TOKEN} placeholders in the raw HTML with icons
+  document.body.innerHTML = document.body.innerHTML.replace(/\$\{(G_[A-Z]+)\}/g, (_, k) => I[k] || '');
+
+  // ————— starfield —————
+  (function(){
+    const c = document.getElementById('stars'), x = c.getContext('2d');
+    let w, h, stars;
+    function init(){ w = c.width = innerWidth; h = c.height = innerHeight;
+      stars = Array.from({length: Math.min(320, (w*h)/6000)}, () => ({ x: Math.random()*w, y: Math.random()*h, r: Math.random()*1.3+.2, a: Math.random()*.6+.2, t: Math.random()*6 }));
+    }
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function draw(now){
+      x.clearRect(0,0,w,h);
+      for(const s of stars){ const tw = reduce ? s.a : s.a*(0.6+0.4*Math.sin(now/900+s.t));
+        x.globalAlpha = tw; x.fillStyle = s.r>1 ? '#bfeaf0' : '#8fd6d0'; x.beginPath(); x.arc(s.x,s.y,s.r,0,7); x.fill(); }
+      x.globalAlpha = 1;
+      if(!reduce) requestAnimationFrame(draw);
+    }
+    init(); requestAnimationFrame(draw); addEventListener('resize', init);
+  })();
+
+  // ————— synthwave grid horizon (teal, perspective) —————
+  (function(){
+    const g = document.getElementById('grid'); if(!g) return; let s = '';
+    for(let i=0;i<=20;i++){ const x = i/20*1000; const persp = 500 + (x-500)*2.4;
+      s += '<line x1="'+x+'" y1="320" x2="'+persp+'" y2="0" stroke="rgba(64,155,155,.5)" stroke-width="1"/>'; }
+    for(let j=0;j<=8;j++){ const t = j/8; const y = 320*(1-t*t); const o = .5*(1-t)+.08;
+      s += '<line x1="0" y1="'+y+'" x2="1000" y2="'+y+'" stroke="rgba(114,221,212,'+o+')" stroke-width="1"/>'; }
+    g.innerHTML = s;
+  })();
+
+  // ————— the memory globe (hologram Earth: graticule + atmosphere + pins + arc) —————
+  (function(){
+    const svg = document.getElementById('globe'); if(!svg) return;
+    const cx=300, cy=300, R=230;
+    const NS='http://www.w3.org/2000/svg';
+    function el(n,a){ const e=document.createElementNS(NS,n); for(const k in a) e.setAttribute(k,a[k]); return e; }
+    // defs: sphere gradient + glow
+    svg.innerHTML =
+      '<defs>'+
+      '<radialGradient id="sph" cx="38%" cy="34%" r="75%">'+
+        '<stop offset="0" stop-color="#12525a"/><stop offset="45%" stop-color="#0b2f39"/><stop offset="100%" stop-color="#04141c"/></radialGradient>'+
+      '<radialGradient id="atm" cx="50%" cy="50%" r="50%">'+
+        '<stop offset="82%" stop-color="rgba(0,169,167,0)"/><stop offset="95%" stop-color="rgba(0,169,167,.45)"/><stop offset="100%" stop-color="rgba(0,169,167,0)"/></radialGradient>'+
+      '<filter id="pinglow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="3.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'+
+      '</defs>';
+    svg.appendChild(el('circle',{cx:cx,cy:cy,r:R+22,fill:'url(#atm)'}));
+    svg.appendChild(el('circle',{cx:cx,cy:cy,r:R,fill:'url(#sph)',stroke:'rgba(114,221,212,.28)','stroke-width':'1'}));
+    // graticule: meridians (ellipses narrowing toward the poles) + parallels
+    const grat = el('g',{opacity:'.34'});
+    for(let m=0;m<6;m++){ const rx=R*Math.abs(Math.cos(m/6*Math.PI));
+      grat.appendChild(el('ellipse',{cx:cx,cy:cy,rx:rx,ry:R,fill:'none',stroke:'rgba(114,221,212,.5)','stroke-width':'.8'})); }
+    for(let p=1;p<6;p++){ const yy=cy-R+2*R*p/6; const rx=R*Math.sqrt(Math.max(0,1-Math.pow((yy-cy)/R,2)));
+      grat.appendChild(el('ellipse',{cx:cx,cy:yy,rx:rx,ry:rx*0.28,fill:'none',stroke:'rgba(114,221,212,.5)','stroke-width':'.8'})); }
+    svg.appendChild(grat);
+    // abstract continents (a couple of soft teal landmass blobs)
+    const land = el('g',{opacity:'.5',fill:'rgba(64,155,155,.5)'});
+    land.appendChild(el('path',{d:'M215 210 q40 -30 80 -10 q20 30 -10 55 q-45 25 -80 5 q-15 -30 10 -50 z'}));
+    land.appendChild(el('path',{d:'M330 300 q35 -8 45 25 q-5 40 -35 55 q-30 -15 -25 -50 q3 -25 15 -30 z'}));
+    svg.appendChild(land);
+    // clip everything to the sphere
+    // pins: [x,y,color,r]
+    const pins=[[250,215,'#72ddd4',3.5],[286,196,'#72ddd4',3.2],[320,232,'#72ddd4',3.5],[352,260,'#b79cff',3.4],[300,300,'#ff8d6e',6.2],[268,340,'#72ddd4',3],[210,290,'#72ddd4',2.8],[360,190,'#72ddd4',3],[230,250,'#72ddd4',2.6],[340,320,'#72ddd4',3.1],[295,175,'#72ddd4',2.6]];
+    // journey arc through the summer-2019 cluster
+    svg.appendChild(el('path',{d:'M250 215 Q268 190 286 196 Q312 205 320 232 Q345 245 352 260',fill:'none',stroke:'rgba(114,221,212,.85)','stroke-width':'2','stroke-dasharray':'1 6','stroke-linecap':'round',filter:'url(#pinglow)'}));
+    for(const [px,py,col,r] of pins){
+      svg.appendChild(el('circle',{cx:px,cy:py,r:r,fill:col,filter:'url(#pinglow)'}));
+    }
+    // focused halo
+    svg.appendChild(el('circle',{cx:300,cy:300,r:12,fill:'none',stroke:'#ff8d6e','stroke-width':'1.5',opacity:'.7'}));
+  })();
+
+  // ————— time-machine density histogram —————
+  (function(){
+    const c = document.getElementById('histogram'); if(!c) return;
+    function draw(){ const r=c.getBoundingClientRect(); const dpr=devicePixelRatio||1;
+      c.width=r.width*dpr; c.height=r.height*dpr; const x=c.getContext('2d'); x.scale(dpr,dpr);
+      const W=r.width,H=r.height,n=84;
+      for(let i=0;i<n;i++){ const t=i/n;
+        // bell-ish density peaking around 2019 (t~.61) with texture
+        const peak=Math.exp(-Math.pow((t-0.61)/0.16,2))*0.9 + Math.exp(-Math.pow((t-0.28)/0.2,2))*0.4;
+        const noise=0.12*Math.abs(Math.sin(i*1.7)+Math.cos(i*0.6));
+        const v=Math.min(1,peak+noise); const bh=Math.max(2,v*H);
+        const bx=t*W, hot=t>0.53&&t<0.69;
+        const grd=x.createLinearGradient(0,H,0,H-bh);
+        grd.addColorStop(0, hot?'rgba(88,235,191,.15)':'rgba(64,155,155,.10)');
+        grd.addColorStop(1, hot?'rgba(88,235,191,.85)':'rgba(64,155,155,.5)');
+        x.fillStyle=grd; x.fillRect(bx, H-bh, W/n-1.5, bh);
+      }
+    }
+    draw(); addEventListener('resize',draw);
+  })();
+</script>
