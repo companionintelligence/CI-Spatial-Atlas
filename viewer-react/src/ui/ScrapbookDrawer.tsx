@@ -5,7 +5,9 @@ import { SparkIcon, PlayIcon, PlusIcon } from './icons.js';
 export type SaveState =
   | { s: 'idle' }
   | { s: 'saving' }
-  | { s: 'done'; id: string }
+  /** `visibility` is snapshotted at save time — the banner must describe what was
+   *  actually shared, not whatever the radio group says now. */
+  | { s: 'done'; id: string; visibility: Visibility }
   | { s: 'error'; msg: string };
 
 const VIS_LABEL: { v: Visibility; label: string }[] = [
@@ -20,7 +22,7 @@ const VIS_LABEL: { v: Visibility; label: string }[] = [
  * (which is what shares it with the household).
  */
 export function ScrapbookDrawer({
-  open, entries, title, visibility, canSave, saveState,
+  open, entries, title, visibility, canSave, canClear, saveState,
   onClose, onTitle, onVisibility, onRemove, onClear, onCurate, onPlay, onSave, onDownload,
 }: {
   open: boolean;
@@ -28,6 +30,8 @@ export function ScrapbookDrawer({
   title: string;
   visibility: Visibility;
   canSave: boolean;
+  /** True when the raw draft holds anything — even ids this story can't resolve. */
+  canClear: boolean;
   saveState: SaveState;
   onClose: () => void;
   onTitle: (t: string) => void;
@@ -102,11 +106,14 @@ export function ScrapbookDrawer({
           {saveState.s === 'saving' ? 'Saving…' : 'Save to Memory'}
         </button>
         <button className="atlas-btn" disabled={empty} onClick={onDownload}>Download .story.json</button>
-        <button className="atlas-btn ghost" disabled={empty} onClick={onClear}>Clear</button>
+        {/* Gate Clear on the raw draft, not on resolvable entries: a draft whose
+            ids this story can't resolve renders zero rows, and disabling Clear
+            there left the only reset affordance dead exactly when it was needed. */}
+        <button className="atlas-btn ghost" disabled={!canClear} onClick={onClear}>Clear</button>
       </div>
 
       {saveState.s === 'done' && (
-        <p className="sb-status ok" role="status">Saved to Companion Memory ({saveState.id}) — {visibility === 'private' ? 'visible only to you' : visibility === 'unlisted' ? 'your household can see it' : 'public'}.</p>
+        <p className="sb-status ok" role="status">Saved to Companion Memory ({saveState.id}) — {saveState.visibility === 'private' ? 'visible only to you' : saveState.visibility === 'unlisted' ? 'your household can see it' : 'public'}.</p>
       )}
       {saveState.s === 'error' && <p className="sb-status err" role="alert">{saveState.msg}</p>}
       {!canSave && !empty && saveState.s === 'idle' && (

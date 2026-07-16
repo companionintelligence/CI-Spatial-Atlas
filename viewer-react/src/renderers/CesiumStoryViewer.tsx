@@ -215,6 +215,11 @@ export function CesiumStoryViewer({
         infoBox={false}
         selectionIndicator={false}
         shouldAnimate
+        // Don't let Cesium adopt whichever data source happens to be tracked:
+        // the memory layer permanently stole clockTrackedDataSource, so on a
+        // story swap the viewer clock ran one story behind. AtlasApp applies the
+        // story's clock explicitly instead.
+        automaticallyTrackDataSourceClocks={false}
       >
         <CzmlDataSource data={globeCzml} />
         {tilesets.map((t) => (

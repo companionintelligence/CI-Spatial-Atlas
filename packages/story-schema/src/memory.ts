@@ -27,7 +27,11 @@ export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
       input: {
         query: ""
         includeTypes: ["event"]
-        eventTypes: ["photo", "video"]
+        # Cover BOTH ingest lanes: the importer writes the G1 kind
+        # (capture.photo), while other paths store the bare classification.
+        # eventTypes is an exact IN match, so listing only the bare form
+        # silently matched zero rows for imported media.
+        eventTypes: ["capture.photo", "capture.video", "photo", "video"]
         hasLocation: true
         startTime: $startTime
         endTime: $endTime
@@ -261,6 +265,13 @@ export function createEventInputFromStory(story: Story, opts: { shareUrl?: strin
       schema: story.schema,
       sceneCount: story.scenes.length,
       mediaCount: (story.media?.length ?? 0) + (story.items?.length ?? 0),
+      // Persist the journey itself. Without the document the saved event is just
+      // a title and a dot: it can't be re-opened or replayed, the household sees
+      // only that *a* journey exists, and a curator's narratives + agent
+      // provenance are lost the moment it's saved.
+      story,
+      // Hoisted for indexing/queries — who (or what) assembled this journey.
+      ...(story.provenance ? { provenance: story.provenance } : {}),
       ...(opts.shareUrl ? { shareUrl: opts.shareUrl } : {}),
     },
     sharingLevel: SHARING[vis] ?? 'private',
