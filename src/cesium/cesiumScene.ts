@@ -47,7 +47,15 @@ const DEFAULT_HOME = { lon: -21.9426, lat: 64.1466, height: 6_000_000 }; // wide
 export async function createCesiumScene(options: CreateCesiumSceneOptions): Promise<CesiumSceneSystem> {
   const { container, isStaticMode } = options;
 
-  Cesium.Ion.defaultAccessToken = __CESIUM_ION_TOKEN__;
+  // A configured ion token unlocks real World Imagery / Terrain / OSM Buildings.
+  // Treat an empty value OR the .env.default placeholder as "no token", so we go
+  // straight to the offline basemap instead of firing doomed ion requests that
+  // 401 per-tile and leave a black globe + RequestErrorEvent noise.
+  const ionToken = __CESIUM_ION_TOKEN__;
+  const hasIonToken = Boolean(ionToken) && ionToken !== 'your_cesium_ion_token_here';
+  if (hasIonToken) {
+    Cesium.Ion.defaultAccessToken = ionToken;
+  }
 
   const viewer = new Cesium.Viewer(container, {
     animation: false,
@@ -79,12 +87,7 @@ export async function createCesiumScene(options: CreateCesiumSceneOptions): Prom
   // zero network required) rather than leaving zero imagery layers, which
   // was found to make `scene.globe.pick()` unreliable for ray/ground
   // intersection — see the raycast functions below, used by pin creation.
-  try {
-    const worldImagery = await Cesium.createWorldImageryAsync();
-    viewer.imageryLayers.removeAll();
-    viewer.imageryLayers.add(new Cesium.ImageryLayer(worldImagery));
-  } catch (err) {
-    console.warn('[cesium] ion World Imagery unavailable — falling back to offline Natural Earth II:', err);
+  const loadOfflineImagery = async (): Promise<void> => {
     try {
       const offlineImagery = await Cesium.TileMapServiceImageryProvider.fromUrl(
         Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII')
@@ -92,21 +95,39 @@ export async function createCesiumScene(options: CreateCesiumSceneOptions): Prom
       viewer.imageryLayers.removeAll();
       viewer.imageryLayers.add(new Cesium.ImageryLayer(offlineImagery));
     } catch (fallbackErr) {
-      console.error('[cesium] Offline imagery fallback also failed:', fallbackErr);
+      console.error('[cesium] Offline imagery failed:', fallbackErr);
     }
+  };
+
+  if (hasIonToken) {
+    try {
+      const worldImagery = await Cesium.createWorldImageryAsync();
+      viewer.imageryLayers.removeAll();
+      viewer.imageryLayers.add(new Cesium.ImageryLayer(worldImagery));
+    } catch (err) {
+      console.warn('[cesium] ion World Imagery unavailable — using offline Natural Earth II:', err);
+      await loadOfflineImagery();
+    }
+  } else {
+    // No valid token — render the bundled offline basemap (zero network, no 401s).
+    await loadOfflineImagery();
   }
 
-  try {
-    viewer.terrainProvider = await Cesium.createWorldTerrainAsync({ requestVertexNormals: true });
-  } catch (err) {
-    console.warn('[cesium] ion World Terrain unavailable — using a flat ellipsoid:', err);
-  }
+  // Terrain + 3D buildings are ion-only; skip them entirely without a token so
+  // they don't 401. (World Terrain would otherwise just leave a flat ellipsoid.)
+  if (hasIonToken) {
+    try {
+      viewer.terrainProvider = await Cesium.createWorldTerrainAsync({ requestVertexNormals: true });
+    } catch (err) {
+      console.warn('[cesium] ion World Terrain unavailable — using a flat ellipsoid:', err);
+    }
 
-  try {
-    buildingsTileset = await Cesium.createOsmBuildingsAsync();
-    viewer.scene.primitives.add(buildingsTileset);
-  } catch (err) {
-    console.warn('[cesium] Cesium OSM Buildings unavailable:', err);
+    try {
+      buildingsTileset = await Cesium.createOsmBuildingsAsync();
+      viewer.scene.primitives.add(buildingsTileset);
+    } catch (err) {
+      console.warn('[cesium] Cesium OSM Buildings unavailable:', err);
+    }
   }
 
   viewer.scene.globe.enableLighting = !isStaticMode;
