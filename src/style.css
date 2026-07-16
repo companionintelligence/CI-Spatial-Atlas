@@ -417,6 +417,23 @@ body {
   position: relative;
 }
 
+/* Cesium widget must fill its container. Cesium's own widgets.css is NOT
+   imported (all Cesium chrome is disabled in cesiumScene.ts), so without these
+   rules the Cesium canvas collapses to a partial height and the globe renders in
+   only the top portion of the viewport. Classic three.js sizes its canvas
+   explicitly and is unaffected. */
+.cesium-viewer,
+.cesium-viewer-cesiumWidgetContainer,
+.cesium-widget,
+.cesium-widget canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.cesium-viewer-bottom {
+  display: none; /* credit bar is also removed programmatically in cesiumScene.ts */
+}
+
 /* -------------------------------------------------------------------------
    Viewport HUD Overlays
    ------------------------------------------------------------------------- */
