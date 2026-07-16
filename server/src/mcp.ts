@@ -186,7 +186,21 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async ({ storyId, start, stop, multiplier, loop }) => {
-      const updated = await store.updateStory(storyId, { timeline: { start, stop, multiplier, loop } });
+      const existing = await store.getStory(storyId);
+      if (!existing) return err(`No such story: ${storyId}`);
+      // Merge, don't replace. `multiplier`/`loop` are optional, so retiming a
+      // story without restating them used to write `undefined` over whatever an
+      // earlier tool call authored — an agent that set loop, then adjusted the
+      // window, silently lost the loop.
+      const updated = await store.updateStory(storyId, {
+        timeline: {
+          ...existing.timeline,
+          start,
+          stop,
+          ...(multiplier !== undefined ? { multiplier } : {}),
+          ...(loop !== undefined ? { loop } : {}),
+        },
+      });
       return updated ? ok({ timeline: updated.timeline }) : err(`No such story: ${storyId}`);
     }
   );

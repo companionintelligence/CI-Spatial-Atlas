@@ -416,6 +416,23 @@ export function AtlasApp() {
   if (error || !model || !story) {
     return <div className="atlas-boot"><div className="msg"><strong>Couldn’t load a story.</strong><span>{error ?? 'Append ?story=<url> to view one.'}</span></div></div>;
   }
+  // A memory query that matches nothing returns a perfectly valid *empty* story,
+  // so the error branch never fires — without this the user just gets a blank
+  // globe and no idea whether it's broken, empty, or filtered.
+  if (source === 'memory' && model.memories.length === 0) {
+    return (
+      <div className="atlas-boot">
+        <div className="msg">
+          <strong>Connected to Companion Memory — no located memories yet.</strong>
+          <span>
+            The search matched nothing with coordinates. Memories need a location to appear on the globe;
+            imports without GPS won’t show here.
+          </span>
+          <span className="dim">Connected to {memory?.url}</span>
+        </div>
+      </div>
+    );
+  }
 
   const isGlobe = view === 'globe';
 

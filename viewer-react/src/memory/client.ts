@@ -8,22 +8,58 @@ function endpointOf(url: string): { endpoint: string; origin: string } {
 
 async function gql<T>(src: MemorySource, query: string, variables: Record<string, unknown>): Promise<T> {
   const { endpoint } = endpointOf(src.url);
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(src.token ? { authorization: `Bearer ${src.token}` } : {}),
-    },
-    // Send the CI-Server session cookie when no explicit token is supplied.
-    credentials: 'include',
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) {
-    throw new Error(`Companion Memory returned HTTP ${res.status} — check the server URL and that you're signed in.`);
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(src.token ? { authorization: `Bearer ${src.token}` } : {}),
+      },
+      // Send the CI-Server session cookie when no explicit token is supplied.
+      credentials: 'include',
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch {
+    // fetch only rejects on network/CORS failures — the response itself never
+    // reaches JS when the preflight is refused, so this is the message a user
+    // actually gets when CI-Server has no CORS allowlist for this origin.
+    throw new Error(
+      `Couldn't reach Companion Memory at ${endpoint}. If the server is up, it's likely CORS: ` +
+      `CI-Server must allow this origin with credentials (a wildcard is invalid with cookies), ` +
+      `or serve Atlas from the same origin.`,
+    );
   }
-  const json = (await res.json()) as { data?: T; errors?: { message?: string }[] };
-  if (json.errors?.length) throw new Error(json.errors[0]?.message ?? 'Companion Memory GraphQL error');
+
+  // GraphQL errors ride on a NON-2xx response too — Apollo/Nest return 400 with a
+  // perfectly good { errors: [...] } body for validation failures. Reading the
+  // status first threw away the one message that says what's actually wrong.
+  const text = await res.text();
+  let json: { data?: T; errors?: { message?: string }[] } | undefined;
+  try { json = JSON.parse(text) as typeof json; } catch { /* not JSON (proxy/HTML error page) */ }
+
+  if (json?.errors?.length) throw new Error(json.errors[0]?.message ?? 'Companion Memory GraphQL error');
+  if (!res.ok) {
+    const hint = res.status === 401 || res.status === 403
+      ? " — sign in, or pass ?token=<jwt>."
+      : text ? ` — ${text.slice(0, 160)}` : ' — check the server URL.';
+    throw new Error(`Companion Memory returned HTTP ${res.status}${hint}`);
+  }
+  if (!json) throw new Error(`Companion Memory returned a non-JSON response from ${endpoint}.`);
   return json.data as T;
+}
+
+/** CI-Server clamps `first` to this; asking for more silently returns 100. */
+const MAX_PAGE_SIZE = 100;
+/** Stop runaway paging on a very large memory. */
+const HARD_CAP = 2000;
+
+interface SearchEnvelope {
+  search?: {
+    totalCount?: number;
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+    edges?: unknown[];
+  };
 }
 
 export interface MemorySource {
@@ -43,9 +79,33 @@ export interface MemorySource {
  */
 export async function fetchMemoryStory(src: MemorySource): Promise<Story> {
   const { origin } = endpointOf(src.url);
-  const data = await gql<unknown>(src, LOCATED_MEDIA_QUERY, { first: src.first ?? 200 });
+  // Page through the whole located set. `first: 200` was silently clamped to 100
+  // server-side and never paged, so anyone with more than 100 located memories
+  // just never saw the rest — with `sortOrder: "asc"`, that meant the most recent
+  // ones were the ones missing.
+  const first = Math.min(src.first ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+  const edges: unknown[] = [];
+  let after: string | undefined;
+  let totalCount = 0;
+  let pages = 0;
+
+  do {
+    const data = await gql<SearchEnvelope>(src, LOCATED_MEDIA_QUERY, { first, after });
+    const search = data?.search;
+    totalCount = search?.totalCount ?? totalCount;
+    const page = Array.isArray(search?.edges) ? search.edges : [];
+    edges.push(...page);
+    const info = search?.pageInfo;
+    after = info?.hasNextPage && info.endCursor ? info.endCursor : undefined;
+    pages += 1;
+    if (page.length === 0) break; // defensive: a server that lies about hasNextPage
+  } while (after && edges.length < HARD_CAP && pages < 50);
+
+  if (totalCount > edges.length) {
+    console.warn(`[atlas] Companion Memory reports ${totalCount} located memories; showing ${edges.length}.`);
+  }
   // `origin` (without /graphql) prefixes the relative presigned media URLs.
-  return memoryToStory(data, { origin, title: 'Companion Memory' });
+  return memoryToStory({ search: { totalCount, edges } }, { origin, title: 'Companion Memory' });
 }
 
 /**
