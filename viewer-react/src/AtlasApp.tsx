@@ -83,7 +83,10 @@ export function AtlasApp() {
   const lightboxRef = useRef<AtlasMemory | null>(null);
   lightboxRef.current = lightbox;
 
-  const sb = useScrapbook();
+  // Scope the draft to the story it collects from — memory ids only mean
+  // something within one story, so a global draft counted memories the current
+  // story can't resolve.
+  const sb = useScrapbook(loadedStory?.id ?? null);
 
   const focused: AtlasMemory | null = useMemo(() => {
     if (!model) return null;
@@ -371,7 +374,9 @@ export function AtlasApp() {
         onFrameAll={frameAll}
         onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
         onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
-        scrapbookCount={sb.count}
+        // Count what the drawer can actually show, so the badge can never claim
+        // memories this story can't resolve.
+        scrapbookCount={sbEntries.length}
       />
       <TopBar view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onShare={share} live={source === 'memory'} />
       <main className="atlas-stage">
