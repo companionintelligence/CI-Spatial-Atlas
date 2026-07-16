@@ -43,9 +43,6 @@ const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
   media: m.media,
 });
 
-/** How long a journey should take to play, whatever its real span. */
-const PLAYBACK_SECONDS = 45;
-
 /**
  * Companion Atlas — a social scrapbook and memory time machine. A CI-branded
  * frame around the Cesium memory globe: collect memories into a scrapbook, let
@@ -126,9 +123,9 @@ export function AtlasApp() {
   useEffect(() => {
     if (!viewer) return;
     const clock = viewer.clock;
-    // Play the journey once and stop at the end — don't loop back and re-fly the
-    // camera to the first memory forever.
-    clock.clockRange = Cesium.ClockRange.CLAMPED;
+    // Clock range + playback pacing come from the CZML document clock
+    // (storyToCzml): Cesium re-copies that onto the viewer on every data-source
+    // load, so patching it here would silently revert on the next story swap.
     if (reduceMotion) clock.shouldAnimate = false;
     setCurrentMs(Cesium.JulianDate.toDate(clock.currentTime).getTime());
     setPlaying(clock.shouldAnimate);
@@ -149,17 +146,6 @@ export function AtlasApp() {
       clock.onTick.removeEventListener(onTick);
     };
   }, [viewer, reduceMotion]);
-
-  // Pace the time machine to the story: a 70-minute trip and a 10-year archive
-  // should both play in ~45s. (The CZML's fixed multiplier blasts short spans
-  // past in a couple of seconds, which reads as a broken timeline.)
-  useEffect(() => {
-    if (!viewer || !model) return;
-    const spanSec = (model.timeline.stopMs - model.timeline.startMs) / 1000;
-    if (Number.isFinite(spanSec) && spanSec > 0) {
-      viewer.clock.multiplier = Math.max(1, spanSec / PLAYBACK_SECONDS);
-    }
-  }, [viewer, model]);
 
   const flyTo = useCallback((m: AtlasMemory) => {
     if (!viewer || m.lat == null || m.lon == null) return;
@@ -188,6 +174,11 @@ export function AtlasApp() {
   const pause = useCallback(() => {
     if (viewer) viewer.clock.shouldAnimate = false;
     setPlaying(false);
+  }, [viewer]);
+
+  const play = useCallback(() => {
+    if (viewer) viewer.clock.shouldAnimate = true;
+    setPlaying(true);
   }, [viewer]);
 
   // A user-initiated jump: select + pause, so the camera settles on the memory
@@ -264,7 +255,10 @@ export function AtlasApp() {
     if (sb.has(id)) sb.remove(id); else sb.add(id);
   }, [sb]);
 
-  /** Hand the globe a story to fly through, and re-run the intro on it. */
+  /** Hand the globe a story to fly through, and re-run the intro on it. Resumes
+   *  the clock: every route to collecting a memory pauses it (inspect = select +
+   *  pause), so without this the chip reads "Playing journey" while the globe
+   *  sits frozen on the first memory. */
   const playStory = useCallback((s: Story) => {
     introDone.current = false;
     flownToRef.current = null;
@@ -273,7 +267,8 @@ export function AtlasApp() {
     setView('globe');
     setSbOpen(false);
     setPeopleOpen(false);
-  }, []);
+    play();
+  }, [play]);
 
   const exitJourney = useCallback(() => {
     introDone.current = false;
