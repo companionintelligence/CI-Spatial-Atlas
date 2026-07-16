@@ -15,13 +15,21 @@ export type StorySource = 'memory' | 'story';
  *    documents), falling back to the bundled sample so the viewer renders out of
  *    the box.
  */
-export function useStory(): { story: Story | null; error: string | null; loading: boolean; source: StorySource } {
+export function useStory(): {
+  story: Story | null;
+  error: string | null;
+  loading: boolean;
+  source: StorySource;
+  /** The connected Companion Memory (for write-back), or null when offline. */
+  memory: { url: string; token?: string } | null;
+} {
   const [story, setStory] = useState<Story | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const params = new URLSearchParams(window.location.search);
   const memoryUrl = params.get('memory') ?? env.VITE_MEMORY_URL;
+  const memoryToken = params.get('token') ?? env.VITE_MEMORY_TOKEN;
   const source: StorySource = memoryUrl ? 'memory' : 'story';
 
   useEffect(() => {
@@ -30,8 +38,7 @@ export function useStory(): { story: Story | null; error: string | null; loading
       try {
         let s: Story;
         if (memoryUrl) {
-          const token = params.get('token') ?? env.VITE_MEMORY_TOKEN;
-          s = await fetchMemoryStory({ url: memoryUrl, token });
+          s = await fetchMemoryStory({ url: memoryUrl, token: memoryToken });
         } else {
           const url = params.get('story') ?? '/stories/sample-pacific-journey.json';
           const res = await fetch(url);
@@ -49,5 +56,5 @@ export function useStory(): { story: Story | null; error: string | null; loading
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { story, error, loading, source };
+  return { story, error, loading, source, memory: memoryUrl ? { url: memoryUrl, token: memoryToken } : null };
 }

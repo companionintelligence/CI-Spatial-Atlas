@@ -3,11 +3,14 @@ import { mediaThumb, type AtlasMemory } from '../model/atlasModel.js';
 
 const TOD_LABEL: Record<AtlasMemory['tod'], string> = { dawn: 'Dawn', day: 'Daylight', dusk: 'Dusk', night: 'Night' };
 
-export function MemoryInspector({ memory, related, onFly, onExpand }: {
+export function MemoryInspector({ memory, related, onFly, onExpand, collected, onCollect }: {
   memory: AtlasMemory | null;
   related: AtlasMemory[];
   onFly: (m: AtlasMemory) => void;
   onExpand: () => void;
+  /** Whether this memory is already in the scrapbook draft. */
+  collected: boolean;
+  onCollect: () => void;
 }) {
   if (!memory) return null;
   const coord = memory.lat != null && memory.lon != null
@@ -55,7 +58,14 @@ export function MemoryInspector({ memory, related, onFly, onExpand }: {
         )}
         <div className="atlas-insp-actions">
           <button className="atlas-btn primary" onClick={() => onFly(memory)}><PlaneIcon />Fly here</button>
-          <button className="atlas-btn" disabled title="Collections coming soon"><PlusIcon />Collect</button>
+          <button
+            className={`atlas-btn${collected ? ' collected' : ''}`}
+            onClick={onCollect}
+            aria-pressed={collected}
+            title={collected ? 'Remove from your scrapbook' : 'Collect into your scrapbook'}
+          >
+            <PlusIcon />{collected ? 'Collected' : 'Collect'}
+          </button>
         </div>
       </div>
     </aside>

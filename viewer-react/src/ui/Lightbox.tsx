@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { mediaFull, type AtlasMemory } from '../model/atlasModel.js';
 
 /** Full-bleed media view for a memory. Shows the real full-resolution image when
@@ -17,6 +17,15 @@ export function Lightbox({ memory, onClose }: { memory: AtlasMemory | null; onCl
       restoreRef.current = null;
     }
   }, [memory]);
+
+  // Escape at the document level: clicking the photo blurs the close button, and
+  // a dialog-scoped handler would go dead once focus falls back to <body>.
+  useEffect(() => {
+    if (!memory) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [memory, onClose]);
 
   if (!memory) return null;
   const url = mediaFull(memory);

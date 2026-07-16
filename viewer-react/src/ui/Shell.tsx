@@ -6,27 +6,31 @@ import {
 export type AtlasView = 'globe' | 'gallery' | 'timeline' | 'graph';
 
 /** Left icon rail. Globe navigates home; Places fits the camera to every memory;
- *  Search opens ⌘K. People/Collections are honest placeholders until those
- *  memory facets land. */
-export function Rail({ view, onView, onSearch, onFrameAll }: {
+ *  People opens the participants facet; Collections opens the scrapbook drawer;
+ *  Search opens ⌘K. */
+export function Rail({ view, onView, onSearch, onFrameAll, onPeople, onCollections, scrapbookCount }: {
   view: AtlasView;
   onView: (v: AtlasView) => void;
   onSearch: () => void;
   onFrameAll: () => void;
+  onPeople: () => void;
+  onCollections: () => void;
+  scrapbookCount: number;
 }) {
   const items = [
     { key: 'globe', label: 'Globe', Icon: GlobeIcon, onClick: () => onView('globe'), active: view === 'globe' },
     { key: 'places', label: 'Fit all places', Icon: PinIcon, onClick: onFrameAll },
-    { key: 'people', label: 'People (coming soon)', Icon: PeopleIcon, disabled: true },
-    { key: 'collections', label: 'Collections (coming soon)', Icon: LayersIcon, disabled: true },
+    { key: 'people', label: 'People', Icon: PeopleIcon, onClick: onPeople },
+    { key: 'collections', label: 'Scrapbook', Icon: LayersIcon, onClick: onCollections, badge: scrapbookCount },
     { key: 'search', label: 'Search', Icon: SparkIcon, onClick: onSearch },
   ];
   return (
     <nav className="atlas-rail" aria-label="Primary">
       <BrandMark className="atlas-mark" />
-      {items.map(({ key, label, Icon, onClick, active, disabled }) => (
-        <button key={key} className={`atlas-rail-btn${active ? ' active' : ''}`} title={label} aria-label={label} aria-current={active ? 'page' : undefined} onClick={onClick} disabled={disabled}>
+      {items.map(({ key, label, Icon, onClick, active, badge }) => (
+        <button key={key} className={`atlas-rail-btn${active ? ' active' : ''}`} title={label} aria-label={badge ? `${label} (${badge})` : label} aria-current={active ? 'page' : undefined} onClick={onClick}>
           <Icon />
+          {badge ? <span className="rail-badge" aria-hidden="true">{badge}</span> : null}
         </button>
       ))}
       <div className="atlas-rail-spacer" />

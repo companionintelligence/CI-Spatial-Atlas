@@ -27,6 +27,7 @@ export interface AtlasMemory {
   gradient: string; // placeholder "photo" tint when there's no real media
   media?: AtlasMedia; // real media co-located with this memory (CI-Server)
   tags?: string[]; // real entity tags when present
+  people?: string[]; // participant entity ids from Companion Memory
 }
 
 export interface AtlasModel {
@@ -107,7 +108,7 @@ export function deriveModel(story: Story): AtlasModel {
   // Index media + tags by location so scene-memories can pick up the real photo
   // and entity tags that sit at the same coordinate (the CI-Server shape: a
   // memory scene + its media entity share a place).
-  const byLoc = new Map<string, { media?: AtlasMedia; tags?: string[]; place?: string }>();
+  const byLoc = new Map<string, { media?: AtlasMedia; tags?: string[]; place?: string; people?: string[] }>();
   for (const e of entities) {
     const pos = 'position' in e ? e.position : undefined;
     if (!pos) continue;
@@ -122,13 +123,15 @@ export function deriveModel(story: Story): AtlasModel {
     if (e.tags?.length) cur.tags = e.tags;
     byLoc.set(locKey(pos.lat, pos.lon), cur);
   }
-  // Real place labels ride on the source media (a memory event's `locationName`).
+  // Real place labels + participants ride on the source media (a memory event's
+  // `locationName` / `participantEntityIds`).
   for (const mi of story.media ?? []) {
-    if (mi.location && mi.locationName) {
-      const cur = byLoc.get(locKey(mi.location.lat, mi.location.lon)) ?? {};
-      cur.place = mi.locationName;
-      byLoc.set(locKey(mi.location.lat, mi.location.lon), cur);
-    }
+    if (!mi.location) continue;
+    const k = locKey(mi.location.lat, mi.location.lon);
+    const cur = byLoc.get(k) ?? {};
+    if (mi.locationName) cur.place = mi.locationName;
+    if (mi.people?.length) cur.people = mi.people;
+    byLoc.set(k, cur);
   }
   const extraFor = (lat?: number, lon?: number) =>
     lat != null && lon != null ? byLoc.get(locKey(lat, lon)) : undefined;
@@ -152,6 +155,7 @@ export function deriveModel(story: Story): AtlasModel {
       gradient: GRADIENTS[i % GRADIENTS.length]!,
       media: extra?.media,
       tags: extra?.tags,
+      people: extra?.people,
     };
   });
 
@@ -181,6 +185,7 @@ export function deriveModel(story: Story): AtlasModel {
       gradient: GRADIENTS[i % GRADIENTS.length]!,
       media: x.media,
       tags: x.tags,
+      people: extraFor(x.lat, x.lon)?.people,
     }));
   }
 

@@ -164,6 +164,8 @@ export const MediaItem = z.object({
   description: z.string().optional(),
   /** Human place label (e.g. a memory event's `locationName`). */
   locationName: z.string().optional(),
+  /** Participant entity ids from Companion Memory (`participantEntityIds`). */
+  people: z.array(z.string()).optional(),
   capturedAt: Iso8601.optional(),
   location: GeoPoint.optional(),
   heading: z.number().optional(),

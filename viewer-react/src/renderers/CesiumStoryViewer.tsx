@@ -41,6 +41,7 @@ export function CesiumStoryViewer({
     [czml],
   );
   const ref = useRef<CesiumComponentRef<Cesium.Viewer>>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   const [viewer, setViewerReady] = useState<Cesium.Viewer | null>(null);
 
   // Latest callbacks / focus without re-running the mount + picking effect.
@@ -104,7 +105,12 @@ export function CesiumStoryViewer({
         }
       })();
 
-      v.scene.globe.enableLighting = true;
+      // Keep the globe lit. Sun-accurate lighting plunges any memory on the night
+      // side into blackness — for a scrapbook that's a memory you can't see, and
+      // half of them are always night somewhere. Google Earth makes the same
+      // call. The moment's time-of-day still reads in the inspector badge and the
+      // Time Machine ("Dawn · sky set to 6:32 AM").
+      v.scene.globe.enableLighting = false;
       v.scene.fog.enabled = true;
       if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
       // Render the globe at device resolution (crisp on HiDPI), capped for perf.
@@ -133,11 +139,26 @@ export function CesiumStoryViewer({
       // clock-driven camera flight never fights the user.
       const canvas = v.scene.canvas;
       const interact = () => onInteractRef.current?.();
+      // Cesium only reports MOUSE_MOVE over the canvas, so leaving it would strand
+      // the hover highlight (and a 'pointer' cursor) on forever.
+      const leave = () => { onHoverRef.current?.(null); canvas.style.cursor = ''; };
       canvas.addEventListener('pointerdown', interact);
       canvas.addEventListener('wheel', interact, { passive: true });
+      canvas.addEventListener('pointerleave', leave);
+
+      // Cesium only re-sizes its drawing buffer on *window* resize. The stage can
+      // change size on its own (chrome/drawers, a resized preview pane, an XR
+      // handoff), which would leave a stale, letterboxed canvas — so watch the
+      // container directly.
+      const host = hostRef.current;
+      const ro = host ? new ResizeObserver(() => { if (!v.isDestroyed()) v.resize(); }) : null;
+      if (host && ro) ro.observe(host);
+
       cleanupInteract = () => {
         canvas.removeEventListener('pointerdown', interact);
         canvas.removeEventListener('wheel', interact);
+        canvas.removeEventListener('pointerleave', leave);
+        ro?.disconnect();
       };
 
       setViewerReady(v);
@@ -178,7 +199,7 @@ export function CesiumStoryViewer({
   }, [viewer, memories]);
 
   return (
-    <div className="atlas-globe">
+    <div className="atlas-globe" ref={hostRef}>
       <Viewer
         ref={ref}
         full={false}

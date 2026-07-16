@@ -52,6 +52,7 @@ export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
             endTime
             locationName
             locationCoordinates
+            participantEntityIds
             mediaContentType
             previewUrl
             mediaUrl
@@ -103,6 +104,7 @@ interface MemoryEventNode {
   endTime?: string;
   locationName?: string;
   locationCoordinates?: unknown;
+  participantEntityIds?: string[] | null;
   mediaContentType?: string | null;
   previewUrl?: string | null;
   mediaUrl?: string | null;
@@ -164,6 +166,7 @@ export function mediaItemsFromMemory(result: unknown, opts: MemoryMapOptions = {
       caption: node.title ?? node.locationName ?? undefined,
       description: node.description ?? undefined,
       locationName: node.locationName ?? undefined,
+      people: node.participantEntityIds?.length ? node.participantEntityIds : undefined,
       capturedAt: node.startTime ?? undefined,
       location,
       sourceMemoryId: node.id,

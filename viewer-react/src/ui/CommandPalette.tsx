@@ -47,6 +47,12 @@ export function CommandPalette({ open, memories, onClose, onSelect, onView }: {
     }
   }, [open]);
 
+  // Keep the highlighted option visible — the list is a fixed-height scroller,
+  // so arrowing past the first screenful would otherwise lose the selection.
+  useLayoutEffect(() => {
+    if (open) document.getElementById(optId(active))?.scrollIntoView({ block: 'nearest' });
+  }, [active, open]);
+
   const items = useMemo<Item[]>(() => {
     const q = query.trim().toLowerCase();
     const views: Item[] = VIEW_ACTIONS
@@ -77,7 +83,17 @@ export function CommandPalette({ open, memories, onClose, onSelect, onView }: {
 
   return (
     <div className="atlas-cmdk-backdrop" onClick={onClose}>
-      <div className="atlas-cmdk" role="dialog" aria-modal="true" aria-label="Search" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+      <div
+        className="atlas-cmdk"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+        // Clicking chrome (the esc badge, an option, the icon) must not blur the
+        // input — every key handler lives on this dialog and needs focus inside.
+        onPointerDown={(e) => { if (!(e.target as HTMLElement).closest('input')) e.preventDefault(); }}
+      >
         <div className="cmdk-input">
           <SearchIcon />
           <input

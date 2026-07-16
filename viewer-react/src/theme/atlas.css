@@ -93,7 +93,11 @@ body { background: var(--atlas-bg); overflow: hidden; }
 /* stage (holds the Cesium globe + overlays) */
 .atlas-stage { grid-area: stage; position: relative; overflow: hidden; }
 .atlas-globe { position: absolute; inset: 0; z-index: 1; }
-/* Cesium must fill its container (widgets.css is injected, but be explicit). */
+/* Cesium must fill its container. `.atlas-globe > div` is Resium's own wrapper:
+   without an explicit height on it the `height:100%` chain below resolves
+   against an auto-height parent and collapses to the widget's initial content
+   height, letterboxing the globe into the top of the stage. */
+.atlas-globe > div,
 .atlas-globe .cesium-viewer, .atlas-globe .cesium-viewer-cesiumWidgetContainer, .atlas-globe .cesium-widget, .atlas-globe .cesium-widget canvas { width: 100%; height: 100%; display: block; }
 /* Smoothly scale the WebGL framebuffer — never blockily upscale it. */
 .atlas-globe .cesium-widget canvas, .atlas-globe canvas { image-rendering: auto !important; }
@@ -105,7 +109,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-grid-horizon { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: 2; pointer-events: none; opacity: .5; -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 92%); mask-image: linear-gradient(to top, #000 0%, transparent 92%); }
 
 .atlas-overlay { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-.atlas-overlay > * { pointer-events: auto; }
+/* Only the interactive scrapbook frames take pointer events. The stats ribbon,
+   place chip, and legend are informational — letting them swallow pointers
+   creates dead zones where globe drag/zoom (and pause-on-interact) fail. */
+.atlas-overlay .atlas-scrap { pointer-events: auto; }
 
 .atlas-place-chip { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 7px 13px; background: var(--atlas-glass); border: 1px solid var(--atlas-line-2); border-radius: 999px; backdrop-filter: blur(10px); font-size: 12.5px; color: var(--atlas-fg-hi); box-shadow: var(--atlas-shadow); }
 .atlas-place-chip svg { width: 14px; height: 14px; color: var(--atlas-teal); }
@@ -251,6 +258,66 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .lb-cap b { font-size: 17px; color: var(--atlas-fg-hi); }
 .lb-cap p { margin: 6px 0; font-size: 13px; line-height: 1.5; color: var(--atlas-fg-dim); max-width: 70ch; }
 .lb-cap span { font: 500 11px/1 var(--atlas-mono); color: var(--atlas-teal); }
+
+/* ————— scrapbook drawer + people panel (the social loop) ————— */
+.atlas-rail-btn { position: relative; }
+.rail-badge {
+  position: absolute; top: 3px; right: 3px; min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; background: var(--atlas-mint); color: var(--atlas-bg);
+  font: 700 9px/15px var(--atlas-mono); text-align: center;
+}
+
+.atlas-sbdrawer {
+  position: absolute; grid-area: stage; z-index: 30; top: 14px; right: 14px; bottom: 118px; width: 336px;
+  display: flex; flex-direction: column; gap: 11px; padding: 14px;
+  background: var(--atlas-glass); border: 1px solid var(--atlas-line-2); border-radius: 16px;
+  backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); overflow: auto;
+}
+.sb-head { display: flex; align-items: center; gap: 8px; }
+.sb-head b { font-size: 14px; color: var(--atlas-fg-hi); display: flex; align-items: center; gap: 7px; }
+.sb-head b svg { width: 16px; height: 16px; color: var(--atlas-teal); }
+.sb-count { font: 700 10px/1 var(--atlas-mono); color: var(--atlas-bg); background: var(--atlas-teal); border-radius: 8px; padding: 3px 6px; }
+.sb-close { margin-left: auto; width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--atlas-fg-dim); cursor: pointer; }
+.sb-close:hover { color: var(--atlas-fg-hi); background: rgba(64,155,155,.12); }
+.sb-title { padding: 9px 11px; border-radius: 9px; border: 1px solid var(--atlas-line); background: rgba(4,18,26,.5); color: var(--atlas-fg-hi); font: 600 13px Montserrat, sans-serif; }
+.sb-title::placeholder { color: var(--atlas-fg-dim); font-weight: 500; }
+.sb-vis { display: flex; gap: 2px; padding: 3px; background: rgba(4,18,26,.6); border: 1px solid var(--atlas-line); border-radius: 999px; }
+.sb-vis button { flex: 1; padding: 6px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--atlas-fg-dim); font: 600 11.5px Montserrat, sans-serif; cursor: pointer; }
+.sb-vis button.active { color: var(--atlas-bg); background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light)); }
+.sb-empty { margin: 0; font-size: 12px; line-height: 1.55; color: var(--atlas-fg-dim); }
+.sb-empty b { color: var(--atlas-teal); display: inline-flex; align-items: center; gap: 3px; }
+.sb-empty svg { width: 11px; height: 11px; }
+.sb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.sb-item { display: flex; align-items: center; gap: 9px; padding: 7px; border: 1px solid var(--atlas-line); border-radius: 10px; background: rgba(4,18,26,.35); }
+.sb-item .ph { width: 44px; height: 34px; flex: none; border-radius: 6px; object-fit: cover; display: block; }
+.sb-item-body { min-width: 0; flex: 1; }
+.sb-item-body b { display: block; font-size: 12px; color: var(--atlas-fg-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-item-body span { display: block; margin-top: 2px; font: 500 9.5px/1.3 var(--atlas-mono); color: var(--atlas-fg-dim); }
+.sb-remove { width: 24px; height: 24px; flex: none; border-radius: 6px; border: 0; background: transparent; color: var(--atlas-fg-dim); cursor: pointer; }
+.sb-remove:hover { color: var(--atlas-coral); background: rgba(255,141,110,.12); }
+.sb-actions { display: flex; flex-direction: column; gap: 7px; margin-top: auto; }
+.sb-actions .atlas-btn { flex: none; }
+.atlas-btn:disabled { opacity: .45; cursor: not-allowed; }
+.atlas-btn.ghost { background: transparent; border-color: var(--atlas-line); color: var(--atlas-fg-dim); }
+.atlas-btn.collected { border-color: var(--atlas-mint); color: var(--atlas-mint); background: rgba(88,235,191,.1); }
+.sb-status { margin: 0; font-size: 11.5px; line-height: 1.5; }
+.sb-status.ok { color: var(--atlas-mint); }
+.sb-status.err { color: var(--atlas-coral); }
+.sb-status.dim { color: var(--atlas-fg-dim); }
+.sb-status code { font: 500 10.5px var(--atlas-mono); color: var(--atlas-teal); }
+
+.atlas-people .people-row { align-items: center; }
+.people-avatar { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--atlas-bg); font-weight: 700; font-size: 13px; background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua)); }
+
+.atlas-journey-chip {
+  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%); bottom: 16px;
+  display: flex; align-items: center; gap: 11px; padding: 8px 8px 8px 14px;
+  background: var(--atlas-glass); border: 1px solid var(--atlas-mint); border-radius: 999px;
+  backdrop-filter: blur(10px); box-shadow: var(--atlas-shadow); font-size: 12px; color: var(--atlas-fg);
+}
+.atlas-journey-chip b { color: var(--atlas-fg-hi); }
+.atlas-journey-chip button { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--atlas-line-2); background: rgba(4,18,26,.5); color: var(--atlas-fg); font: 600 11px Montserrat, sans-serif; cursor: pointer; }
+.atlas-journey-chip button:hover { border-color: var(--atlas-mint); color: var(--atlas-mint); }
 
 @media (prefers-reduced-motion: reduce) { .atlas-app *, .atlas-overlay * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (max-width: 980px) { .atlas-inspector, .atlas-stats, .atlas-legend, .atlas-scrap { display: none; } }

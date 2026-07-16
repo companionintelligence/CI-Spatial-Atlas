@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
+import { buildScrapbookStory, curateJourney, type ScrapbookEntry, type Story } from '@companion-atlas/story';
 import { useStory } from './story/useStory.js';
 import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
@@ -11,6 +12,10 @@ import { TimeMachine } from './ui/TimeMachine.js';
 import { AltView } from './ui/AltViews.js';
 import { CommandPalette } from './ui/CommandPalette.js';
 import { Lightbox } from './ui/Lightbox.js';
+import { useScrapbook } from './scrapbook/useScrapbook.js';
+import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
+import { PeoplePanel, groupByPerson, type PersonGroup } from './ui/PeoplePanel.js';
+import { saveStoryToMemory } from './memory/client.js';
 
 /** The last memory whose time is at or before `ms` (the segment being played). */
 function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
@@ -22,14 +27,40 @@ function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
   return r;
 }
 
+/** A curated journey re-ids its scenes `sb-<originalId>`; map back so collecting
+ *  from inside a playing journey still toggles the original memory. */
+const baseId = (id: string) => (id.startsWith('sb-') ? id.slice(3) : id);
+
+const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
+  id: baseId(m.id),
+  title: m.title,
+  narrative: m.narrative,
+  place: m.place,
+  timeMs: m.timeMs,
+  lat: m.lat,
+  lon: m.lon,
+  people: m.people,
+  media: m.media,
+});
+
+/** How long a journey should take to play, whatever its real span. */
+const PLAYBACK_SECONDS = 45;
+
 /**
- * Companion Atlas — the redesigned shell. A CI-branded frame (rail + top bar)
- * around the Cesium memory globe, with a right memory inspector and the bottom
- * Time Machine scrubber wired to the Cesium `Clock`. See docs/REDESIGN.md.
+ * Companion Atlas — a social scrapbook and memory time machine. A CI-branded
+ * frame around the Cesium memory globe: collect memories into a scrapbook, let
+ * the Companion curate them into a journey, play it through time, and save it
+ * back into Companion Memory (which is what shares it). See docs/REDESIGN.md.
  */
 export function AtlasApp() {
-  const { story, error, loading, source } = useStory();
+  const { story: loadedStory, error, loading, source, memory } = useStory();
+
+  // A curated scrapbook journey temporarily takes over the globe; the loaded
+  // story stays the base the scrapbook collects against.
+  const [journey, setJourney] = useState<Story | null>(null);
+  const story = journey ?? loadedStory;
   const model = useMemo(() => (story ? deriveModel(story) : null), [story]);
+  const baseModel = useMemo(() => (loadedStory ? deriveModel(loadedStory) : null), [loadedStory]);
 
   // Reduced-motion gates the app's dominant motion (time autoplay + camera
   // flights), not just the starfield.
@@ -46,9 +77,16 @@ export function AtlasApp() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<AtlasMemory | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sbOpen, setSbOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
   const lastSync = useRef(0);
   const flownToRef = useRef<string | null>(null);
   const introDone = useRef(false);
+  const lightboxRef = useRef<AtlasMemory | null>(null);
+  lightboxRef.current = lightbox;
+
+  const sb = useScrapbook();
 
   const focused: AtlasMemory | null = useMemo(() => {
     if (!model) return null;
@@ -59,6 +97,17 @@ export function AtlasApp() {
     () => (model ? model.memories.filter((m) => m.id !== focused?.id) : []),
     [model, focused],
   );
+
+  // The scrapbook always collects against the *base* story, so a draft survives
+  // playing a journey built from it.
+  const sbEntries = useMemo(() => {
+    if (!baseModel) return [];
+    return sb.draft.memoryIds
+      .map((id) => baseModel.memories.find((m) => m.id === id))
+      .filter((m): m is AtlasMemory => !!m);
+  }, [baseModel, sb.draft.memoryIds]);
+
+  const peopleGroups = useMemo(() => (baseModel ? groupByPerson(baseModel.memories) : []), [baseModel]);
 
   // Overlays that follow the clock: the scrapbook shows the memories nearest the
   // playhead and the place chip names the current place, so scrubbing/playing
@@ -100,6 +149,17 @@ export function AtlasApp() {
       clock.onTick.removeEventListener(onTick);
     };
   }, [viewer, reduceMotion]);
+
+  // Pace the time machine to the story: a 70-minute trip and a 10-year archive
+  // should both play in ~45s. (The CZML's fixed multiplier blasts short spans
+  // past in a couple of seconds, which reads as a broken timeline.)
+  useEffect(() => {
+    if (!viewer || !model) return;
+    const spanSec = (model.timeline.stopMs - model.timeline.startMs) / 1000;
+    if (Number.isFinite(spanSec) && spanSec > 0) {
+      viewer.clock.multiplier = Math.max(1, spanSec / PLAYBACK_SECONDS);
+    }
+  }, [viewer, model]);
 
   const flyTo = useCallback((m: AtlasMemory) => {
     if (!viewer || m.lat == null || m.lon == null) return;
@@ -189,18 +249,97 @@ export function AtlasApp() {
 
   // Open *on the memories*: once the viewer + model are both ready, frame the
   // first memory and set the clock to its moment (so its region is lit, not the
-  // default empty night hemisphere), then let playback carry the journey. Once.
+  // default empty night hemisphere), then let playback carry the journey.
   useEffect(() => {
     if (!viewer || !model || introDone.current) return;
     const first = model.memories[0];
     if (first) { introDone.current = true; select(first); }
   }, [viewer, model, select]);
 
-  // ⌘K / Ctrl-K toggles the command palette.
+  // ————— the scrapbook loop: collect → curate → play → save —————
+
+  const collected = useCallback((m: AtlasMemory) => sb.has(baseId(m.id)), [sb]);
+  const toggleCollect = useCallback((m: AtlasMemory) => {
+    const id = baseId(m.id);
+    if (sb.has(id)) sb.remove(id); else sb.add(id);
+  }, [sb]);
+
+  /** Hand the globe a story to fly through, and re-run the intro on it. */
+  const playStory = useCallback((s: Story) => {
+    introDone.current = false;
+    flownToRef.current = null;
+    setFocusedId(null);
+    setJourney(s);
+    setView('globe');
+    setSbOpen(false);
+    setPeopleOpen(false);
+  }, []);
+
+  const exitJourney = useCallback(() => {
+    introDone.current = false;
+    flownToRef.current = null;
+    setFocusedId(null);
+    setJourney(null);
+  }, []);
+
+  const draftStory = useCallback(
+    (curated: boolean): Story | null => {
+      if (sbEntries.length === 0) return null;
+      const entries = sbEntries.map(toEntry);
+      const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
+      return curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
+    },
+    [sbEntries, sb.draft.visibility, sb.draft.title],
+  );
+
+  const curate = useCallback(() => {
+    const s = draftStory(true);
+    if (!s) return;
+    sb.setTitle(s.title); // the Companion names the journey
+    playStory(s);
+  }, [draftStory, sb, playStory]);
+
+  const playScrapbook = useCallback(() => {
+    const s = draftStory(false);
+    if (s) playStory(s);
+  }, [draftStory, playStory]);
+
+  const saveScrapbook = useCallback(async () => {
+    const s = draftStory(false);
+    if (!s || !memory) return;
+    setSaveState({ s: 'saving' });
+    try {
+      const r = await saveStoryToMemory(memory, s, { shareUrl: window.location.href });
+      setSaveState({ s: 'done', id: r.id });
+    } catch (e) {
+      setSaveState({ s: 'error', msg: e instanceof Error ? e.message : String(e) });
+    }
+  }, [draftStory, memory]);
+
+  const downloadScrapbook = useCallback(() => {
+    const s = draftStory(false);
+    if (!s) return;
+    const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(s.title || 'journey').replace(/[^\w.-]+/g, '-').toLowerCase()}.story.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [draftStory]);
+
+  const playPerson = useCallback((g: PersonGroup) => {
+    const s = curateJourney(g.memories.map(toEntry), { title: `${g.label} — shared memories`, visibility: 'private' });
+    playStory(s);
+  }, [playStory]);
+
+  // ⌘K / Ctrl-K toggles the command palette (never behind the lightbox, which
+  // sits above it — an invisible focused palette would steal keystrokes).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        if (lightboxRef.current) return;
         setPaletteOpen((o) => !o);
       }
     };
@@ -216,6 +355,8 @@ export function AtlasApp() {
   // don't re-subscribe on every ~240ms clock-driven re-render.
   const closeLightbox = useCallback(() => setLightbox(null), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const closeScrapbook = useCallback(() => setSbOpen(false), []);
+  const closePeople = useCallback(() => setPeopleOpen(false), []);
 
   if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
   if (error || !model || !story) {
@@ -228,7 +369,15 @@ export function AtlasApp() {
     <div className="atlas-app">
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
-      <Rail view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onFrameAll={frameAll} />
+      <Rail
+        view={view}
+        onView={setView}
+        onSearch={() => setPaletteOpen(true)}
+        onFrameAll={frameAll}
+        onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
+        onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
+        scrapbookCount={sb.count}
+      />
       <TopBar view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onShare={share} live={source === 'memory'} />
       <main className="atlas-stage">
         <CesiumStoryViewer
@@ -252,8 +401,23 @@ export function AtlasApp() {
         {!isGlobe && (
           <AltView view={view} memories={model.memories} focusedId={focused?.id ?? null} onSelect={inspect} />
         )}
+        {journey && (
+          <div className="atlas-journey-chip" role="status">
+            <span>Playing journey · <b>{journey.title}</b></span>
+            <button onClick={exitJourney}>Back to all memories</button>
+          </div>
+        )}
       </main>
-      {isGlobe && <MemoryInspector memory={focused} related={related} onFly={inspect} onExpand={() => focused && setLightbox(focused)} />}
+      {isGlobe && (
+        <MemoryInspector
+          memory={focused}
+          related={related}
+          onFly={inspect}
+          onExpand={() => focused && setLightbox(focused)}
+          collected={focused ? collected(focused) : false}
+          onCollect={() => focused && toggleCollect(focused)}
+        />
+      )}
       <TimeMachine
         model={model}
         currentMs={currentMs || model.timeline.startMs}
@@ -262,6 +426,24 @@ export function AtlasApp() {
         onScrub={scrub}
         onStep={step}
       />
+      <ScrapbookDrawer
+        open={sbOpen}
+        entries={sbEntries}
+        title={sb.draft.title}
+        visibility={sb.draft.visibility}
+        canSave={!!memory}
+        saveState={saveState}
+        onClose={closeScrapbook}
+        onTitle={sb.setTitle}
+        onVisibility={sb.setVisibility}
+        onRemove={sb.remove}
+        onClear={sb.clear}
+        onCurate={curate}
+        onPlay={playScrapbook}
+        onSave={() => void saveScrapbook()}
+        onDownload={downloadScrapbook}
+      />
+      <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPerson} />
       <CommandPalette
         open={paletteOpen}
         memories={model.memories}
