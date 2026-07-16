@@ -46,6 +46,11 @@ function iso(d: string): string {
   return Number.isNaN(t.getTime()) ? d : t.toISOString();
 }
 
+/** Cesium's billboard can only load real (http/data) images. A non-loadable URI
+ *  (e.g. `ci-memory://…` before it's resolved) must NOT be set as a billboard
+ *  image — Cesium's fetchImage rejects the scheme and logs a console error. */
+const isLoadableImage = (u: string | undefined): u is string => !!u && /^(https?:|data:|blob:)/i.test(u);
+
 /** A TimeSpec → CZML availability interval, defaulting to the doc interval. */
 function availability(time: TimeSpec | undefined, docInterval: string): string {
   if (!time) return docInterval;
@@ -89,8 +94,9 @@ export function storyToCzml(story: Story): CzmlResult {
           description: mediaCardHtml(item),
           availability: availability(item.time, docInterval),
           position: { cartographicDegrees: [pos.lon, pos.lat, pos.height ?? 0] },
-          // A billboard needs an image; without one, still place the entity as a point.
-          ...(img
+          // A billboard needs a *loadable* image; otherwise place a point so an
+          // unresolved URI (ci-memory://…) doesn't trigger a fetch error.
+          ...(isLoadableImage(img)
             ? { billboard: { image: img, scale: 0.5, verticalOrigin: 'BOTTOM' } }
             : { point: { pixelSize: 10, color: cssToRgba('#39c0ff') } }),
         });

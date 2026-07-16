@@ -1,5 +1,5 @@
 import { PinIcon } from './icons.js';
-import type { AtlasModel, AtlasMemory } from '../model/atlasModel.js';
+import { mediaThumb, type AtlasModel, type AtlasMemory } from '../model/atlasModel.js';
 
 export function StatsRibbon({ stats }: { stats: AtlasModel['stats'] }) {
   const cells = [
@@ -42,8 +42,9 @@ export function PlaceChip({ memory }: { memory: AtlasMemory | null }) {
   );
 }
 
-/** Floating scrapbook frames clustered over the focused place. */
-export function ScrapbookFrames({ memories, onSelect }: { memories: AtlasMemory[]; onSelect: (m: AtlasMemory) => void }) {
+/** Floating scrapbook frames for the memories nearest the playhead (time-driven:
+ *  scrubbing/playing repopulates them). Real media when the story carries it. */
+export function ScrapbookFrames({ memories, hoveredId, onSelect }: { memories: AtlasMemory[]; hoveredId?: string | null; onSelect: (m: AtlasMemory) => void }) {
   const spots = [
     { top: '30%', left: '31%', rot: -6, z: 3 },
     { top: '25%', left: '45%', rot: 3, z: 4 },
@@ -54,15 +55,18 @@ export function ScrapbookFrames({ memories, onSelect }: { memories: AtlasMemory[
     <>
       {shown.map((m, i) => {
         const s = spots[i]!;
+        const thumb = mediaThumb(m);
         return (
           <button
             key={m.id}
-            className="atlas-scrap"
+            className={`atlas-scrap${m.id === hoveredId ? ' hover' : ''}`}
             onClick={() => onSelect(m)}
             style={{ top: s.top, left: s.left, transform: `rotate(${s.rot}deg)`, zIndex: s.z, padding: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit', color: 'inherit' }}
             aria-label={`${m.title}, ${m.whenDate} ${m.whenTime}`}
           >
-            <div className="ph" style={{ background: m.gradient }} />
+            {thumb
+              ? <img className="ph" src={thumb} alt="" loading="lazy" />
+              : <div className="ph" style={{ background: m.gradient }} aria-hidden="true" />}
             <div className="cap"><b>{m.title}</b><span>{m.whenDate} · {m.whenTime}</span></div>
           </button>
         );

@@ -2,12 +2,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
 import { useStory } from './story/useStory.js';
 import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
-import { deriveModel, type AtlasMemory } from './model/atlasModel.js';
+import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
 import { Rail, TopBar, type AtlasView } from './ui/Shell.js';
 import { Starfield, GridHorizon } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
 import { TimeMachine } from './ui/TimeMachine.js';
+import { AltView } from './ui/AltViews.js';
+import { CommandPalette } from './ui/CommandPalette.js';
+import { Lightbox } from './ui/Lightbox.js';
+
+/** The last memory whose time is at or before `ms` (the segment being played). */
+function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
+  const sorted = [...memories].sort((a, b) => a.timeMs - b.timeMs);
+  let r: AtlasMemory | null = sorted[0] ?? null;
+  for (const m of sorted) {
+    if (m.timeMs <= ms) r = m; else break;
+  }
+  return r;
+}
 
 /**
  * Companion Atlas — the redesigned shell. A CI-branded frame (rail + top bar)
@@ -30,7 +43,12 @@ export function AtlasApp() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(!reduceMotion);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<AtlasMemory | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const lastSync = useRef(0);
+  const flownToRef = useRef<string | null>(null);
+  const introDone = useRef(false);
 
   const focused: AtlasMemory | null = useMemo(() => {
     if (!model) return null;
@@ -42,11 +60,26 @@ export function AtlasApp() {
     [model, focused],
   );
 
+  // Overlays that follow the clock: the scrapbook shows the memories nearest the
+  // playhead and the place chip names the current place, so scrubbing/playing
+  // repopulates them.
+  const scrapbook = useMemo(
+    () => (model ? memoriesAround(model.memories, currentMs, 3) : []),
+    [model, currentMs],
+  );
+  const currentPlace = useMemo(
+    () => (model ? nearestMemory(model.memories, currentMs) : null),
+    [model, currentMs],
+  );
+
   // Sync React state from the Cesium clock (throttled) so the Time Machine + the
   // "sky follows the moment" readout track playback.
   useEffect(() => {
     if (!viewer) return;
     const clock = viewer.clock;
+    // Play the journey once and stop at the end — don't loop back and re-fly the
+    // camera to the first memory forever.
+    clock.clockRange = Cesium.ClockRange.CLAMPED;
     if (reduceMotion) clock.shouldAnimate = false;
     setCurrentMs(Cesium.JulianDate.toDate(clock.currentTime).getTime());
     setPlaying(clock.shouldAnimate);
@@ -77,13 +110,24 @@ export function AtlasApp() {
     if (viewer) viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ms));
   }, [viewer]);
 
-  // Selecting a memory also jumps the clock to its instant, so the globe's
-  // lighting/terminator ("sky follows the moment") tracks the chosen memory.
+  // Selecting a memory jumps the clock to its instant (so the terminator follows
+  // the moment) and flies the camera. `flownToRef` keeps the playback fly-through
+  // from immediately re-flying the same memory.
   const select = useCallback((m: AtlasMemory) => {
     setFocusedId(m.id);
+    flownToRef.current = m.id;
     scrub(m.timeMs);
     flyTo(m);
   }, [flyTo, scrub]);
+
+  const pause = useCallback(() => {
+    if (viewer) viewer.clock.shouldAnimate = false;
+    setPlaying(false);
+  }, [viewer]);
+
+  // A user-initiated jump: select + pause, so the camera settles on the memory
+  // instead of the playback fly-through carrying on.
+  const inspect = useCallback((m: AtlasMemory) => { select(m); pause(); }, [select, pause]);
 
   const togglePlay = useCallback(() => {
     if (!viewer) { setPlaying((p) => !p); return; }
@@ -100,41 +144,88 @@ export function AtlasApp() {
     const next = dir === 1
       ? sorted.find((m) => m.timeMs > currentMs) ?? sorted[sorted.length - 1]
       : [...sorted].reverse().find((m) => m.timeMs < currentMs) ?? sorted[0];
-    if (next) select(next);
-  }, [model, currentMs, select]);
+    if (next) inspect(next);
+  }, [model, currentMs, inspect]);
+
+  // The scrubber flies the camera *along the route*: while playing, as the clock
+  // crosses each memory, fly to it and focus it (the inspector follows too).
+  useEffect(() => {
+    if (!viewer || !model || !playing || !introDone.current) return;
+    const passed = lastPassed(model.memories, currentMs);
+    if (passed && passed.id !== flownToRef.current) {
+      flownToRef.current = passed.id;
+      setFocusedId(passed.id);
+      flyTo(passed);
+    }
+  }, [currentMs, playing, viewer, model, flyTo]);
 
   // Open *on the memories*: once the viewer + model are both ready, frame the
   // first memory and set the clock to its moment (so its region is lit, not the
-  // default empty night hemisphere). Runs exactly once.
-  const introDone = useRef(false);
+  // default empty night hemisphere), then let playback carry the journey. Once.
   useEffect(() => {
     if (!viewer || !model || introDone.current) return;
     const first = model.memories[0];
     if (first) { introDone.current = true; select(first); }
   }, [viewer, model, select]);
 
+  // ⌘K / Ctrl-K toggles the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, []);
+
+  const share = useCallback(() => {
+    try { void navigator.clipboard?.writeText(window.location.href); } catch { /* ignore */ }
+  }, []);
+
+  // Stable close handlers so overlay effects (e.g. Lightbox's Escape listener)
+  // don't re-subscribe on every ~240ms clock-driven re-render.
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
+
   if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
   if (error || !model || !story) {
     return <div className="atlas-boot"><div className="msg"><strong>Couldn’t load a story.</strong><span>{error ?? 'Append ?story=<url> to view one.'}</span></div></div>;
   }
 
+  const isGlobe = view === 'globe';
+
   return (
     <div className="atlas-app">
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
-      <Rail />
-      <TopBar view={view} onView={setView} />
+      <Rail view={view} onView={setView} onSearch={() => setPaletteOpen(true)} />
+      <TopBar view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onShare={share} />
       <main className="atlas-stage">
-        <CesiumStoryViewer story={story} onViewer={setViewer} />
-        <GridHorizon />
-        <div className="atlas-overlay">
-          <StatsRibbon stats={model.stats} />
-          <PlaceChip memory={focused} />
-          <ScrapbookFrames memories={model.memories} onSelect={select} />
-          <Legend />
-        </div>
+        <CesiumStoryViewer
+          story={story}
+          memories={model.memories}
+          focusedId={focused?.id ?? null}
+          onViewer={setViewer}
+          onPick={inspect}
+          onHover={setHoveredId}
+          onInteract={pause}
+        />
+        {isGlobe && <GridHorizon />}
+        {isGlobe && (
+          <div className="atlas-overlay">
+            <StatsRibbon stats={model.stats} />
+            <PlaceChip memory={currentPlace} />
+            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} />
+            <Legend />
+          </div>
+        )}
+        {!isGlobe && (
+          <AltView view={view} memories={model.memories} focusedId={focused?.id ?? null} onSelect={inspect} />
+        )}
       </main>
-      <MemoryInspector memory={focused} related={related} onFly={select} />
+      {isGlobe && <MemoryInspector memory={focused} related={related} onFly={inspect} onExpand={() => focused && setLightbox(focused)} />}
       <TimeMachine
         model={model}
         currentMs={currentMs || model.timeline.startMs}
@@ -143,6 +234,14 @@ export function AtlasApp() {
         onScrub={scrub}
         onStep={step}
       />
+      <CommandPalette
+        open={paletteOpen}
+        memories={model.memories}
+        onClose={closePalette}
+        onSelect={(m) => { inspect(m); closePalette(); }}
+        onView={(v) => { setView(v); closePalette(); }}
+      />
+      <Lightbox memory={lightbox} onClose={closeLightbox} />
     </div>
   );
 }
