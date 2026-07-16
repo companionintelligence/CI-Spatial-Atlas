@@ -28,7 +28,7 @@ function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
  * Time Machine scrubber wired to the Cesium `Clock`. See docs/REDESIGN.md.
  */
 export function AtlasApp() {
-  const { story, error, loading } = useStory();
+  const { story, error, loading, source } = useStory();
   const model = useMemo(() => (story ? deriveModel(story) : null), [story]);
 
   // Reduced-motion gates the app's dominant motion (time autoplay + camera
@@ -84,6 +84,11 @@ export function AtlasApp() {
     setCurrentMs(Cesium.JulianDate.toDate(clock.currentTime).getTime());
     setPlaying(clock.shouldAnimate);
     const onTick = () => {
+      // At the end, actually stop — CLAMPED holds currentTime at stopTime but
+      // leaves shouldAnimate true, which makes the scrubber snap back to the end.
+      if (clock.shouldAnimate && Cesium.JulianDate.greaterThanOrEquals(clock.currentTime, clock.stopTime)) {
+        clock.shouldAnimate = false;
+      }
       const now = performance.now();
       if (now - lastSync.current < 240) return;
       lastSync.current = now;
@@ -129,10 +134,33 @@ export function AtlasApp() {
   // instead of the playback fly-through carrying on.
   const inspect = useCallback((m: AtlasMemory) => { select(m); pause(); }, [select, pause]);
 
+  // "Fit all places": frame the camera on every located memory at once.
+  const frameAll = useCallback(() => {
+    setView('globe');
+    if (!viewer || !model) return;
+    const positions = model.memories
+      .filter((m) => m.lat != null && m.lon != null)
+      .map((m) => Cesium.Cartesian3.fromDegrees(m.lon!, m.lat!));
+    if (positions.length === 0) return;
+    pause();
+    const sphere = Cesium.BoundingSphere.fromPoints(positions);
+    void viewer.camera.flyToBoundingSphere(sphere, {
+      duration: reduceMotion ? 0 : 1.6,
+      offset: new Cesium.HeadingPitchRange(0, -Math.PI / 3, Math.max(2_000_000, sphere.radius * 3)),
+    });
+  }, [viewer, model, reduceMotion, pause]);
+
   const togglePlay = useCallback(() => {
     if (!viewer) { setPlaying((p) => !p); return; }
-    viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
-    setPlaying(viewer.clock.shouldAnimate);
+    const clock = viewer.clock;
+    // Pressing play at the end replays from the start.
+    if (!clock.shouldAnimate && Cesium.JulianDate.greaterThanOrEquals(clock.currentTime, clock.stopTime)) {
+      clock.currentTime = Cesium.JulianDate.clone(clock.startTime);
+      flownToRef.current = null;
+      setCurrentMs(Cesium.JulianDate.toDate(clock.startTime).getTime());
+    }
+    clock.shouldAnimate = !clock.shouldAnimate;
+    setPlaying(clock.shouldAnimate);
   }, [viewer]);
 
   // Prev/Next move to the memory bracketing the playhead: Next → first memory
@@ -200,8 +228,8 @@ export function AtlasApp() {
     <div className="atlas-app">
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
-      <Rail view={view} onView={setView} onSearch={() => setPaletteOpen(true)} />
-      <TopBar view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onShare={share} />
+      <Rail view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onFrameAll={frameAll} />
+      <TopBar view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onShare={share} live={source === 'memory'} />
       <main className="atlas-stage">
         <CesiumStoryViewer
           story={story}

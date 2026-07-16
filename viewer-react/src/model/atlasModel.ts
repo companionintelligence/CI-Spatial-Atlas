@@ -107,7 +107,7 @@ export function deriveModel(story: Story): AtlasModel {
   // Index media + tags by location so scene-memories can pick up the real photo
   // and entity tags that sit at the same coordinate (the CI-Server shape: a
   // memory scene + its media entity share a place).
-  const byLoc = new Map<string, { media?: AtlasMedia; tags?: string[] }>();
+  const byLoc = new Map<string, { media?: AtlasMedia; tags?: string[]; place?: string }>();
   for (const e of entities) {
     const pos = 'position' in e ? e.position : undefined;
     if (!pos) continue;
@@ -121,6 +121,14 @@ export function deriveModel(story: Story): AtlasModel {
     }
     if (e.tags?.length) cur.tags = e.tags;
     byLoc.set(locKey(pos.lat, pos.lon), cur);
+  }
+  // Real place labels ride on the source media (a memory event's `locationName`).
+  for (const mi of story.media ?? []) {
+    if (mi.location && mi.locationName) {
+      const cur = byLoc.get(locKey(mi.location.lat, mi.location.lon)) ?? {};
+      cur.place = mi.locationName;
+      byLoc.set(locKey(mi.location.lat, mi.location.lon), cur);
+    }
   }
   const extraFor = (lat?: number, lon?: number) =>
     lat != null && lon != null ? byLoc.get(locKey(lat, lon)) : undefined;
@@ -140,7 +148,7 @@ export function deriveModel(story: Story): AtlasModel {
       ...solarLocal(t, loc?.lon),
       lat: loc?.lat,
       lon: loc?.lon,
-      place: sc.title,
+      place: extra?.place ?? sc.title,
       gradient: GRADIENTS[i % GRADIENTS.length]!,
       media: extra?.media,
       tags: extra?.tags,
@@ -151,13 +159,13 @@ export function deriveModel(story: Story): AtlasModel {
   // authored scenes — project those entities into memories so every memory
   // surface (scrapbook / inspector / time-machine / globe) still populates.
   if (memories.length === 0) {
-    const located: { id: string; title?: string; description?: string; lat: number; lon: number; ms: number; media?: AtlasMedia; tags?: string[] }[] = [];
+    const located: { id: string; title?: string; description?: string; place?: string; lat: number; lon: number; ms: number; media?: AtlasMedia; tags?: string[] }[] = [];
     for (const e of entities) {
       const pos = 'position' in e ? e.position : undefined;
       const ms = timeSpecMs(e.time);
       if (pos && Number.isFinite(ms)) {
         const extra = extraFor(pos.lat, pos.lon);
-        located.push({ id: e.id, title: e.title, description: e.description, lat: pos.lat, lon: pos.lon, ms, media: extra?.media, tags: extra?.tags ?? e.tags });
+        located.push({ id: e.id, title: e.title, description: e.description, place: extra?.place, lat: pos.lat, lon: pos.lon, ms, media: extra?.media, tags: extra?.tags ?? e.tags });
       }
     }
     located.sort((a, b) => a.ms - b.ms);
@@ -169,7 +177,7 @@ export function deriveModel(story: Story): AtlasModel {
       ...solarLocal(x.ms, x.lon),
       lat: x.lat,
       lon: x.lon,
-      place: x.title,
+      place: x.place ?? x.title ?? `Memory ${i + 1}`,
       gradient: GRADIENTS[i % GRADIENTS.length]!,
       media: x.media,
       tags: x.tags,

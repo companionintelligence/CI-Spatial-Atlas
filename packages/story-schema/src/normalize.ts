@@ -165,7 +165,7 @@ export function mediaToEntities(m: MediaItem): Item[] {
   const out: Item[] = [];
 
   if (m.kind === 'video') {
-    out.push({ id: m.id, type: 'video', position: m.location, time, source, media: { url: m.uri, posterUrl: m.thumbnailUri, thumbnailUrl: m.thumbnailUri } });
+    out.push({ id: m.id, type: 'video', position: m.location, time, source, title: m.caption, description: m.description, media: { url: m.uri, posterUrl: m.thumbnailUri, thumbnailUrl: m.thumbnailUri } });
   } else if (m.kind === 'gaussian-splat') {
     out.push({ id: m.id, type: 'splat', position: m.location, time, source, tileset: m.derived3d?.uri ?? m.uri });
   } else if (m.kind === 'pointcloud') {
@@ -179,7 +179,7 @@ export function mediaToEntities(m: MediaItem): Item[] {
     // image | image-set | pano360 → photo. Its reconstruction (if any) is
     // emitted below as a distinct entity, so it is NOT attached inline here
     // (attaching it too would double-count in the CZML converter).
-    out.push({ id: m.id, type: 'photo', position: m.location, time, source, heading: m.heading, media: { url: m.uri, thumbnailUrl: m.thumbnailUri } });
+    out.push({ id: m.id, type: 'photo', position: m.location, time, source, title: m.caption, description: m.description, heading: m.heading, media: { url: m.uri, thumbnailUrl: m.thumbnailUri } });
   }
 
   // A reconstruction attached to a 2D capture (photo/video) becomes its own

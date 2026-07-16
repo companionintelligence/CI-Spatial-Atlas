@@ -90,10 +90,12 @@ Status as of 2026-07-15 (Companion-Atlas PR #13): A/C delivered, B/D partial.
 - **Phase A — CI shell. ✅ delivered** (as a vendored-token reproduction). Icon rail + top bar +
   view switcher + ⌘K command palette, themed from vendored `@companionintelligence/tokens`.
   *Remaining:* adopt the real `@companionintelligence/ui` `AppShell`/`Command` components.
-- **Phase B — Memory data. ◐ partial.** The data spine runs on the unified `Story` via
-  `deriveModel`; pins + inspector + scrapbook derive from it, and real media/tags are plumbed
-  (`mediaThumb`/`mediaFull`, degrading to tints for non-http URLs). *Remaining:* bind to the live
-  CI-Server `search()` contract (`?view=globe`, `hasLocation:true`, `getEntityMedia`) at scale.
+- **Phase B — Memory data. ✅ delivered.** The viewer connects to a live CI-Server: `memoryToStory`
+  maps the located `search()` result (`includeTypes:["event"]`, `hasLocation:true`) into a Story, and
+  `fetchMemoryStory` does the transport with a Portal OIDC bearer / session cookie. Point the viewer
+  with `?memory=<ci-server-url>` (or `VITE_MEMORY_URL`) and the globe renders real memories — title,
+  narrative, place, time, and presigned media all flow through. *Remaining:* pagination past the
+  first page, bbox/time-window server-side filtering, and write-back (`createEvent`).
 - **Phase C — Time Machine. ✅ delivered.** Scrubber (density histogram + keyboard-operable playhead)
   driving the Cesium `Clock` via `storyToCzml`; sky-follows-the-moment lighting; journey arc,
   clock-driven traveler, camera fly-through; globe pin click/hover picking.

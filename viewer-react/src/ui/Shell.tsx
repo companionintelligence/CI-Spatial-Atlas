@@ -5,21 +5,27 @@ import {
 
 export type AtlasView = 'globe' | 'gallery' | 'timeline' | 'graph';
 
-/** Left icon rail — Globe navigates; Places/People/Collections/Search open the
- *  command palette (the browse/search surface). */
-export function Rail({ view, onView, onSearch }: { view: AtlasView; onView: (v: AtlasView) => void; onSearch: () => void }) {
+/** Left icon rail. Globe navigates home; Places fits the camera to every memory;
+ *  Search opens ⌘K. People/Collections are honest placeholders until those
+ *  memory facets land. */
+export function Rail({ view, onView, onSearch, onFrameAll }: {
+  view: AtlasView;
+  onView: (v: AtlasView) => void;
+  onSearch: () => void;
+  onFrameAll: () => void;
+}) {
   const items = [
     { key: 'globe', label: 'Globe', Icon: GlobeIcon, onClick: () => onView('globe'), active: view === 'globe' },
-    { key: 'places', label: 'Places', Icon: PinIcon, onClick: onSearch },
-    { key: 'people', label: 'People', Icon: PeopleIcon, onClick: onSearch },
-    { key: 'collections', label: 'Collections', Icon: LayersIcon, onClick: onSearch },
+    { key: 'places', label: 'Fit all places', Icon: PinIcon, onClick: onFrameAll },
+    { key: 'people', label: 'People (coming soon)', Icon: PeopleIcon, disabled: true },
+    { key: 'collections', label: 'Collections (coming soon)', Icon: LayersIcon, disabled: true },
     { key: 'search', label: 'Search', Icon: SparkIcon, onClick: onSearch },
   ];
   return (
     <nav className="atlas-rail" aria-label="Primary">
       <BrandMark className="atlas-mark" />
-      {items.map(({ key, label, Icon, onClick, active }) => (
-        <button key={key} className={`atlas-rail-btn${active ? ' active' : ''}`} title={label} aria-label={label} aria-current={active ? 'page' : undefined} onClick={onClick}>
+      {items.map(({ key, label, Icon, onClick, active, disabled }) => (
+        <button key={key} className={`atlas-rail-btn${active ? ' active' : ''}`} title={label} aria-label={label} aria-current={active ? 'page' : undefined} onClick={onClick} disabled={disabled}>
           <Icon />
         </button>
       ))}
@@ -31,7 +37,7 @@ export function Rail({ view, onView, onSearch }: { view: AtlasView; onView: (v: 
 }
 
 /** Top bar — wordmark, view switcher, ⌘K search, share. */
-export function TopBar({ view, onView, onSearch, onShare }: { view: AtlasView; onView: (v: AtlasView) => void; onSearch: () => void; onShare: () => void }) {
+export function TopBar({ view, onView, onSearch, onShare, live }: { view: AtlasView; onView: (v: AtlasView) => void; onSearch: () => void; onShare: () => void; live?: boolean }) {
   const tabs: { key: AtlasView; label: string; Icon: typeof GlobeIcon }[] = [
     { key: 'globe', label: 'Globe', Icon: GlobeIcon },
     { key: 'gallery', label: 'Gallery', Icon: ImagesIcon },
@@ -41,6 +47,7 @@ export function TopBar({ view, onView, onSearch, onShare }: { view: AtlasView; o
   return (
     <header className="atlas-top">
       <div className="atlas-wordmark"><b>Companion&nbsp;Atlas</b><span>your memories in space &amp; time</span></div>
+      {live && <span className="atlas-live" title="Connected to Companion Memory"><i />Live memory</span>}
       <div className="switch" role="group" aria-label="View">
         {tabs.map(({ key, label, Icon }) => (
           <button key={key} aria-pressed={view === key} className={view === key ? 'active' : ''} onClick={() => onView(key)}>

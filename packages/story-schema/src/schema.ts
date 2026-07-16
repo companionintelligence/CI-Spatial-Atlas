@@ -160,6 +160,10 @@ export const MediaItem = z.object({
   uri: z.string(),
   thumbnailUri: z.string().optional(),
   caption: z.string().optional(),
+  /** Longer narrative (e.g. a memory event's description). */
+  description: z.string().optional(),
+  /** Human place label (e.g. a memory event's `locationName`). */
+  locationName: z.string().optional(),
   capturedAt: Iso8601.optional(),
   location: GeoPoint.optional(),
   heading: z.number().optional(),

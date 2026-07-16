@@ -15,8 +15,8 @@
  * Kept free of `fetch` so every mapping is unit-tested; the server connector
  * (`server/src/connectors.ts`) does the transport with a Portal OIDC bearer.
  */
-import type { GeoPoint, MediaItem, Story } from './schema.js';
-import { storyEntities, timelineBounds } from './normalize.js';
+import { STORY_SCHEMA_ID, type GeoPoint, type MediaItem, type Story } from './schema.js';
+import { loadStory, storyEntities, timelineBounds } from './normalize.js';
 
 /** Located media memories, chronological, paginated. `query:""` takes CI-Server's
  *  "timed" path; `includeTypes:["event"]` + `hasLocation:true` restricts to
@@ -162,6 +162,8 @@ export function mediaItemsFromMemory(result: unknown, opts: MemoryMapOptions = {
       uri: media ?? thumb ?? '',
       thumbnailUri: thumb,
       caption: node.title ?? node.locationName ?? undefined,
+      description: node.description ?? undefined,
+      locationName: node.locationName ?? undefined,
       capturedAt: node.startTime ?? undefined,
       location,
       sourceMemoryId: node.id,
@@ -172,6 +174,35 @@ export function mediaItemsFromMemory(result: unknown, opts: MemoryMapOptions = {
     });
   }
   return items;
+}
+
+/**
+ * Build a canonical `Story` from a raw CI-Server `search()` result — the read
+ * path that lets the globe render **live Companion Memory**. Each located media
+ * event becomes a `MediaItem` (which `deriveModel` projects into a memory pin +
+ * inspector card); the clock window is derived from their capture times. Pass
+ * `opts.origin` so relative presigned media URLs resolve against the server.
+ */
+export function memoryToStory(
+  result: unknown,
+  opts: MemoryMapOptions & { id?: string; title?: string } = {},
+): Story {
+  const media = mediaItemsFromMemory(result, opts);
+  const times = media
+    .map((m) => (m.capturedAt ? Date.parse(m.capturedAt) : NaN))
+    .filter((n) => !Number.isNaN(n))
+    .sort((a, b) => a - b);
+  const timeline = times.length
+    ? { start: new Date(times[0]!).toISOString(), stop: new Date(times[times.length - 1]!).toISOString() }
+    : undefined;
+  return loadStory({
+    schema: STORY_SCHEMA_ID,
+    id: opts.id ?? 'companion-memory',
+    title: opts.title ?? 'Companion Memory',
+    ...(timeline ? { timeline } : {}),
+    media,
+    scenes: [],
+  });
 }
 
 /** The `$input` for the `createEvent` write-back mutation, built from a story. */

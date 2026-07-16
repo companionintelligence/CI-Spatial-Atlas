@@ -107,6 +107,9 @@ export function CesiumStoryViewer({
       v.scene.globe.enableLighting = true;
       v.scene.fog.enabled = true;
       if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
+      // Render the globe at device resolution (crisp on HiDPI), capped for perf.
+      v.useBrowserRecommendedResolution = false;
+      v.resolutionScale = Math.min(2, window.devicePixelRatio || 1);
 
       // Picking: click/hover a memory pin → map its id back to the AtlasMemory.
       handler = new Cesium.ScreenSpaceEventHandler(v.scene.canvas);
