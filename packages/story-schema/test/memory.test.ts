@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mediaItemsFromMemory, readGeoJsonPoint, createEventInputFromStory, loadStory } from '../src/index.js';
+import { mediaItemsFromMemory, memoryToStory, readGeoJsonPoint, createEventInputFromStory, loadStory, storyEntities } from '../src/index.js';
 import atlas from './fixtures/atlas-story.json';
 
 const sampleResult = {
@@ -72,6 +72,31 @@ describe('mediaItemsFromMemory', () => {
   it('returns [] for a shapeless result', () => {
     expect(mediaItemsFromMemory({})).toEqual([]);
     expect(mediaItemsFromMemory(null)).toEqual([]);
+  });
+});
+
+describe('memoryToStory (read path)', () => {
+  it('builds a renderable Story from a search() result, absolutizing media and deriving the clock', () => {
+    const story = memoryToStory(sampleResult, { origin: 'https://ci-server.localhost' });
+    expect(story.schema).toBe('companion.atlas/story@1');
+    expect(story.title).toBe('Companion Memory');
+    // two located media survive (null-island + FileType dropped)
+    expect(story.media!.length).toBe(2);
+    // clock window spans the media capture times
+    expect(story.timeline!.start).toBe('2026-05-09T09:14:00.000Z');
+    expect(story.timeline!.stop).toBe('2026-05-09T10:00:00.000Z');
+    // media URLs absolutized against the server origin
+    expect(story.media![0]!.thumbnailUri).toBe('https://ci-server.localhost/companion/x_thumb.jpg?sig=1');
+
+    // deriveModel's entity fallback turns these into renderable located memories
+    const entities = storyEntities(story);
+    expect(entities.filter((e) => 'position' in e && e.position).length).toBe(2);
+  });
+
+  it('produces an empty (but valid) Story from a shapeless result', () => {
+    const story = memoryToStory({});
+    expect(story.media).toEqual([]);
+    expect(story.scenes).toEqual([]);
   });
 });
 

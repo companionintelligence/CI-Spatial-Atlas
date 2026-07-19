@@ -61,7 +61,7 @@ Type: **Montserrat** (CI canon) + a mono for coordinates/timestamps. Iconography
 | **Backdrop** | space + drifting glows behind the globe | `GradientBackground` (literally "deep teal-navy + mint/cyan glows") | — |
 | **The globe** | photoreal Cesium Earth; memory **pins**, clusters, **journey arc** | Cesium (Resium) inside `AppShell` `<main>`; markers mirror `entityVisuals` | `locationCoordinates`, route = time-ordered `routeLocations` |
 | **Place chip** | current focus + coordinates | `Badge`/glass chip | `locationName`, coords |
-| **Scrapbook frames** | floating photo cards anchored to place | `Card` / `Carousel` (echoes lifescope diorama ring) | `previewUrl`, `eventDisplayTitle`, time |
+| **Scrapbook frames** | floating photo cards for the memories in the time window around the playhead (place-anchoring to each pin is Phase D) | `Card` / `Carousel` (echoes lifescope diorama ring) | `previewUrl`, `eventDisplayTitle`, time |
 | **Memory inspector** | selected memory detail | `Drawer` / `Sheet` (= CI-Server `EntityDetails`) | full `EventType` + tags + related |
 | **Time Machine** (hero) | density histogram + **scrubber** that flies the camera along the route and filters by date; **sky follows the moment** | net-new (seed: `BlendTimeline`); drives Cesium `Clock` | bucketed `startTime` (`groupEntitiesByBucket`) |
 | **Stats ribbon** | memories / places / years | `StatCard` | query aggregates |
@@ -85,16 +85,24 @@ Type: **Montserrat** (CI canon) + a mono for coordinates/timestamps. Iconography
 
 ## 6. Build plan (phased, targets `viewer-react` — the canonical Resium viewer)
 
-- **Phase A — CI shell.** Add `@companionintelligence/ui` + `tokens` (GitHub Packages) or vendor.
-  Replace bespoke chrome with `AppShell` + `GradientBackground` + `PageHeader`; wire `ThemeProvider`
-  (dark), `Logo`, `Command`. *Deliverable: the redesigned frame around the existing globe.*
-- **Phase B — Memory data.** Mount on the CI-Server `search()` contract (`?view=globe`,
-  `hasLocation:true`); reuse `mapCoordinates`/`getEntityMedia`; render pins + inspector `Drawer`
-  from real `EventType` records. Extends the ported `mediaItemsFromMemory`.
-- **Phase C — Time Machine.** The scrubber (density histogram + playhead) driving the Cesium
-  `Clock` via `storyToCzml`; sky-follows-the-moment lighting; journey arc + fly-through.
-- **Phase D — Scrapbook + scale.** Globe-anchored photo frames + `MediaLightbox`; `scaleBy/recenter`
-  god↔human scale; then the R3F/XR immersive path (in-world `XRControlPanel` tiles, companion guide).
+Status as of 2026-07-15 (Companion-Atlas PR #13): A/C delivered, B/D partial.
+
+- **Phase A — CI shell. ✅ delivered** (as a vendored-token reproduction). Icon rail + top bar +
+  view switcher + ⌘K command palette, themed from vendored `@companionintelligence/tokens`.
+  *Remaining:* adopt the real `@companionintelligence/ui` `AppShell`/`Command` components.
+- **Phase B — Memory data. ✅ delivered.** The viewer connects to a live CI-Server: `memoryToStory`
+  maps the located `search()` result (`includeTypes:["event"]`, `hasLocation:true`) into a Story, and
+  `fetchMemoryStory` does the transport with a Portal OIDC bearer / session cookie. Point the viewer
+  with `?memory=<ci-server-url>` (or `VITE_MEMORY_URL`) and the globe renders real memories — title,
+  narrative, place, time, and presigned media all flow through. *Remaining:* pagination past the
+  first page, bbox/time-window server-side filtering, and write-back (`createEvent`).
+- **Phase C — Time Machine. ✅ delivered.** Scrubber (density histogram + keyboard-operable playhead)
+  driving the Cesium `Clock` via `storyToCzml`; sky-follows-the-moment lighting; journey arc,
+  clock-driven traveler, camera fly-through; globe pin click/hover picking.
+- **Phase D — Scrapbook + scale. ◐ partial.** Time-window scrapbook + `Lightbox` delivered, plus the
+  Gallery/Timeline/Graph alternate views. *Remaining:* place-anchor each frame to its pin
+  (`SceneTransforms.worldToWindowCoordinates` + connector); `scaleBy/recenter` god↔human scale; then
+  the R3F/XR immersive path (in-world `XRControlPanel` tiles, companion guide).
 
 Retire the vanilla `src/` viewer once `viewer-react` reaches parity.
 

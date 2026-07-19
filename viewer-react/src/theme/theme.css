@@ -29,17 +29,3 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
-
-/* App shell states (AtlasApp) */
-.atlas-loading,
-.atlas-error,
-.atlas-empty {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  font-weight: 500;
-  color: var(--muted-foreground);
-}
-.atlas-error {
-  color: var(--destructive);
-}

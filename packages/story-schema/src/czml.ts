@@ -46,6 +46,11 @@ function iso(d: string): string {
   return Number.isNaN(t.getTime()) ? d : t.toISOString();
 }
 
+/** Cesium's billboard can only load real (http/data) images. A non-loadable URI
+ *  (e.g. `ci-memory://…` before it's resolved) must NOT be set as a billboard
+ *  image — Cesium's fetchImage rejects the scheme and logs a console error. */
+const isLoadableImage = (u: string | undefined): u is string => !!u && /^(https?:|data:|blob:)/i.test(u);
+
 /** A TimeSpec → CZML availability interval, defaulting to the doc interval. */
 function availability(time: TimeSpec | undefined, docInterval: string): string {
   if (!time) return docInterval;
@@ -57,10 +62,25 @@ function availability(time: TimeSpec | undefined, docInterval: string): string {
   return docInterval;
 }
 
+/** A journey should take roughly this long to play back, whatever its real span:
+ *  a fixed multiplier blows a 70-minute trip past in seconds and makes a decade
+ *  crawl. Authored `timeline.multiplier` still wins. */
+const PLAYBACK_SECONDS = 45;
+
+function pacedMultiplier(startIso: string, stopIso: string): number {
+  const spanSec = (Date.parse(stopIso) - Date.parse(startIso)) / 1000;
+  if (!Number.isFinite(spanSec) || spanSec <= 0) return 1;
+  return Math.max(1, spanSec / PLAYBACK_SECONDS);
+}
+
 export function storyToCzml(story: Story): CzmlResult {
   const bounds = timelineBounds(story);
   const docInterval = `${iso(bounds.start)}/${iso(bounds.stop)}`;
 
+  // NOTE: Cesium copies this document clock onto the viewer *every time* the
+  // data source loads (trackDataSourceClock), so the pacing and range have to
+  // live here. Patching `viewer.clock` after mount silently reverts on the next
+  // story swap — which is what made curated journeys loop forever at 600x.
   const documentPacket: CzmlPacket = {
     id: 'document',
     name: story.title,
@@ -68,8 +88,9 @@ export function storyToCzml(story: Story): CzmlResult {
     clock: {
       interval: docInterval,
       currentTime: iso(story.timeline?.current ?? bounds.start),
-      multiplier: story.timeline?.multiplier ?? 3600,
-      range: story.timeline?.loop === false ? 'CLAMPED' : 'LOOP_STOP',
+      multiplier: story.timeline?.multiplier ?? pacedMultiplier(bounds.start, bounds.stop),
+      // Play the journey once and stop; only loop when the story asks to.
+      range: story.timeline?.loop === true ? 'LOOP_STOP' : 'CLAMPED',
       step: 'SYSTEM_CLOCK_MULTIPLIER',
     },
   };
@@ -89,8 +110,9 @@ export function storyToCzml(story: Story): CzmlResult {
           description: mediaCardHtml(item),
           availability: availability(item.time, docInterval),
           position: { cartographicDegrees: [pos.lon, pos.lat, pos.height ?? 0] },
-          // A billboard needs an image; without one, still place the entity as a point.
-          ...(img
+          // A billboard needs a *loadable* image; otherwise place a point so an
+          // unresolved URI (ci-memory://…) doesn't trigger a fetch error.
+          ...(isLoadableImage(img)
             ? { billboard: { image: img, scale: 0.5, verticalOrigin: 'BOTTOM' } }
             : { point: { pixelSize: 10, color: cssToRgba('#39c0ff') } }),
         });

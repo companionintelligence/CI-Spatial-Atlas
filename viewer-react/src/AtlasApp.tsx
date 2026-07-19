@@ -1,22 +1,78 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
+import { buildScrapbookStory, curateJourney, type ScrapbookEntry, type Story } from '@companion-atlas/story';
 import { useStory } from './story/useStory.js';
 import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
-import { deriveModel, type AtlasMemory } from './model/atlasModel.js';
+import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
 import { Rail, TopBar, type AtlasView } from './ui/Shell.js';
 import { Starfield, GridHorizon } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
 import { TimeMachine } from './ui/TimeMachine.js';
+import { AltView } from './ui/AltViews.js';
+import { CommandPalette } from './ui/CommandPalette.js';
+import { Lightbox } from './ui/Lightbox.js';
+import { useScrapbook } from './scrapbook/useScrapbook.js';
+import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
+import { PeoplePanel, groupByPerson, type PersonGroup } from './ui/PeoplePanel.js';
+import { saveStoryToMemory } from './memory/client.js';
+
+/** The last memory whose time is at or before `ms` (the segment being played). */
+function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
+  const sorted = [...memories].sort((a, b) => a.timeMs - b.timeMs);
+  let r: AtlasMemory | null = sorted[0] ?? null;
+  for (const m of sorted) {
+    if (m.timeMs <= ms) r = m; else break;
+  }
+  return r;
+}
+
+/** How long a journey should take to play back, whatever its real span. */
+const PLAYBACK_SECONDS = 45;
 
 /**
- * Companion Atlas — the redesigned shell. A CI-branded frame (rail + top bar)
- * around the Cesium memory globe, with a right memory inspector and the bottom
- * Time Machine scrubber wired to the Cesium `Clock`. See docs/REDESIGN.md.
+ * The current URL with credentials stripped. `?token=` is a bearer token and
+ * `?memory=` is a private server address — neither belongs on the clipboard or
+ * persisted into a household-visible event's `metadata.shareUrl`.
+ */
+function safeShareUrl(): string {
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.delete('token');
+    u.searchParams.delete('memory');
+    return u.toString();
+  } catch {
+    return window.location.origin;
+  }
+}
+
+const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
+  id: m.id,
+  title: m.title,
+  narrative: m.narrative,
+  place: m.place,
+  timeMs: m.timeMs,
+  lat: m.lat,
+  lon: m.lon,
+  people: m.people,
+  media: m.media,
+});
+
+/**
+ * Companion Atlas — a social scrapbook and memory time machine. A CI-branded
+ * frame around the Cesium memory globe: collect memories into a scrapbook, let
+ * the Companion curate them into a journey, play it through time, and save it
+ * back into Companion Memory (which is what shares it). See docs/REDESIGN.md.
  */
 export function AtlasApp() {
-  const { story, error, loading } = useStory();
+  const { story: loadedStory, error, loading, source, memory } = useStory();
+
+  // A curated scrapbook journey temporarily takes over the globe; the loaded
+  // story stays the base the scrapbook collects against.
+  const [journey, setJourney] = useState<Story | null>(null);
+  const story = journey ?? loadedStory;
   const model = useMemo(() => (story ? deriveModel(story) : null), [story]);
+  const baseModel = useMemo(() => (loadedStory ? deriveModel(loadedStory) : null), [loadedStory]);
 
   // Reduced-motion gates the app's dominant motion (time autoplay + camera
   // flights), not just the starfield.
@@ -30,7 +86,24 @@ export function AtlasApp() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(!reduceMotion);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<AtlasMemory | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sbOpen, setSbOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
   const lastSync = useRef(0);
+  const flownToRef = useRef<string | null>(null);
+  const introDone = useRef(false);
+  const lightboxRef = useRef<AtlasMemory | null>(null);
+  lightboxRef.current = lightbox;
+  /** journey scene id → base memory id, for the currently playing journey. */
+  const journeyMapRef = useRef(new Map<string, string>());
+
+  // Scope the draft to the story it collects from — memory ids only mean
+  // something within one story, so a global draft counted memories the current
+  // story can't resolve.
+  const sb = useScrapbook(loadedStory?.id ?? null);
 
   const focused: AtlasMemory | null = useMemo(() => {
     if (!model) return null;
@@ -42,6 +115,29 @@ export function AtlasApp() {
     [model, focused],
   );
 
+  // The scrapbook always collects against the *base* story, so a draft survives
+  // playing a journey built from it.
+  const sbEntries = useMemo(() => {
+    if (!baseModel) return [];
+    return sb.draft.memoryIds
+      .map((id) => baseModel.memories.find((m) => m.id === id))
+      .filter((m): m is AtlasMemory => !!m);
+  }, [baseModel, sb.draft.memoryIds]);
+
+  const peopleGroups = useMemo(() => (baseModel ? groupByPerson(baseModel.memories) : []), [baseModel]);
+
+  // Overlays that follow the clock: the scrapbook shows the memories nearest the
+  // playhead and the place chip names the current place, so scrubbing/playing
+  // repopulates them.
+  const scrapbook = useMemo(
+    () => (model ? memoriesAround(model.memories, currentMs, 3) : []),
+    [model, currentMs],
+  );
+  const currentPlace = useMemo(
+    () => (model ? nearestMemory(model.memories, currentMs) : null),
+    [model, currentMs],
+  );
+
   // Sync React state from the Cesium clock (throttled) so the Time Machine + the
   // "sky follows the moment" readout track playback.
   useEffect(() => {
@@ -51,6 +147,11 @@ export function AtlasApp() {
     setCurrentMs(Cesium.JulianDate.toDate(clock.currentTime).getTime());
     setPlaying(clock.shouldAnimate);
     const onTick = () => {
+      // At the end, actually stop — CLAMPED holds currentTime at stopTime but
+      // leaves shouldAnimate true, which makes the scrubber snap back to the end.
+      if (clock.shouldAnimate && Cesium.JulianDate.greaterThanOrEquals(clock.currentTime, clock.stopTime)) {
+        clock.shouldAnimate = false;
+      }
       const now = performance.now();
       if (now - lastSync.current < 240) return;
       lastSync.current = now;
@@ -62,6 +163,31 @@ export function AtlasApp() {
       clock.onTick.removeEventListener(onTick);
     };
   }, [viewer, reduceMotion]);
+
+  // Apply the *current story's* clock explicitly. Cesium's automatic
+  // data-source clock tracking is off (the memory layer was stealing it, which
+  // left the viewer one story behind on every swap), so the app is the single
+  // owner of range/pacing/bounds — and it re-applies on each story change.
+  useEffect(() => {
+    if (!viewer || !model || !story) return;
+    const clock = viewer.clock;
+    const { startMs, stopMs } = model.timeline;
+    if (!Number.isFinite(startMs) || !Number.isFinite(stopMs)) return;
+    const start = Cesium.JulianDate.fromDate(new Date(startMs));
+    const stop = Cesium.JulianDate.fromDate(new Date(Math.max(stopMs, startMs + 1000)));
+    const spanSec = Math.max(1, (stopMs - startMs) / 1000);
+    clock.startTime = start;
+    clock.stopTime = stop;
+    // Only loop when the story asks to; otherwise play once and stop.
+    clock.clockRange = story.timeline?.loop === true ? Cesium.ClockRange.LOOP_STOP : Cesium.ClockRange.CLAMPED;
+    // Any journey — 70 minutes or 10 years — plays in ~PLAYBACK_SECONDS.
+    clock.multiplier = story.timeline?.multiplier ?? Math.max(1, spanSec / PLAYBACK_SECONDS);
+    // Clamp the playhead into the new story's window.
+    if (Cesium.JulianDate.lessThan(clock.currentTime, start) || Cesium.JulianDate.greaterThan(clock.currentTime, stop)) {
+      clock.currentTime = Cesium.JulianDate.clone(start);
+      setCurrentMs(startMs);
+    }
+  }, [viewer, model, story]);
 
   const flyTo = useCallback((m: AtlasMemory) => {
     if (!viewer || m.lat == null || m.lon == null) return;
@@ -77,18 +203,57 @@ export function AtlasApp() {
     if (viewer) viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ms));
   }, [viewer]);
 
-  // Selecting a memory also jumps the clock to its instant, so the globe's
-  // lighting/terminator ("sky follows the moment") tracks the chosen memory.
+  // Selecting a memory jumps the clock to its instant (so the terminator follows
+  // the moment) and flies the camera. `flownToRef` keeps the playback fly-through
+  // from immediately re-flying the same memory.
   const select = useCallback((m: AtlasMemory) => {
     setFocusedId(m.id);
+    flownToRef.current = m.id;
     scrub(m.timeMs);
     flyTo(m);
   }, [flyTo, scrub]);
 
+  const pause = useCallback(() => {
+    if (viewer) viewer.clock.shouldAnimate = false;
+    setPlaying(false);
+  }, [viewer]);
+
+  const play = useCallback(() => {
+    if (viewer) viewer.clock.shouldAnimate = true;
+    setPlaying(true);
+  }, [viewer]);
+
+  // A user-initiated jump: select + pause, so the camera settles on the memory
+  // instead of the playback fly-through carrying on.
+  const inspect = useCallback((m: AtlasMemory) => { select(m); pause(); }, [select, pause]);
+
+  // "Fit all places": frame the camera on every located memory at once.
+  const frameAll = useCallback(() => {
+    setView('globe');
+    if (!viewer || !model) return;
+    const positions = model.memories
+      .filter((m) => m.lat != null && m.lon != null)
+      .map((m) => Cesium.Cartesian3.fromDegrees(m.lon!, m.lat!));
+    if (positions.length === 0) return;
+    pause();
+    const sphere = Cesium.BoundingSphere.fromPoints(positions);
+    void viewer.camera.flyToBoundingSphere(sphere, {
+      duration: reduceMotion ? 0 : 1.6,
+      offset: new Cesium.HeadingPitchRange(0, -Math.PI / 3, Math.max(2_000_000, sphere.radius * 3)),
+    });
+  }, [viewer, model, reduceMotion, pause]);
+
   const togglePlay = useCallback(() => {
     if (!viewer) { setPlaying((p) => !p); return; }
-    viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
-    setPlaying(viewer.clock.shouldAnimate);
+    const clock = viewer.clock;
+    // Pressing play at the end replays from the start.
+    if (!clock.shouldAnimate && Cesium.JulianDate.greaterThanOrEquals(clock.currentTime, clock.stopTime)) {
+      clock.currentTime = Cesium.JulianDate.clone(clock.startTime);
+      flownToRef.current = null;
+      setCurrentMs(Cesium.JulianDate.toDate(clock.startTime).getTime());
+    }
+    clock.shouldAnimate = !clock.shouldAnimate;
+    setPlaying(clock.shouldAnimate);
   }, [viewer]);
 
   // Prev/Next move to the memory bracketing the playhead: Next → first memory
@@ -100,41 +265,232 @@ export function AtlasApp() {
     const next = dir === 1
       ? sorted.find((m) => m.timeMs > currentMs) ?? sorted[sorted.length - 1]
       : [...sorted].reverse().find((m) => m.timeMs < currentMs) ?? sorted[0];
-    if (next) select(next);
-  }, [model, currentMs, select]);
+    if (next) inspect(next);
+  }, [model, currentMs, inspect]);
+
+  // The scrubber flies the camera *along the route*: while playing, as the clock
+  // crosses each memory, fly to it and focus it (the inspector follows too).
+  useEffect(() => {
+    if (!viewer || !model || !playing || !introDone.current) return;
+    const passed = lastPassed(model.memories, currentMs);
+    if (passed && passed.id !== flownToRef.current) {
+      flownToRef.current = passed.id;
+      setFocusedId(passed.id);
+      flyTo(passed);
+    }
+  }, [currentMs, playing, viewer, model, flyTo]);
 
   // Open *on the memories*: once the viewer + model are both ready, frame the
   // first memory and set the clock to its moment (so its region is lit, not the
-  // default empty night hemisphere). Runs exactly once.
-  const introDone = useRef(false);
+  // default empty night hemisphere), then let playback carry the journey.
   useEffect(() => {
     if (!viewer || !model || introDone.current) return;
     const first = model.memories[0];
     if (first) { introDone.current = true; select(first); }
   }, [viewer, model, select]);
 
+  // ————— the scrapbook loop: collect → curate → play → save —————
+
+  // While a journey plays, its scenes are re-ids of base memories. Map back by
+  // membership (built when the journey is constructed) rather than by stripping
+  // an `sb-` prefix — the exporter names every scene `sb-<id>`, so a downloaded
+  // journey re-opened as the base story would have had its own ids mangled.
+  const toBaseId = useCallback((id: string) => journeyMapRef.current.get(id) ?? id, []);
+  const collected = useCallback((m: AtlasMemory) => sb.has(toBaseId(m.id)), [sb, toBaseId]);
+  const toggleCollect = useCallback((m: AtlasMemory) => {
+    const id = toBaseId(m.id);
+    if (sb.has(id)) sb.remove(id); else sb.add(id);
+  }, [sb, toBaseId]);
+
+  /** Hand the globe a story to fly through, and re-run the intro on it. Resumes
+   *  the clock: every route to collecting a memory pauses it (inspect = select +
+   *  pause), so without this the chip reads "Playing journey" while the globe
+   *  sits frozen on the first memory. */
+  const playStory = useCallback((s: Story, sources: AtlasMemory[]) => {
+    // Remember which base memory each journey scene came from.
+    journeyMapRef.current = new Map(s.scenes.map((sc, i) => [sc.id, sources[i]?.id ?? sc.id]));
+    introDone.current = false;
+    flownToRef.current = null;
+    setFocusedId(null);
+    setJourney(s);
+    setView('globe');
+    setSbOpen(false);
+    setPeopleOpen(false);
+    play();
+  }, [play]);
+
+  const exitJourney = useCallback(() => {
+    journeyMapRef.current = new Map();
+    introDone.current = false;
+    flownToRef.current = null;
+    setFocusedId(null);
+    setJourney(null);
+    play();
+  }, [play]);
+
+  const draftStory = useCallback(
+    (curated: boolean): Story | null => {
+      if (sbEntries.length === 0) return null;
+      const entries = sbEntries.map(toEntry);
+      const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
+      return curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
+    },
+    [sbEntries, sb.draft.visibility, sb.draft.title],
+  );
+
+  const curate = useCallback(() => {
+    const s = draftStory(true);
+    if (!s) return;
+    sb.setTitle(s.title);   // the Companion names the journey
+    sb.setCurated(true);    // …and save/download must keep its work
+    playStory(s, sbEntries);
+  }, [draftStory, sb, playStory, sbEntries]);
+
+  const playScrapbook = useCallback(() => {
+    const s = draftStory(sb.draft.curated);
+    if (s) playStory(s, sbEntries);
+  }, [draftStory, playStory, sb.draft.curated, sbEntries]);
+
+  const saveScrapbook = useCallback(async () => {
+    // Honour the curation: saving after "Curate with Companion" used to rebuild
+    // the raw story, throwing away the generated narratives *and* the agent
+    // provenance the curator stamped.
+    const s = draftStory(sb.draft.curated);
+    if (!s || !memory) return;
+    setSaveState({ s: 'saving' });
+    try {
+      const r = await saveStoryToMemory(memory, s, { shareUrl: safeShareUrl() });
+      setSaveState({ s: 'done', id: r.id, visibility: sb.draft.visibility });
+    } catch (e) {
+      setSaveState({ s: 'error', msg: e instanceof Error ? e.message : String(e) });
+    }
+  }, [draftStory, memory, sb.draft.curated, sb.draft.visibility]);
+
+  const downloadScrapbook = useCallback(() => {
+    const s = draftStory(sb.draft.curated);
+    if (!s) return;
+    const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(s.title || 'journey').replace(/[^\w.-]+/g, '-').toLowerCase()}.story.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [draftStory]);
+
+  // ⌘K / Ctrl-K toggles the command palette (never behind the lightbox, which
+  // sits above it — an invisible focused palette would steal keystrokes).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (lightboxRef.current) return;
+        setPaletteOpen((o) => !o);
+      }
+    };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, []);
+
+  const share = useCallback(() => {
+    try { void navigator.clipboard?.writeText(safeShareUrl()); } catch { /* ignore */ }
+  }, []);
+
+  // A "Saved" banner must not outlive the thing it described: editing the draft
+  // (or clearing it) invalidates the confirmation.
+  useEffect(() => { setSaveState({ s: 'idle' }); }, [sb.draft.memoryIds, sb.draft.title, sb.draft.visibility]);
+
+  const playPersonJourney = useCallback((g: PersonGroup) => {
+    const s = curateJourney(g.memories.map(toEntry), { title: `${g.label} — shared memories`, visibility: 'private' });
+    playStory(s, g.memories);
+  }, [playStory]);
+
+  // Stable close handlers so overlay effects (e.g. Lightbox's Escape listener)
+  // don't re-subscribe on every ~240ms clock-driven re-render.
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const closeScrapbook = useCallback(() => setSbOpen(false), []);
+  const closePeople = useCallback(() => setPeopleOpen(false), []);
+
   if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
   if (error || !model || !story) {
     return <div className="atlas-boot"><div className="msg"><strong>Couldn’t load a story.</strong><span>{error ?? 'Append ?story=<url> to view one.'}</span></div></div>;
   }
+  // A memory query that matches nothing returns a perfectly valid *empty* story,
+  // so the error branch never fires — without this the user just gets a blank
+  // globe and no idea whether it's broken, empty, or filtered.
+  if (source === 'memory' && model.memories.length === 0) {
+    return (
+      <div className="atlas-boot">
+        <div className="msg">
+          <strong>Connected to Companion Memory — no located memories yet.</strong>
+          <span>
+            The search matched nothing with coordinates. Memories need a location to appear on the globe;
+            imports without GPS won’t show here.
+          </span>
+          <span className="dim">Connected to {memory?.url}</span>
+        </div>
+      </div>
+    );
+  }
+
+  const isGlobe = view === 'globe';
 
   return (
     <div className="atlas-app">
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
-      <Rail />
-      <TopBar view={view} onView={setView} />
+      <Rail
+        view={view}
+        onView={setView}
+        onSearch={() => setPaletteOpen(true)}
+        onFrameAll={frameAll}
+        onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
+        onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
+        // Count what the drawer can actually show, so the badge can never claim
+        // memories this story can't resolve.
+        scrapbookCount={sbEntries.length}
+      />
+      <TopBar view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onShare={share} live={source === 'memory'} />
       <main className="atlas-stage">
-        <CesiumStoryViewer story={story} onViewer={setViewer} />
-        <GridHorizon />
-        <div className="atlas-overlay">
-          <StatsRibbon stats={model.stats} />
-          <PlaceChip memory={focused} />
-          <ScrapbookFrames memories={model.memories} onSelect={select} />
-          <Legend />
-        </div>
+        <CesiumStoryViewer
+          story={story}
+          memories={model.memories}
+          focusedId={focused?.id ?? null}
+          onViewer={setViewer}
+          onPick={inspect}
+          onHover={setHoveredId}
+          onInteract={pause}
+        />
+        {isGlobe && <GridHorizon />}
+        {isGlobe && (
+          <div className="atlas-overlay">
+            <StatsRibbon stats={model.stats} />
+            <PlaceChip memory={currentPlace} />
+            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} />
+            <Legend />
+          </div>
+        )}
+        {!isGlobe && (
+          <AltView view={view} memories={model.memories} focusedId={focused?.id ?? null} onSelect={inspect} />
+        )}
+        {journey && (
+          <div className="atlas-journey-chip" role="status">
+            <span>Playing journey · <b>{journey.title}</b></span>
+            <button onClick={exitJourney}>Back to all memories</button>
+          </div>
+        )}
       </main>
-      <MemoryInspector memory={focused} related={related} onFly={select} />
+      {isGlobe && (
+        <MemoryInspector
+          memory={focused}
+          related={related}
+          onFly={inspect}
+          onExpand={() => focused && setLightbox(focused)}
+          collected={focused ? collected(focused) : false}
+          onCollect={() => focused && toggleCollect(focused)}
+        />
+      )}
       <TimeMachine
         model={model}
         currentMs={currentMs || model.timeline.startMs}
@@ -143,6 +499,33 @@ export function AtlasApp() {
         onScrub={scrub}
         onStep={step}
       />
+      <ScrapbookDrawer
+        open={sbOpen}
+        entries={sbEntries}
+        title={sb.draft.title}
+        visibility={sb.draft.visibility}
+        canSave={!!memory}
+        canClear={sb.count > 0}
+        saveState={saveState}
+        onClose={closeScrapbook}
+        onTitle={sb.setTitle}
+        onVisibility={sb.setVisibility}
+        onRemove={sb.remove}
+        onClear={sb.clear}
+        onCurate={curate}
+        onPlay={playScrapbook}
+        onSave={() => void saveScrapbook()}
+        onDownload={downloadScrapbook}
+      />
+      <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPersonJourney} />
+      <CommandPalette
+        open={paletteOpen}
+        memories={model.memories}
+        onClose={closePalette}
+        onSelect={(m) => { inspect(m); closePalette(); }}
+        onView={(v) => { setView(v); closePalette(); }}
+      />
+      <Lightbox memory={lightbox} onClose={closeLightbox} />
     </div>
   );
 }

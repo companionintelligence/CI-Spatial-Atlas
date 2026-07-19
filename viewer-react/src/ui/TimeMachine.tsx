@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { PlayIcon, PauseIcon, PrevIcon, NextIcon, SunIcon, MoonIcon } from './icons.js';
-import { solarLocal, type AtlasModel, type AtlasMemory } from '../model/atlasModel.js';
+import { solarLocal, nearestMemory, type AtlasModel } from '../model/atlasModel.js';
 
 const DAY = 86_400_000;
 
@@ -117,13 +117,4 @@ export function TimeMachine({
       </div>
     </div>
   );
-}
-
-function nearestMemory(memories: AtlasMemory[], ms: number): AtlasMemory | null {
-  let best: AtlasMemory | null = null, bd = Infinity;
-  for (const m of memories) {
-    const dd = Math.abs(m.timeMs - ms);
-    if (dd < bd) { bd = dd; best = m; }
-  }
-  return best;
 }
