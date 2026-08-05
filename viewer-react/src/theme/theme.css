@@ -1,20 +1,18 @@
 /*
  * Companion Atlas theme entry — Companion Intelligence canonical tokens.
  *
- * Tracks @companionintelligence/tokens (CI-Common). `tokens.css`/`tokens.json`
- * are vendored copies (the sanctioned offline consumption path); keep them in
- * sync and keep `--primary` canonical (CI teal #0f717a / #abd4d8) — enforced by
- * `npm run lint:canon`. Montserrat is loaded self-hosted via @fontsource.
+ * Consumes @companionintelligence/tokens v0.3 (phthalo-mist palette, Manrope).
+ * Manrope is loaded self-hosted via @fontsource. `--primary` canon is enforced
+ * by `npm run lint:canon` at the repo root.
  */
-@import '@fontsource/montserrat/200.css';
-@import '@fontsource/montserrat/400.css';
-@import '@fontsource/montserrat/500.css';
-@import '@fontsource/montserrat/600.css';
-@import '@fontsource/montserrat/700.css';
-@import './tokens.css';
+@import '@fontsource/manrope/400.css';
+@import '@fontsource/manrope/500.css';
+@import '@fontsource/manrope/600.css';
+@import '@fontsource/manrope/700.css';
+@import '@companionintelligence/tokens/tokens.css';
 
 :root {
-  --font-sans: 'Montserrat', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;
 }
 
 html,
@@ -27,5 +25,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  letter-spacing: var(--font-letter-spacing);
+  word-spacing: var(--font-word-spacing);
   -webkit-font-smoothing: antialiased;
 }
