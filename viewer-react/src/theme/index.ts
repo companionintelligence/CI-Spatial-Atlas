@@ -1,19 +1,18 @@
 /**
  * Programmatic access to the CI canonical tokens for the WebGL layers (Cesium
  * materials, React-Three-Fiber colors) that can't read CSS custom properties.
- * Values track @companionintelligence/tokens (CI-Common) via the vendored
- * `tokens.json`.
+ * Values track @companionintelligence/tokens v0.3.
  */
-import tokens from './tokens.json';
+import { tokens, MANROPE_STACK } from '@companionintelligence/tokens';
 
 type Mode = 'light' | 'dark';
 
-/** CI teal `--primary` for the given mode (default dark, the viewer's default). */
+/** CI phthalo `--primary` for the given mode (default dark, the viewer's default). */
 export function primaryHex(mode: Mode = 'dark'): string {
   return tokens[mode].primary.hex;
 }
 
-/** The canonical Montserrat font stack. */
-export const fontStack = '"Montserrat", system-ui, -apple-system, sans-serif';
+/** The canonical Manrope font stack. */
+export const fontStack = MANROPE_STACK;
 
 export { tokens };

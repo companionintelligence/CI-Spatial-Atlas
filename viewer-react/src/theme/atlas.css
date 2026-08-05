@@ -27,7 +27,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
 .atlas-app {
   position: fixed; inset: 0; color: var(--atlas-fg);
-  font-family: 'Montserrat', 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Manrope', 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   display: grid; grid-template-columns: 60px 1fr; grid-template-rows: 54px 1fr;
   grid-template-areas: "rail top" "rail stage";
@@ -185,7 +185,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-rail-btn:disabled:hover, .atlas-icon-btn:disabled:hover { color: var(--atlas-fg-dim); background: transparent; }
 
 /* app-shell loading / error / empty states */
-.atlas-boot { position: fixed; inset: 0; display: grid; place-items: center; background: var(--atlas-bg); color: var(--atlas-fg-dim); font-family: 'Montserrat', system-ui, sans-serif; }
+.atlas-boot { position: fixed; inset: 0; display: grid; place-items: center; background: var(--atlas-bg); color: var(--atlas-fg-dim); font-family: 'Manrope', system-ui, sans-serif; }
 .atlas-boot .msg { text-align: center; display: flex; flex-direction: column; gap: 8px; }
 .atlas-emptyview { display: grid; place-items: center; color: var(--atlas-fg-dim); font-size: 14px; }
 
@@ -223,12 +223,12 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .graph-edge { stroke: rgba(114,221,212,.5); stroke-width: 2; }
 .graph-spoke { stroke: rgba(64,155,155,.18); stroke-width: 1; stroke-dasharray: 3 4; }
 .graph-hub { fill: var(--atlas-teal-600); stroke: var(--atlas-aqua-light); stroke-width: 1.5; }
-.graph-hub-label { fill: var(--atlas-ink); font: 700 12px Montserrat, sans-serif; }
+.graph-hub-label { fill: var(--atlas-ink); font: 700 12px Manrope, sans-serif; }
 .graph-node { cursor: pointer; }
 .graph-node circle { fill: var(--atlas-aqua-light); stroke: var(--atlas-bg); stroke-width: 2; transition: fill .15s; }
 .graph-node:hover circle { fill: #fff; }
 .graph-node.active circle { fill: var(--atlas-mint); }
-.graph-node text { fill: var(--atlas-fg); font: 600 12px Montserrat, sans-serif; pointer-events: none; }
+.graph-node text { fill: var(--atlas-fg); font: 600 12px Manrope, sans-serif; pointer-events: none; }
 .graph-node:focus-visible circle { stroke: var(--atlas-aqua-light); stroke-width: 3; }
 
 /* ————— ⌘K command palette ————— */
@@ -236,7 +236,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-cmdk { width: min(560px, 92vw); background: var(--atlas-card); border: 1px solid var(--atlas-line-2); border-radius: 14px; box-shadow: var(--atlas-shadow); overflow: hidden; }
 .cmdk-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--atlas-line); }
 .cmdk-input svg { width: 17px; height: 17px; color: var(--atlas-teal); }
-.cmdk-input input { flex: 1; background: none; border: 0; outline: none; color: var(--atlas-fg-hi); font: 500 15px Montserrat, sans-serif; }
+.cmdk-input input { flex: 1; background: none; border: 0; outline: none; color: var(--atlas-fg-hi); font: 500 15px Manrope, sans-serif; }
 .cmdk-input input::placeholder { color: var(--atlas-fg-dim); }
 .cmdk-input .kbd { font: 600 10px/1 var(--atlas-mono); color: var(--atlas-fg-dim); border: 1px solid var(--atlas-line-2); border-radius: 5px; padding: 3px 6px; }
 .cmdk-list { list-style: none; margin: 0; padding: 6px; max-height: 46vh; overflow: auto; }
@@ -279,10 +279,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .sb-count { font: 700 10px/1 var(--atlas-mono); color: var(--atlas-bg); background: var(--atlas-teal); border-radius: 8px; padding: 3px 6px; }
 .sb-close { margin-left: auto; width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--atlas-fg-dim); cursor: pointer; }
 .sb-close:hover { color: var(--atlas-fg-hi); background: rgba(64,155,155,.12); }
-.sb-title { padding: 9px 11px; border-radius: 9px; border: 1px solid var(--atlas-line); background: rgba(4,18,26,.5); color: var(--atlas-fg-hi); font: 600 13px Montserrat, sans-serif; }
+.sb-title { padding: 9px 11px; border-radius: 9px; border: 1px solid var(--atlas-line); background: rgba(4,18,26,.5); color: var(--atlas-fg-hi); font: 600 13px Manrope, sans-serif; }
 .sb-title::placeholder { color: var(--atlas-fg-dim); font-weight: 500; }
 .sb-vis { display: flex; gap: 2px; padding: 3px; background: rgba(4,18,26,.6); border: 1px solid var(--atlas-line); border-radius: 999px; }
-.sb-vis button { flex: 1; padding: 6px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--atlas-fg-dim); font: 600 11.5px Montserrat, sans-serif; cursor: pointer; }
+.sb-vis button { flex: 1; padding: 6px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--atlas-fg-dim); font: 600 11.5px Manrope, sans-serif; cursor: pointer; }
 .sb-vis button.active { color: var(--atlas-bg); background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light)); }
 .sb-empty { margin: 0; font-size: 12px; line-height: 1.55; color: var(--atlas-fg-dim); }
 .sb-empty b { color: var(--atlas-teal); display: inline-flex; align-items: center; gap: 3px; }
@@ -316,7 +316,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
   backdrop-filter: blur(10px); box-shadow: var(--atlas-shadow); font-size: 12px; color: var(--atlas-fg);
 }
 .atlas-journey-chip b { color: var(--atlas-fg-hi); }
-.atlas-journey-chip button { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--atlas-line-2); background: rgba(4,18,26,.5); color: var(--atlas-fg); font: 600 11px Montserrat, sans-serif; cursor: pointer; }
+.atlas-journey-chip button { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--atlas-line-2); background: rgba(4,18,26,.5); color: var(--atlas-fg); font: 600 11px Manrope, sans-serif; cursor: pointer; }
 .atlas-journey-chip button:hover { border-color: var(--atlas-mint); color: var(--atlas-mint); }
 
 @media (prefers-reduced-motion: reduce) { .atlas-app *, .atlas-overlay * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

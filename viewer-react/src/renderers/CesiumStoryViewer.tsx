@@ -258,7 +258,7 @@ function buildMemoryLayer(memories: AtlasMemory[], getFocusedId: () => string | 
       },
       label: {
         text: m.title,
-        font: '600 13px Montserrat, sans-serif',
+        font: '600 13px Manrope, sans-serif',
         fillColor: fg,
         showBackground: true,
         backgroundColor: dark.withAlpha(0.66),
