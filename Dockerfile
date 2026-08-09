@@ -1,11 +1,32 @@
 # Companion Atlas — web viewer image.
-# Multi-stage: build the Vite SPA, then serve the static bundle with nginx.
+# Multi-stage: build the Vite SPA under Deno (npm/Node compat mode), then serve
+# the static bundle with nginx.
 
-FROM node:22-alpine AS build
+FROM denoland/deno:alpine-2.9.5 AS build
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
+# Only this package's own manifests are copied in — the sibling npm/Deno
+# workspace members (packages/story-schema, viewer-react, server) are never
+# added to this image. The root viewer doesn't depend on any of them, and
+# Deno's npm-workspace resolution re-checks *every* workspace member's
+# package.json on each `deno task` invocation (unlike `npm run`, which only
+# resolves once at `npm ci` time) — if viewer-react's package.json were
+# present, every `deno task` here would try to resolve its private
+# @companionintelligence/tokens dependency (see viewer-react/.npmrc) and fail
+# without registry credentials this image doesn't need.
+COPY package.json package-lock.json deno.json ./
+RUN deno install
+COPY index.html tsconfig.json vite.config.ts ./
+COPY src ./src
+COPY public ./public
+COPY scripts ./scripts
+COPY materials ./materials
+COPY tests ./tests
+# ImageMagick (`magick`) is required by scripts/generate-textures.ts and was
+# missing from this image even before the Deno migration (verified against
+# the prior node:22-alpine Dockerfile, which failed the same way) — added
+# here, with the jpeg/tiff delegates the source materials/ assets need, so
+# the build actually completes.
+RUN apk add --no-cache imagemagick imagemagick-jpeg imagemagick-tiff
 # Texture generation + production build. Build-time map keys are injected as
 # Vite `define` constants (see vite.config.ts); pass them as --build-arg / env.
 ARG CESIUM_ION_TOKEN=""
@@ -16,7 +37,7 @@ ENV CESIUM_ION_TOKEN=$CESIUM_ION_TOKEN \
     GOOGLE_MAP_PLATFORM=$GOOGLE_MAP_PLATFORM \
     MAPBOX_API_KEY=$MAPBOX_API_KEY \
     ESRI_API_KEY=$ESRI_API_KEY
-RUN npm run textures:build && npm run cesium:assets && npm run build
+RUN deno task textures:build && deno task cesium:assets && deno task build
 
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
