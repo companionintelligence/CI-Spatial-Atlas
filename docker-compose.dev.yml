@@ -6,6 +6,7 @@
 #   cp .env.dev.example .env.dev          # then edit for connected vs mock mode
 #   docker compose -f docker-compose.dev.yml up postgres redis minio atlas-api
 #   (in another shell)  cd viewer-react && npm install && npm run dev
+#     (or, under Deno: cd viewer-react && deno task dev)
 #
 # Two modes (see .env.dev.example):
 #   MOCK (default)      COMPANION_OIDC_ISSUER + CI_MEMORY_URL empty → auth runs as
@@ -16,7 +17,7 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
-    command: ['npm', 'run', 'dev']
+    command: ['deno', 'task', 'dev']
     env_file: [.env.dev]
     environment:
       PORT: '8787'
