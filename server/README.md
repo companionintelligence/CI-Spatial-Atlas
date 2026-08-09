@@ -26,6 +26,22 @@ npm run build
 claude mcp add companion-atlas -- node "$PWD/dist/mcp-stdio.js"
 ```
 
+Or under Deno (`deno.json` mirrors the npm scripts as tasks; run from the repo
+root so the `@companion-atlas/story` workspace dependency resolves):
+
+```sh
+deno install            # once, from the repo root
+cd server
+deno task dev            # REST API + MCP-over-HTTP on :8787
+deno task test            # vitest, run under Deno's npm/Node compat
+```
+
+The container (`server/Dockerfile`) runs the compiled server with a scoped
+permission set (`--allow-net --allow-env --allow-read=. --allow-sys`) — no
+`--allow-run`, since `src/pipeline.ts`'s `exiftool-vendored` calls are still
+orchestration stubs. See the Dockerfile's comments for the exact `--allow-run`
+scoping to add once that's wired up.
+
 ## Layout
 
 | File | Responsibility |

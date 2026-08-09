@@ -75,6 +75,17 @@ npm run cesium:assets   # copies Cesium's static assets into public/cesium/
 npm run vibe:dev
 ```
 
+Or under [Deno](https://deno.com) (2.9+; `deno.json` mirrors these as tasks,
+resolving `npm run <script>` → `deno task <script>` for every package in the
+repo — root, `server/`, `packages/story-schema/`, `viewer-react/`):
+
+```sh
+deno install
+deno task textures:build
+deno task cesium:assets
+deno task vibe:dev
+```
+
 Get a free [Cesium ion](https://ion.cesium.com/) access token and put it in
 `.env` as `CESIUM_ION_TOKEN=...` (see [`.env.default`](.env.default)) to see
 the real-imagery Cesium renderer; without a token the app falls back to the
@@ -91,6 +102,15 @@ npm install
 npm run dev          # REST + MCP-over-HTTP on :8787
 # or, for a local agent:
 npm run mcp:stdio
+```
+
+Or under Deno, from the repo root (`server/src` depends on the
+`packages/story-schema` workspace package, so `deno install` needs to run
+where the workspace is declared):
+
+```sh
+deno install
+cd server && deno task dev
 ```
 
 See [`server/README.md`](server/README.md) and [`docs/mcp-api.md`](docs/mcp-api.md).
