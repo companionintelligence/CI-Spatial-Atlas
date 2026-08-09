@@ -1,0 +1,8 @@
+{
+  "tasks": {
+    "build": "deno run -A npm:typescript/lib/tsc.js -p tsconfig.json",
+    "typecheck": "deno run -A npm:typescript/lib/tsc.js -p tsconfig.json --noEmit",
+    "test": "deno run -A npm:vitest run",
+    "gen:schema": "deno task build && deno run -A scripts/gen-schema.mjs"
+  }
+}

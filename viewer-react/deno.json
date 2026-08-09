@@ -1,0 +1,8 @@
+{
+  "tasks": {
+    "dev": "deno run -A npm:vite --host 127.0.0.1 --port 4174",
+    "build": "deno run -A npm:typescript/lib/tsc.js --noEmit && deno run -A npm:vite build",
+    "preview": "deno run -A npm:vite preview",
+    "test": "deno run -A npm:vitest run"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "dev": "deno run -A --watch src/index.ts",
+    "mcp:stdio": "deno run -A src/mcp-stdio.ts",
+    "build": "deno run -A npm:typescript/lib/tsc.js -p tsconfig.json",
+    "start": "deno run -A dist/index.js",
+    "typecheck": "deno run -A npm:typescript/lib/tsc.js -p tsconfig.json --noEmit",
+    "test": "deno run -A npm:vitest run"
+  }
+}
