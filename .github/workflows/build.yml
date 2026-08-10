@@ -61,7 +61,12 @@ jobs:
         run: |
           set -euo pipefail
           test -f dist/index.html
-          test -f dist/cesium/Workers/cesiumWorkerBootstrapper.js
+          # Cesium's Workers/* are content-hashed chunks, so assert on the
+          # stable asset paths instead. Without these the default renderer
+          # cannot resolve CESIUM_BASE_URL at runtime.
+          test -f dist/cesium/Assets/approximateTerrainHeights.json
+          test -d dist/cesium/Widgets/CesiumWidget
+          test -n "$(ls -A dist/cesium/Workers)"
           echo "dist size: $(du -sh dist | cut -f1), files: $(find dist -type f | wc -l)"
 
       - uses: actions/upload-artifact@v4
@@ -110,8 +115,22 @@ jobs:
             if curl -fsS -o /dev/null http://127.0.0.1:18080/; then break; fi
             sleep 1
           done
-          curl -fsS -o /dev/null http://127.0.0.1:18080/
-          curl -fsS -o /dev/null http://127.0.0.1:18080/cesium/Workers/cesiumWorkerBootstrapper.js
+
+          curl -fsS http://127.0.0.1:18080/ | grep -q '<title>'
+
+          # The SPA fallback returns index.html with HTTP 200 for ANY unknown
+          # path, so a bare status check would pass even with the Cesium assets
+          # missing entirely. Assert on the content type instead: a real .json
+          # file is served as application/json, the HTML fallback is not.
+          ctype=$(curl -fsS -o /dev/null -w '%{content_type}' \
+            http://127.0.0.1:18080/cesium/Assets/approximateTerrainHeights.json)
+          echo "approximateTerrainHeights.json content-type: $ctype"
+          case "$ctype" in
+            application/json*) ;;
+            *) echo "Cesium assets are not being served (got '$ctype')"; exit 1 ;;
+          esac
+
           # SPA fallback: unknown deep links must resolve to index.html.
-          curl -fsS -o /dev/null http://127.0.0.1:18080/some/deep/link
+          curl -fsS http://127.0.0.1:18080/some/deep/link | grep -q '<title>'
+
           docker rm -f atlas-ci
