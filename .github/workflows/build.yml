@@ -1,0 +1,117 @@
+# Companion Atlas — build verification.
+#
+# This repository had no `.github/workflows` directory at all, so nothing ever
+# proved the viewer or the image could be built. The Dockerfile was in fact
+# broken (it ran `npm run textures:build`, which shells out to ImageMagick,
+# absent from node:22-alpine), which is why
+# ghcr.io/companionintelligence/companion-atlas-viewer — the image
+# hub/docker-compose.json tells CI-Hub to pull — was never published.
+#
+# Scope is deliberately limited to BUILD VERIFICATION:
+#   - no registry push
+#   - no secrets (nothing here needs a token)
+#   - no deployment to any domain
+# Publishing the image and wiring a host are separate, reviewed decisions.
+name: build
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  viewer:
+    name: Static viewer build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # `npm ci` is not used: package-lock.json resolves
+      # @companionintelligence/tokens to a "link" at ../ci-common/packages/tokens
+      # — a path outside this repository — so a clean checkout gets a broken
+      # symlink. That dependency belongs to the viewer-react workspace only; the
+      # root viewer built here does not import it.
+      - name: Install root dependencies
+        run: npm install --no-audit --no-fund --workspaces=false --include-workspace-root
+
+      - name: Typecheck and build viewer
+        run: npm run build
+
+      - name: Stage Cesium runtime assets
+        run: npm run cesium:assets
+
+      # public/ is copied into dist/ by Vite, so cesium:assets must precede a
+      # final build for /cesium/* to exist in the bundle.
+      - name: Rebuild with Cesium assets staged
+        run: npm run build
+
+      - name: Verify bundle contents
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          test -f dist/cesium/Workers/cesiumWorkerBootstrapper.js
+          echo "dist size: $(du -sh dist | cut -f1), files: $(find dist -type f | wc -l)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atlas-viewer-dist
+          path: dist
+          retention-days: 7
+
+  schema:
+    name: Story schema build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm install --no-audit --no-fund --workspace @companion-atlas/story --include-workspace-root
+
+      # packages/story-schema publishes ./dist, but nothing built it, so every
+      # consumer of @companion-atlas/story failed to typecheck from a clean tree.
+      - name: Build @companion-atlas/story
+        run: npm run build --workspace @companion-atlas/story
+
+      - name: Verify emitted types
+        run: test -f packages/story-schema/dist/index.d.ts
+
+  image:
+    name: Viewer image (build only, no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t companion-atlas-viewer:ci .
+
+      # Proves the container actually serves, on the port hub/config.json and
+      # hub/docker-compose.json advertise to CI-Hub (8080).
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          docker run -d --name atlas-ci -p 18080:8080 companion-atlas-viewer:ci
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:18080/; then break; fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null http://127.0.0.1:18080/
+          curl -fsS -o /dev/null http://127.0.0.1:18080/cesium/Workers/cesiumWorkerBootstrapper.js
+          # SPA fallback: unknown deep links must resolve to index.html.
+          curl -fsS -o /dev/null http://127.0.0.1:18080/some/deep/link
+          docker rm -f atlas-ci
