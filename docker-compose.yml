@@ -23,7 +23,14 @@ services:
         MAPBOX_API_KEY: ${MAPBOX_API_KEY:-}
         ESRI_API_KEY: ${ESRI_API_KEY:-}
     ports:
-      - "4173:80"
+      # Container-side must be 8080: the viewer image serves the static bundle
+      # with nginx `listen 8080` (see Dockerfile), matching the port this app
+      # advertises to CI-Hub in hub/config.json and hub/docker-compose.json.
+      # This said "4173:80" until now, which pointed at a dead port — nothing
+      # listens on 80 in that image. Host side stays 4173 so it keeps matching
+      # ATLAS_VIEWER_BASE_URL below, the README quickstart, and the Playwright
+      # baseURL.
+      - "4173:8080"
     depends_on:
       - atlas-api
 
