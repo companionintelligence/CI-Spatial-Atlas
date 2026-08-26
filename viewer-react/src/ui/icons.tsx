@@ -58,6 +58,9 @@ export const PlaneIcon = (p: P) => (
   <svg {...S(p)}><path d="M10.5 13.5 3 11l18-7-7 18-2.5-7.5L10.5 13.5z" /></svg>
 );
 export const PlusIcon = (p: P) => <svg {...S({ ...p, strokeWidth: 1.8 })}><path d="M12 5v14M5 12h14" /></svg>;
+export const FlagIcon = (p: P) => (
+  <svg {...S(p)}><path d="M5 21V4" /><path d="M5 5c2-1.5 4-1.5 6 0s4 1.5 6 0v9c-2 1.5-4 1.5-6 0s-4-1.5-6 0V5z" /></svg>
+);
 export const PlayIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M8 5.5v13l11-6.5z" /></svg>;
 export const PauseIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /></svg>;
 export const PrevIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M6 5h2v14H6zM19 5 9 12l10 7z" /></svg>;

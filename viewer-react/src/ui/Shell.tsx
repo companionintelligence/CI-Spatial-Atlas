@@ -1,6 +1,6 @@
 import {
   BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon, SparkIcon, GearIcon,
-  ImagesIcon, ClockIcon, GraphIcon, SearchIcon, ShareIcon, MoonIcon,
+  ImagesIcon, ClockIcon, GraphIcon, SearchIcon, ShareIcon, MoonIcon, FlagIcon,
 } from './icons.js';
 
 export type AtlasView = 'globe' | 'gallery' | 'timeline' | 'graph';
@@ -40,8 +40,17 @@ export function Rail({ view, onView, onSearch, onFrameAll, onPeople, onCollectio
   );
 }
 
-/** Top bar — wordmark, view switcher, ⌘K search, share. */
-export function TopBar({ view, onView, onSearch, onShare, live }: { view: AtlasView; onView: (v: AtlasView) => void; onSearch: () => void; onShare: () => void; live?: boolean }) {
+/** Top bar — wordmark, view switcher, ⌘K search, places toggle, share. */
+export function TopBar({ view, onView, onSearch, onShare, live, showPlaces, onTogglePlaces }: {
+  view: AtlasView;
+  onView: (v: AtlasView) => void;
+  onSearch: () => void;
+  onShare: () => void;
+  live?: boolean;
+  /** Named-places layer (CI-Server Places API) — off by default; the memory layer is primary. */
+  showPlaces?: boolean;
+  onTogglePlaces?: () => void;
+}) {
   const tabs: { key: AtlasView; label: string; Icon: typeof GlobeIcon }[] = [
     { key: 'globe', label: 'Globe', Icon: GlobeIcon },
     { key: 'gallery', label: 'Gallery', Icon: ImagesIcon },
@@ -63,6 +72,17 @@ export function TopBar({ view, onView, onSearch, onShare, live }: { view: AtlasV
       <button className="atlas-search" aria-label="Search memories (Command K)" onClick={onSearch}>
         <SearchIcon /><span>Jump to a place, date, person…</span><span className="kbd">⌘K</span>
       </button>
+      {onTogglePlaces && (
+        <button
+          className="atlas-icon-btn"
+          title="Named places (Companion Memory)"
+          aria-label="Toggle named places"
+          aria-pressed={!!showPlaces}
+          onClick={onTogglePlaces}
+        >
+          <FlagIcon />
+        </button>
+      )}
       <button className="atlas-icon-btn" title="Copy link to this view" aria-label="Copy link to this view" onClick={onShare}><ShareIcon /></button>
       <button className="atlas-icon-btn" title="Theme (coming soon)" aria-label="Theme" disabled><MoonIcon /></button>
     </header>

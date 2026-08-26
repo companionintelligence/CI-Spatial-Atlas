@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` fires the root `prepare` script, which builds
+      # packages/story-schema — nothing downstream can resolve
+      # @companion-atlas/story without it.
+      - run: npm ci
+
+      - name: story-schema — typecheck + test
+        run: |
+          npm run typecheck -w packages/story-schema
+          npm test -w packages/story-schema
+
+      - name: viewer-react — build + test
+        run: |
+          npm run build -w viewer-react
+          npm test -w viewer-react
+
+      - name: server — typecheck + test
+        run: |
+          npm run typecheck -w server
+          npm test -w server
+
+      - name: legacy viewer — typecheck + build
+        run: |
+          npm run typecheck
+          npm run build
