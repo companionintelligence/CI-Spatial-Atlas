@@ -3,19 +3,7 @@
 
 FROM node:22-alpine AS build
 WORKDIR /app
-# scripts/generate-textures.ts shells out to ImageMagick's `magick` CLI, which
-# the node:22-alpine base doesn't ship — the build previously failed here
-# every time (spawn magick ENOENT), unrelated to any app code. Alpine splits
-# format support into per-codec subpackages; the bare `imagemagick` package
-# has no JPEG/TIFF delegates on its own, and the source textures under
-# materials/ are a mix of both (see scripts/generate-textures.ts).
-RUN apk add --no-cache imagemagick imagemagick-jpeg imagemagick-tiff
 COPY package*.json ./
-# `npm ci` fires the root `prepare` script (builds packages/story-schema), so
-# that package's source must be present before `npm ci` runs — not just after
-# the full `COPY . .` below.
-COPY packages/story-schema/package.json packages/story-schema/tsconfig.json packages/story-schema/
-COPY packages/story-schema/src packages/story-schema/src
 RUN npm ci
 COPY . .
 # Production build. Build-time map keys are injected as Vite `define`

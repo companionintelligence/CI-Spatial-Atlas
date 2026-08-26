@@ -4,17 +4,30 @@
 # viewer-react/Dockerfile .`), not viewer-react/ — this app resolves
 # @companion-atlas/story via the npm workspace, so the root package.json and
 # packages/story-schema must be in the build context.
+#
+# KNOWN LIMITATION: this image cannot build to completion today.
+# viewer-react's src/theme/index.ts imports @companionintelligence/tokens,
+# which package-lock.json resolves to `link:../ci-common/packages/tokens` — a
+# path outside this repository, unresolvable in a build context that is only
+# this repo. Everything up to (and validated by CI as of this change) the
+# `npm run build -w packages/story-schema` step below works; the final
+# `npm run build -w viewer-react` fails on that one import until the
+# dependency is published somewhere this build context can reach.
 
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-# `npm ci` fires the root `prepare` script (builds packages/story-schema), so
-# that package's source must be present before `npm ci` runs.
 COPY packages/story-schema/package.json packages/story-schema/tsconfig.json packages/story-schema/
 COPY packages/story-schema/src packages/story-schema/src
 COPY viewer-react/package.json viewer-react/
 RUN npm ci
 COPY . .
+# packages/story-schema ships from its own dist/, which nothing builds
+# automatically (no root lifecycle hook does this — a `prepare` script here
+# once broke the CI job that installs a single workspace at a time with
+# --workspaces=false, since that install never resolves story-schema's own
+# `zod` dependency). Build it explicitly, every time something needs it.
+RUN npm run build -w packages/story-schema
 # Vite inlines import.meta.env.VITE_* at build time (see src/story/useStory.ts,
 # src/renderers/CesiumStoryViewer.tsx). These are optional build-time
 # defaults — `?memory=`/`?token=` URL params still override at runtime, so a
