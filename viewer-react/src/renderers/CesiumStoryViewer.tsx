@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
 import { Viewer, CzmlDataSource, Cesium3DTileset, type CesiumComponentRef } from 'resium';
-import { storyToCzml, type Story } from '@companion-atlas/story';
+import { storyToCzml, type Story, type Place } from '@companion-atlas/story';
 import type { AtlasMemory } from '../model/atlasModel.js';
 
 const PLACEHOLDER_TOKEN = 'your_cesium_ion_token_here';
@@ -19,15 +19,22 @@ type Located = AtlasMemory & { lat: number; lon: number };
  * real World Imagery/Terrain; otherwise → the bundled offline Natural Earth II,
  * so the globe is never black. `baseLayer={false}` means no ion request fires
  * until we decide to below.
+ *
+ * A second, optional layer renders named CI-Server Places (`place:<placeId>`
+ * ids) — the room-to-planet geographic entities memories happen *in*, distinct
+ * from the memory pins above. It's off by default (pass `places={[]}`, the
+ * default) so it never competes with the memory layer for attention.
  */
 export function CesiumStoryViewer({
-  story, memories, focusedId, onViewer, onPick, onHover, onInteract,
+  story, memories, places = [], focusedId, onViewer, onPick, onPickPlace, onHover, onInteract,
 }: {
   story: Story;
   memories: AtlasMemory[];
+  places?: Place[];
   focusedId: string | null;
   onViewer?: (v: Cesium.Viewer | null) => void;
   onPick?: (m: AtlasMemory) => void;
+  onPickPlace?: (p: Place) => void;
   onHover?: (id: string | null) => void;
   onInteract?: () => void;
 }) {
@@ -47,11 +54,14 @@ export function CesiumStoryViewer({
   // Latest callbacks / focus without re-running the mount + picking effect.
   const onViewerRef = useRef(onViewer); onViewerRef.current = onViewer;
   const onPickRef = useRef(onPick); onPickRef.current = onPick;
+  const onPickPlaceRef = useRef(onPickPlace); onPickPlaceRef.current = onPickPlace;
   const onHoverRef = useRef(onHover); onHoverRef.current = onHover;
   const onInteractRef = useRef(onInteract); onInteractRef.current = onInteract;
   const focusedIdRef = useRef(focusedId); focusedIdRef.current = focusedId;
   const memMapRef = useRef(new Map<string, AtlasMemory>());
   memMapRef.current = useMemo(() => new Map(memories.map((m) => [m.id, m])), [memories]);
+  const placeMapRef = useRef(new Map<string, Place>());
+  placeMapRef.current = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
 
   // ---- mount: acquire the viewer, configure imagery, install picking ----
   useEffect(() => {
@@ -117,22 +127,34 @@ export function CesiumStoryViewer({
       v.useBrowserRecommendedResolution = false;
       v.resolutionScale = Math.min(2, window.devicePixelRatio || 1);
 
-      // Picking: click/hover a memory pin → map its id back to the AtlasMemory.
+      // Picking: click/hover a pin → map its id back to the AtlasMemory or Place
+      // it came from, by the `mem:`/`place:` prefix each layer's entities carry.
       handler = new Cesium.ScreenSpaceEventHandler(v.scene.canvas);
-      const memIdAt = (pos: Cesium.Cartesian2): string | null => {
+      const idAt = (pos: Cesium.Cartesian2): { kind: 'mem' | 'place'; id: string } | null => {
         const picked = v.scene.pick(pos) as { id?: { id?: unknown } } | undefined;
         const id = picked?.id?.id;
-        return typeof id === 'string' && id.startsWith('mem:') ? id.slice(4) : null;
+        if (typeof id !== 'string') return null;
+        if (id.startsWith('mem:')) return { kind: 'mem', id: id.slice(4) };
+        if (id.startsWith('place:')) return { kind: 'place', id: id.slice(6) };
+        return null;
       };
       handler.setInputAction((e: { position: Cesium.Cartesian2 }) => {
-        const memId = memIdAt(e.position);
-        const m = memId ? memMapRef.current.get(memId) : null;
-        if (m) onPickRef.current?.(m);
+        const hit = idAt(e.position);
+        if (hit?.kind === 'mem') {
+          const m = memMapRef.current.get(hit.id);
+          if (m) onPickRef.current?.(m);
+        } else if (hit?.kind === 'place') {
+          const p = placeMapRef.current.get(hit.id);
+          if (p) onPickPlaceRef.current?.(p);
+        }
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handler.setInputAction((e: { endPosition: Cesium.Cartesian2 }) => {
-        const memId = memIdAt(e.endPosition);
-        onHoverRef.current?.(memId);
-        v.scene.canvas.style.cursor = memId ? 'pointer' : '';
+        const hit = idAt(e.endPosition);
+        // hoveredId only ever means a *memory* hover (it drives ScrapbookFrames'
+        // highlight) — a hovered place still shows the pointer cursor, but
+        // doesn't touch that memory-specific state.
+        onHoverRef.current?.(hit?.kind === 'mem' ? hit.id : null);
+        v.scene.canvas.style.cursor = hit ? 'pointer' : '';
       }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
       // Manual globe interaction (drag/zoom) pauses the auto-tour, so a
@@ -197,6 +219,16 @@ export function CesiumStoryViewer({
       void added.then((d) => { if (!viewer.isDestroyed()) viewer.dataSources.remove(d ?? ds, true); });
     };
   }, [viewer, memories]);
+
+  // ---- places layer: named CI-Server Places (opt-in, empty by default) ----
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const ds = buildPlacesLayer(places);
+    const added = viewer.dataSources.add(ds);
+    return () => {
+      void added.then((d) => { if (!viewer.isDestroyed()) viewer.dataSources.remove(d ?? ds, true); });
+    };
+  }, [viewer, places]);
 
   return (
     <div className="atlas-globe" ref={hostRef}>
@@ -288,6 +320,51 @@ function buildMemoryLayer(memories: AtlasMemory[], getFocusedId: () => string | 
         return travelerPos(route, ms, result);
       }, false),
       point: { pixelSize: 9, color: mint, outlineColor: dark, outlineWidth: 2, disableDepthTestDistance: onTop },
+    });
+  }
+  return ds;
+}
+
+/** Build the named-Places layer as a CustomDataSource. Small dot for
+ *  room/building/venue-scale places; a larger labeled pin for
+ *  city/region/country/continent/planet, since a room-scale label at globe
+ *  zoom is just noise. Uses `--atlas-violet` — the Legend's own "Place" swatch
+ *  color, previously defined but drawn by nothing. */
+function buildPlacesLayer(places: Place[]): Cesium.CustomDataSource {
+  const ds = new Cesium.CustomDataSource('atlas-places');
+  const violet = Cesium.Color.fromCssColorString('#b79cff');
+  const dark = Cesium.Color.fromCssColorString('#041620');
+  const fg = Cesium.Color.fromCssColorString('#d7e6e6');
+  const onTop = Number.POSITIVE_INFINITY;
+  const LABELED_KINDS = new Set(['city', 'region', 'country', 'continent', 'planet']);
+
+  const seen = new Set<string>();
+  for (const p of places) {
+    if (p.latitude == null || p.longitude == null || seen.has(p.id)) continue;
+    seen.add(p.id);
+    const big = p.placeKind ? LABELED_KINDS.has(p.placeKind) : false;
+    ds.entities.add({
+      id: `place:${p.id}`,
+      position: Cesium.Cartesian3.fromDegrees(p.longitude, p.latitude),
+      point: {
+        pixelSize: big ? 10 : 6,
+        color: violet,
+        outlineColor: dark,
+        outlineWidth: 1.5,
+        disableDepthTestDistance: onTop,
+      },
+      label: big ? {
+        text: p.name ?? p.placeKind ?? 'Place',
+        font: '600 12px Manrope, sans-serif',
+        fillColor: fg,
+        showBackground: true,
+        backgroundColor: dark.withAlpha(0.66),
+        backgroundPadding: new Cesium.Cartesian2(6, 3),
+        pixelOffset: new Cesium.Cartesian2(0, -14),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: onTop,
+        translucencyByDistance: new Cesium.NearFarScalar(2.0e6, 1.0, 1.2e7, 0.0),
+      } : undefined,
     });
   }
   return ds;

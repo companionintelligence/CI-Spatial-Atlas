@@ -12,8 +12,10 @@
   ],
   "scripts": {
     "dev": "vite",
+    "dev:viewer-react": "npm run build -w packages/story-schema && npm run dev -w viewer-react",
     "vibe:dev": "vite --host 127.0.0.1 --port 4173",
     "build": "tsc --noEmit && vite build",
+    "build:viewer-react": "npm run build -w packages/story-schema && npm run build -w viewer-react",
     "vibe:build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:visual": "playwright test --config=playwright.config.js",

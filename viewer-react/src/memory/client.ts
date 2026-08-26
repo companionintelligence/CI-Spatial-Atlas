@@ -1,4 +1,7 @@
-import { LOCATED_MEDIA_QUERY, SAVE_STORY_MUTATION, createEventInputFromStory, memoryToStory, type Story } from '@companion-atlas/story';
+import {
+  LOCATED_MEDIA_QUERY, SAVE_STORY_MUTATION, createEventInputFromStory, memoryToStory, type Story,
+  PLACES_QUERY, placesFromResponse, type Place,
+} from '@companion-atlas/story';
 
 function endpointOf(url: string): { endpoint: string; origin: string } {
   const trimmed = url.replace(/\/+$/, '');
@@ -114,6 +117,40 @@ export async function fetchMemoryStory(src: MemorySource): Promise<Story> {
  * (unlisted → household), so household members' Companions can see it. The
  * write is idempotent server-side on (sourceType, sourceSystem, sourceId).
  */
+interface PlacesQueryEnvelope {
+  places?: {
+    totalCount?: number;
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+    edges?: unknown[];
+  };
+}
+
+/**
+ * Fetch every named Place from Companion Memory — the room-to-planet
+ * geographic entities memories happen *in*, distinct from the located
+ * memories themselves (`fetchMemoryStory`). Same transport, same auth
+ * (bearer/cookie via `gql()`); CI-Server's `places()` Paginator doesn't clamp
+ * `first` server-side the way `search()` does, but page defensively anyway.
+ */
+export async function fetchPlaces(src: MemorySource): Promise<Place[]> {
+  const first = Math.min(src.first ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+  const edges: unknown[] = [];
+  let after: string | undefined;
+  let pages = 0;
+
+  do {
+    const data = await gql<PlacesQueryEnvelope>(src, PLACES_QUERY, { first, after });
+    const page = Array.isArray(data?.places?.edges) ? data.places!.edges! : [];
+    edges.push(...page);
+    const info = data?.places?.pageInfo;
+    after = info?.hasNextPage && info.endCursor ? info.endCursor : undefined;
+    pages += 1;
+    if (page.length === 0) break; // defensive: a server that lies about hasNextPage
+  } while (after && edges.length < HARD_CAP && pages < 50);
+
+  return placesFromResponse({ places: { edges } });
+}
+
 export async function saveStoryToMemory(
   src: MemorySource,
   story: Story,

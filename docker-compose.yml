@@ -1,14 +1,19 @@
-# Companion Atlas — containerized 3D processing server + web viewer.
+# Companion Atlas — containerized 3D processing server + web viewer(s).
 #
-#   viewer    static web viewer (nginx) — renders shared 4D stories
-#   atlas-api 3D processing API + MCP server (REST + /mcp)
-#   worker    GPU reconstruction worker (photogrammetry / gaussian splat)
-#   minio     S3-compatible object store for media + generated 3D Tiles
-#   postgres  story / scene / media metadata
-#   redis     job queue (ingest → reconstruct → tile)
+#   viewer        legacy static web viewer (nginx) — renders shared 4D stories
+#   viewer-react  consolidated viewer (Resium/CesiumJS + R3F/WebXR, ADR-0001) —
+#                 the one with live Companion Memory + Places integration
+#   atlas-api     3D processing API + MCP server (REST + /mcp)
+#   worker        GPU reconstruction worker (photogrammetry / gaussian splat)
+#   minio         S3-compatible object store for media + generated 3D Tiles
+#   postgres      story / scene / media metadata
+#   redis         job queue (ingest → reconstruct → tile)
 #
 # Bring up the app tier (viewer + api + stores):
 #   docker compose up viewer atlas-api minio postgres redis
+# Or the consolidated viewer (talks directly to an external CI-Server, no
+# atlas-api dependency — set VITE_MEMORY_URL):
+#   docker compose up viewer-react
 # Add reconstruction (needs an NVIDIA GPU):
 #   docker compose --profile gpu up worker
 
@@ -33,6 +38,17 @@ services:
       - "4173:8080"
     depends_on:
       - atlas-api
+
+  viewer-react:
+    build:
+      context: .
+      dockerfile: viewer-react/Dockerfile
+      args:
+        VITE_CESIUM_ION_TOKEN: ${VITE_CESIUM_ION_TOKEN:-}
+        VITE_MEMORY_URL: ${VITE_MEMORY_URL:-}
+        VITE_MEMORY_TOKEN: ${VITE_MEMORY_TOKEN:-}
+    ports:
+      - "4174:80"
 
   atlas-api:
     build:

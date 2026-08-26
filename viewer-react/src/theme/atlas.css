@@ -89,6 +89,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-icon-btn { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: var(--atlas-fg-dim); background: transparent; border: 1px solid transparent; cursor: pointer; }
 .atlas-icon-btn:hover { color: var(--atlas-teal); background: rgba(64,155,155,.10); }
 .atlas-icon-btn svg { width: 18px; height: 18px; }
+.atlas-icon-btn[aria-pressed="true"] { color: var(--atlas-violet); background: rgba(183,156,255,.14); border-color: rgba(183,156,255,.3); }
 
 /* stage (holds the Cesium globe + overlays) */
 .atlas-stage { grid-area: stage; position: relative; overflow: hidden; }

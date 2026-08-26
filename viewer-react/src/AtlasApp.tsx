@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
-import { buildScrapbookStory, curateJourney, type ScrapbookEntry, type Story } from '@companion-atlas/story';
+import { buildScrapbookStory, curateJourney, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
 import { useStory } from './story/useStory.js';
+import { usePlaces } from './story/usePlaces.js';
 import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
 import { Rail, TopBar, type AtlasView } from './ui/Shell.js';
 import { Starfield, GridHorizon } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
+import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
 import { AltView } from './ui/AltViews.js';
 import { CommandPalette } from './ui/CommandPalette.js';
@@ -66,6 +68,7 @@ const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
  */
 export function AtlasApp() {
   const { story: loadedStory, error, loading, source, memory } = useStory();
+  const { places } = usePlaces(memory);
 
   // A curated scrapbook journey temporarily takes over the globe; the loaded
   // story stays the base the scrapbook collects against.
@@ -84,6 +87,10 @@ export function AtlasApp() {
   const [view, setView] = useState<AtlasView>('globe');
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  // Named-places layer: opt-in (the memory layer is the primary surface), and
+  // its own focus state — independent of `focusedId`/`focused`, which are memory-only.
+  const [showPlaces, setShowPlaces] = useState(false);
+  const [focusedPlace, setFocusedPlace] = useState<Place | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(!reduceMotion);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -196,6 +203,17 @@ export function AtlasApp() {
       duration: reduceMotion ? 0 : 1.6,
     });
   }, [viewer, reduceMotion]);
+
+  const flyToPlace = useCallback((p: Place) => {
+    if (!viewer || p.latitude == null || p.longitude == null) return;
+    void viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(p.longitude, p.latitude, 1_800_000),
+      duration: reduceMotion ? 0 : 1.6,
+    });
+  }, [viewer, reduceMotion]);
+
+  const closePlace = useCallback(() => setFocusedPlace(null), []);
+  const togglePlaces = useCallback(() => setShowPlaces((v) => !v), []);
 
   const scrub = useCallback((ms: number) => {
     if (!Number.isFinite(ms)) return;
@@ -451,14 +469,24 @@ export function AtlasApp() {
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
       />
-      <TopBar view={view} onView={setView} onSearch={() => setPaletteOpen(true)} onShare={share} live={source === 'memory'} />
+      <TopBar
+        view={view}
+        onView={setView}
+        onSearch={() => setPaletteOpen(true)}
+        onShare={share}
+        live={source === 'memory'}
+        showPlaces={showPlaces}
+        onTogglePlaces={togglePlaces}
+      />
       <main className="atlas-stage">
         <CesiumStoryViewer
           story={story}
           memories={model.memories}
+          places={showPlaces ? places : []}
           focusedId={focused?.id ?? null}
           onViewer={setViewer}
           onPick={inspect}
+          onPickPlace={setFocusedPlace}
           onHover={setHoveredId}
           onInteract={pause}
         />
@@ -482,14 +510,18 @@ export function AtlasApp() {
         )}
       </main>
       {isGlobe && (
-        <MemoryInspector
-          memory={focused}
-          related={related}
-          onFly={inspect}
-          onExpand={() => focused && setLightbox(focused)}
-          collected={focused ? collected(focused) : false}
-          onCollect={() => focused && toggleCollect(focused)}
-        />
+        focusedPlace ? (
+          <PlaceCard place={focusedPlace} onFly={flyToPlace} onClose={closePlace} />
+        ) : (
+          <MemoryInspector
+            memory={focused}
+            related={related}
+            onFly={inspect}
+            onExpand={() => focused && setLightbox(focused)}
+            collected={focused ? collected(focused) : false}
+            onCollect={() => focused && toggleCollect(focused)}
+          />
+        )
       )}
       <TimeMachine
         model={model}

@@ -96,6 +96,62 @@ jobs:
       - name: Verify emitted types
         run: test -f packages/story-schema/dist/index.d.ts
 
+  viewer-react:
+    name: viewer-react — tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm install --no-audit --no-fund --workspace @companion-atlas/viewer-react --workspace @companion-atlas/story --include-workspace-root
+
+      - name: Build @companion-atlas/story
+        run: npm run build --workspace @companion-atlas/story
+
+      - name: Test
+        run: npm test --workspace @companion-atlas/viewer-react
+
+      # The full `npm run build --workspace @companion-atlas/viewer-react`
+      # (tsc --noEmit && vite build) is deliberately NOT run here.
+      # viewer-react depends on @companionintelligence/tokens, which
+      # package-lock.json resolves to `link:../ci-common/packages/tokens` — a
+      # path outside this repository, same as the `viewer` job above works
+      # around for the root app. Unlike that job, viewer-react's own source
+      # (src/theme/index.ts) imports it directly, so there's no way to build
+      # or typecheck viewer-react in a single-repo CI checkout today. The
+      # tests above don't touch that import and so aren't affected. Add a
+      # build/typecheck step here once that dependency is published to a
+      # registry this checkout can resolve.
+
+  server:
+    name: server — typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # server/src/ci-memory-client.ts imports from @companion-atlas/story
+      # (not declared in server/package.json — it currently resolves only via
+      # npm workspace hoisting), so include it explicitly here too.
+      - name: Install
+        run: npm install --no-audit --no-fund --workspace server --workspace @companion-atlas/story --include-workspace-root
+
+      - name: Build @companion-atlas/story
+        run: npm run build --workspace @companion-atlas/story
+
+      - name: Typecheck
+        run: npm run typecheck --workspace server
+
+      - name: Test
+        run: npm test --workspace server
+
   image:
     name: Viewer image (build only, no push)
     runs-on: ubuntu-latest

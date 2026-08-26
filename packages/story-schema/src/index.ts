@@ -10,6 +10,7 @@ export * from './normalize.js';
 export * from './czml.js';
 export * from './validate.js';
 export * from './memory.js';
+export * from './places.js';
 export * from './scrapbook.js';
 export type {
   LegacyScrapbook,

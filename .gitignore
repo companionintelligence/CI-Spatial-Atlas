@@ -12,6 +12,9 @@
 /server/node_modules
 /server/dist
 
+# Workspace packages build output (e.g. packages/story-schema/dist)
+/packages/*/dist
+
 # Test + build artifacts
 /test-results/earth-*
 /test-results/tiles-*
