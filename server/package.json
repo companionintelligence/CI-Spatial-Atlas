@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@companion-atlas/story": "file:../packages/story-schema",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "exiftool-vendored": "^28.3.0",
     "fastify": "^5.2.0",

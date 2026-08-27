@@ -20,3 +20,13 @@
 /test-results/tiles-*
 /playwright-report
 capture/
+
+# Deno lockfile — not committed yet: viewer-react's @companionintelligence/tokens
+# dependency lives on a private GitHub Packages registry (see viewer-react/.npmrc)
+# and `deno install`/`deno task *` resolve the whole npm workspace graph in one
+# pass, so a lockfile generated without NODE_AUTH_TOKEN would be incomplete and
+# would just error out for everyone else. Once a machine with that token runs
+# `deno install` at the repo root, commit the resulting deno.lock deliberately.
+/deno.lock
+/*/deno.lock
+/*/*/deno.lock

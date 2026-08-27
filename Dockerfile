@@ -1,21 +1,38 @@
 # Companion Atlas — web viewer image.
-# Multi-stage: build the Vite SPA, then serve the static bundle with nginx.
+# Multi-stage: build the Vite SPA under Deno (npm/Node compat mode), then serve
+# the static bundle with nginx.
 
-FROM node:22-alpine AS build
+FROM denoland/deno:alpine-2.9.5 AS build
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
+# Only this package's own manifests are copied in — the sibling npm/Deno
+# workspace members (packages/story-schema, viewer-react, server) are never
+# added to this image. The root viewer doesn't depend on any of them, and
+# Deno's npm-workspace resolution re-checks *every* workspace member's
+# package.json on each `deno task` invocation (unlike `npm run`, which only
+# resolves once at `npm ci` time) — if viewer-react's package.json were
+# present, every `deno task` here would try to resolve its private
+# @companionintelligence/tokens dependency (see viewer-react/.npmrc) and fail
+# without registry credentials this image doesn't need.
+COPY package.json package-lock.json deno.json ./
+RUN deno install
+COPY index.html tsconfig.json vite.config.ts ./
+COPY src ./src
+COPY public ./public
+COPY scripts ./scripts
+COPY materials ./materials
+COPY tests ./tests
 # Production build. Build-time map keys are injected as Vite `define`
 # constants (see vite.config.ts); pass them as --build-arg / env.
 #
-# NOTE: `npm run textures:build` is deliberately NOT run here. It shells out to
-# ImageMagick (`magick`), which is not present in node:22-alpine, so including
-# it made this image impossible to build (the failure mode that left
-# ghcr.io/companionintelligence/companion-atlas-viewer unpublished). The
+# NOTE: `deno task textures:build` is deliberately NOT run here (same fix as
+# the npm-based image, PR #19/#20 — the Deno migration branched before that
+# landed and had independently reached for installing ImageMagick instead).
+# It shells out to ImageMagick (`magick`), which isn't present in this image,
+# and would make the build fail the way it used to before #19/#20. The
 # generated textures under public/textures/ are committed to the repo, so the
-# build does not need to regenerate them; run `npm run textures:build` locally
-# and commit the result when the source material in materials/ changes.
+# build doesn't need to regenerate them; run `deno task textures:build` (or
+# `npm run textures:build`) locally and commit the result when the source
+# material in materials/ changes.
 ARG CESIUM_ION_TOKEN=""
 ARG GOOGLE_MAP_PLATFORM=""
 ARG MAPBOX_API_KEY=""
@@ -24,7 +41,7 @@ ENV CESIUM_ION_TOKEN=$CESIUM_ION_TOKEN \
     GOOGLE_MAP_PLATFORM=$GOOGLE_MAP_PLATFORM \
     MAPBOX_API_KEY=$MAPBOX_API_KEY \
     ESRI_API_KEY=$ESRI_API_KEY
-RUN npm run cesium:assets && npm run build
+RUN deno task cesium:assets && deno task build
 
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
