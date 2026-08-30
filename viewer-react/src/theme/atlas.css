@@ -526,3 +526,8 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-rail-btn, .atlas-icon-btn, .tm-btn { min-width: 40px; min-height: 40px; }
   .tm-play { min-width: 44px; min-height: 44px; }
 }
+/* Historical weather, folded into the time-of-day chip. */
+.atlas-insp-plainhead .now .wx {
+  padding-left: 8px; margin-left: 6px; border-left: 1px solid var(--atlas-line-2);
+  color: var(--atlas-fg); font-variant-numeric: tabular-nums;
+}

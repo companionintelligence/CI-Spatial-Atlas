@@ -1,5 +1,6 @@
 import { PinIcon, ClockIcon, CameraIcon, SunIcon, MoonIcon, PlaneIcon, PlusIcon } from './icons.js';
 import { mediaThumb, type AtlasMemory, type AtlasPlaceSummary } from '../model/atlasModel.js';
+import type { MemoryWeather } from '../memory/weather.js';
 
 const fmtDate = (ms: number) =>
   new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -25,11 +26,13 @@ function formatDuration(mins: number): string {
 
 const TOD_LABEL: Record<AtlasMemory['tod'], string> = { dawn: 'Dawn', day: 'Daylight', dusk: 'Dusk', night: 'Night' };
 
-export function MemoryInspector({ memory, related, place, onFly, onExpand, collected, onCollect }: {
+export function MemoryInspector({ memory, related, place, weather, onFly, onExpand, collected, onCollect }: {
   memory: AtlasMemory | null;
   related: AtlasMemory[];
   /** Everything else that happened at this memory's place, for the visit history. */
   place?: AtlasPlaceSummary | null;
+  /** Actual weather at this memory's place and hour, when the archive has it. */
+  weather?: MemoryWeather | null;
   onFly: (m: AtlasMemory) => void;
   onExpand: () => void;
   /** Whether this memory is already in the scrapbook draft. */
@@ -61,7 +64,10 @@ export function MemoryInspector({ memory, related, place, onFly, onExpand, colle
         </button>
       ) : (
         <div className="atlas-insp-plainhead">
-          <div className="now">{night ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · {memory.whenTime}</div>
+          <div className="now">
+            {night ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · {memory.whenTime}
+            {weather && <span className="wx">{Math.round(weather.tempC)}°C · {weather.label}</span>}
+          </div>
         </div>
       )}
       <div className="atlas-insp-body">

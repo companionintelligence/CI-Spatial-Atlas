@@ -11,6 +11,7 @@ import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 import { Starfield, GridHorizon } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { placeSummaries } from './model/atlasModel.js';
+import { useWeather } from './story/useWeather.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
 import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
@@ -148,6 +149,9 @@ export function AtlasApp() {
     () => (model ? model.memories.filter((m) => m.id !== focused?.id) : []),
     [model, focused],
   );
+
+  // What the weather actually was, at this place, that hour.
+  const weather = useWeather(focused);
 
   // The scrapbook always collects against the *base* story, so a draft survives
   // playing a journey built from it.
@@ -548,6 +552,7 @@ export function AtlasApp() {
             memory={focused}
             related={related}
             place={focused ? placeIndex.get(focused.placeId ?? `name:${focused.place ?? ''}`) ?? null : null}
+            weather={weather}
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}
