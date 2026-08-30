@@ -41,12 +41,14 @@ export function Rail({ view, onView, onSearch, onFrameAll, onPeople, onCollectio
 }
 
 /** Top bar — wordmark, view switcher, ⌘K search, places toggle, share. */
-export function TopBar({ view, onView, onSearch, onShare, live, showPlaces, onTogglePlaces }: {
+export function TopBar({ view, onView, onSearch, onShare, live, sample, showPlaces, onTogglePlaces }: {
   view: AtlasView;
   onView: (v: AtlasView) => void;
   onSearch: () => void;
   onShare: () => void;
   live?: boolean;
+  /** Showing the bundled demo story because no Companion Memory is connected. */
+  sample?: boolean;
   /** Named-places layer (CI-Server Places API) — off by default; the memory layer is primary. */
   showPlaces?: boolean;
   onTogglePlaces?: () => void;
@@ -61,6 +63,14 @@ export function TopBar({ view, onView, onSearch, onShare, live, showPlaces, onTo
     <header className="atlas-top">
       <div className="atlas-wordmark"><b>Companion&nbsp;Atlas</b><span>your memories in space &amp; time</span></div>
       {live && <span className="atlas-live" title="Connected to Companion Memory"><i />Live memory</span>}
+      {sample && (
+        <span
+          className="atlas-sample"
+          title="Not connected to Companion Memory. These are bundled demo places, not your memories. Pass ?memory=<ci-server-url> to load real data."
+        >
+          <i />Demo data — not connected
+        </span>
+      )}
       <div className="switch" role="group" aria-label="View">
         {tabs.map(({ key, label, Icon }) => (
           <button key={key} aria-pressed={view === key} className={view === key ? 'active' : ''} onClick={() => onView(key)}>

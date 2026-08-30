@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
+    server: {
+      port: Number(process.env.PORT) || 5173
+    },
     define: {
       __CESIUM_ION_TOKEN__: JSON.stringify(env.CESIUM_ION_TOKEN ?? ''),
       __GOOGLE_MAP_PLATFORM__: JSON.stringify(env.GOOGLE_MAP_PLATFORM ?? ''),

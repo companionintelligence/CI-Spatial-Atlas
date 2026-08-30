@@ -75,6 +75,11 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-wordmark span { font-size: 10.5px; color: var(--atlas-fg-dim); letter-spacing: .28px; margin-top: 3px; text-transform: uppercase; }
 .atlas-live { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(88,235,191,.12); border: 1px solid rgba(88,235,191,.4); color: var(--atlas-mint); font-size: 10.5px; font-weight: 600; letter-spacing: .3px; }
 .atlas-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--atlas-mint); box-shadow: 0 0 8px 1px var(--atlas-mint); }
+/* Counterpart to .atlas-live: amber, deliberately not the mint "connected"
+   colour, so an unconnected viewer showing bundled fixtures reads as demo at a
+   glance instead of passing for the user's own memories. */
+.atlas-sample { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(224,151,90,.12); border: 1px solid rgba(224,151,90,.45); color: #e0975a; font-size: 10.5px; font-weight: 600; letter-spacing: .3px; }
+.atlas-sample i { width: 7px; height: 7px; border-radius: 50%; background: #e0975a; box-shadow: 0 0 8px 1px rgba(224,151,90,.7); }
 .switch { display: flex; gap: 2px; padding: 3px; background: rgba(4,18,26,.7); border: 1px solid var(--atlas-line); border-radius: 999px; }
 .switch button { display: flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 999px; border: 0; background: transparent; color: var(--atlas-fg-dim); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: color .15s, background .15s; }
 .switch button svg { width: 15px; height: 15px; }

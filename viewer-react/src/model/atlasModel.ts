@@ -35,7 +35,7 @@ export interface AtlasModel {
   stats: { memories: number; places: number; years: number };
   memories: AtlasMemory[];
   focused: AtlasMemory | null;
-  timeline: { startMs: number; stopMs: number; ticks: { label: string; hot: boolean }[] };
+  timeline: { startMs: number; stopMs: number; ticks: { label: string; ms: number }[] };
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -193,18 +193,41 @@ export function deriveModel(story: Story): AtlasModel {
   for (const m of memories) {
     if (m.lat != null && m.lon != null) places.add(locKey(m.lat, m.lon));
   }
+  // Memory ids come straight from the source (scene ids, or CI-Server entity
+  // ids), and a single CI-Server event can surface more than once — e.g. the
+  // same located event projected as both a photo and a marker. Duplicates reach
+  // React as repeated `key`s, which makes it omit or double-render frames, so
+  // the scrapbook silently loses cards and clicks land on the wrong memory.
+  // Dedupe once here rather than at each render site.
+  const seenIds = new Set<string>();
+  memories = memories.filter((m) => (seenIds.has(m.id) ? false : (seenIds.add(m.id), true)));
+
   const years = Number.isFinite(startMs) && Number.isFinite(stopMs)
     ? Math.max(1, new Date(stopMs).getFullYear() - new Date(startMs).getFullYear() + 1)
     : 1;
 
-  // Timeline axis ticks (evenly spaced across the span).
-  const ticks: { label: string; hot: boolean }[] = [];
+  // Timeline axis ticks (evenly spaced across the span). The label granularity
+  // follows the span: a single afternoon's worth of memories labelled `MMM D`
+  // renders the same date six times and tells the reader nothing, so short spans
+  // fall back to clock time and multi-year spans collapse to month + year.
+  const ticks: { label: string; ms: number }[] = [];
   if (Number.isFinite(startMs) && Number.isFinite(stopMs) && stopMs > startMs) {
     const span = stopMs - startMs;
+    const HOUR = 3_600_000;
+    const DAY = 24 * HOUR;
+    const label = (d: Date): string => {
+      if (span < 36 * HOUR) {
+        const h = d.getHours();
+        const h12 = h % 12 === 0 ? 12 : h % 12;
+        return `${h12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+      }
+      if (span < 400 * DAY) return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+      return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    };
     const n = 5;
     for (let i = 0; i <= n; i++) {
-      const d = new Date(startMs + (span * i) / n);
-      ticks.push({ label: `${MONTHS[d.getMonth()]} ${d.getDate()}`, hot: i === n - 1 });
+      const ms = startMs + (span * i) / n;
+      ticks.push({ label: label(new Date(ms)), ms });
     }
   }
 
