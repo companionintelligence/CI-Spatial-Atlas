@@ -4,6 +4,7 @@ import { GoogleMaps, Ion } from 'cesium';
 import './theme/theme.css';
 import './theme/atlas.css';
 import { AtlasApp } from './AtlasApp.js';
+import { maybeInstallXREmulator } from './renderers/xr/devEmulator.js';
 import { rendererForDevice } from './renderers/rendererForDevice.js';
 
 // Use the configured Cesium ion token for real World Imagery / World Terrain.
@@ -30,11 +31,16 @@ const reactRoot = createRoot(root);
 // nothing in the desktop chrome — rails, drawers, the scrubber — exists inside
 // an immersive session. Importing the XR root only when it wins keeps 3D Tiles
 // and WebXR out of the bundle every desktop visitor downloads.
-void rendererForDevice().then(async (kind) => {
-  const App = kind === 'xr' ? (await import('./renderers/xr/XRAtlasApp.js')).XRAtlasApp : AtlasApp;
-  reactRoot.render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
-});
+// The emulator must be installed before rendererForDevice() runs — that is the
+// function asking navigator.xr whether an immersive session is possible, so
+// installing afterwards leaves it having already chosen the desktop globe.
+void maybeInstallXREmulator()
+  .then(() => rendererForDevice())
+  .then(async (kind) => {
+    const App = kind === 'xr' ? (await import('./renderers/xr/XRAtlasApp.js')).XRAtlasApp : AtlasApp;
+    reactRoot.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+  });

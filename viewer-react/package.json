@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Consolidated Companion Atlas viewer \u2014 Resium (React+Cesium) for desktop/mobile, R3F for WebXR. Phase-1 scaffold (see README).",
+  "description": "Consolidated Companion Atlas viewer — Resium (React+Cesium) for desktop/mobile, R3F for WebXR. Phase-1 scaffold (see README).",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4174",
     "build": "tsc --noEmit && vite build",
@@ -28,6 +28,7 @@
     "@types/react-dom": "^18.3.0",
     "@types/three": "^0.183.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "iwer": "^2.3.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.5",
     "vite-plugin-cesium": "^1.2.23"

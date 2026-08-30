@@ -60,9 +60,34 @@ const _q = new Quaternion();
 const _s = new Vector3();
 const _cart = { lat: 0, lon: 0, height: 0 };
 
+/**
+ * Where the Earth sits when a session starts.
+ *
+ * Scale 1e-7 makes a globe ~1.3 m across — a body-scale object you can reach
+ * around, which is the Google Earth VR framing. The position is the part that
+ * matters and was wrong: leaving it at the origin centres that globe on the
+ * player's own floor position, so it sits *between their feet*. The camera
+ * starts at eye height looking level, and the top of the globe is barely knee
+ * high, so an immersive session opened on an empty black room — the Earth was
+ * there the whole time, 55 degrees below the view direction. Verified in an
+ * emulated Quest 3 session: pitching the headset down brought it into frame.
+ *
+ * It now starts in front of the player at chest height, where a globe on a
+ * stand would be — visible immediately, and within arm's reach for the grab
+ * locomotion that is the whole interaction model.
+ */
 export function createWorldTransform(): WorldTransform {
-  return { position: new Vector3(), quaternion: new Quaternion(), scale: 1e-7 };
+  return {
+    position: new Vector3(0, EYE_HEIGHT_M - 0.5, -GLOBE_DISTANCE_M),
+    quaternion: new Quaternion(),
+    scale: 1e-7,
+  };
 }
+
+/** Standing eye height of the WebXR `local-floor` reference space, metres. */
+const EYE_HEIGHT_M = 1.6;
+/** How far in front of the player the globe floats, metres. */
+const GLOBE_DISTANCE_M = 1.6;
 
 export function copyWorldTransform(from: WorldTransform, to: WorldTransform): WorldTransform {
   to.position.copy(from.position);
