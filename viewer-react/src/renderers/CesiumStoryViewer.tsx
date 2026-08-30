@@ -46,6 +46,20 @@ type Located = AtlasMemory & { lat: number; lon: number };
 const LIT_FADE_OUT = 1.0e4;
 const LIT_FADE_IN = 1.0e5;
 
+/**
+ * Ask for one frame.
+ *
+ * Under `requestRenderMode` Cesium only draws when something tells it to. It
+ * works that out for itself for the things it owns — camera moves, entity and
+ * imagery-collection changes, tiles finishing, the clock moving — but a plain
+ * property set on `globe` or `scene` is invisible to it. Every such mutation in
+ * this file is followed by one of these; without it the change is real in the
+ * scene graph and simply never appears, which looks exactly like a frozen app.
+ */
+function nudge(v: Cesium.Viewer | null | undefined): void {
+  if (v && !v.isDestroyed()) v.scene.requestRender();
+}
+
 function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number; in: number }): void {
   globe.enableLighting = on;
   globe.dynamicAtmosphereLighting = on;
@@ -222,6 +236,7 @@ export function CesiumStoryViewer({
       applySunLighting(v.scene.globe, sunLightingRef.current, stockFadeRef.current);
       v.scene.fog.enabled = true;
       if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
+      nudge(v);
       // Render the globe at device resolution (crisp on HiDPI), capped for perf.
       //
       // `resolutionScale` is a MULTIPLIER on the device pixel ratio, not a
@@ -239,6 +254,22 @@ export function CesiumStoryViewer({
       const dpr = window.devicePixelRatio || 1;
       v.useBrowserRecommendedResolution = false;
       v.resolutionScale = Math.min(2, dpr) / dpr;
+
+      // NOT enabled here, deliberately: `v.scene.requestRenderMode = true`.
+      //
+      // Removing the pins' per-frame closures made it *possible* — 580
+      // non-constant properties used to mark the scene dirty on every frame,
+      // which defeats the mode outright — and an idle globe still costs a full
+      // 24.6 ms frame forever, so the win is real and worth taking. What is
+      // missing is proof. Its failure mode is that some mutation nobody thought
+      // to follow with a `requestRender` stops appearing at all, which presents
+      // as a frozen app, and that has to be verified against a *running* render
+      // loop: the mode's gate is in the loop, not in `scene.render()`, so
+      // driving `render()` by hand cannot tell you whether it works.
+      //
+      // The `nudge()` calls below are the groundwork and are already in place;
+      // `requestRender` is a no-op while this stays off. Turning it on is one
+      // line plus a pass over every mutation site.
 
       // Picking: click/hover a pin → map its id back to the AtlasMemory or Place
       // it came from, by the `mem:`/`place:` prefix each layer's entities carry.
@@ -409,6 +440,7 @@ export function CesiumStoryViewer({
     };
     applySunLighting(viewer.scene.globe, sunLighting, stockFadeRef.current);
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
+    nudge(viewer); // plain property sets on `globe`; Cesium cannot see them
   }, [viewer, sunLighting]);
 
   // ---- Google Photorealistic 3D Tiles (buildings) ----
@@ -430,6 +462,7 @@ export function CesiumStoryViewer({
         // Google's tiles carry their own surface; the ellipsoid globe underneath
         // would z-fight through the streets.
         viewer.scene.globe.show = false;
+        nudge(viewer);
       })
       .catch((e) => console.error('[atlas] photorealistic tiles failed', e));
     return () => {
@@ -437,6 +470,7 @@ export function CesiumStoryViewer({
       if (!viewer.isDestroyed()) {
         if (tileset) viewer.scene.primitives.remove(tileset);
         viewer.scene.globe.show = true;
+        nudge(viewer);
       }
     };
   }, [viewer, buildings]);
