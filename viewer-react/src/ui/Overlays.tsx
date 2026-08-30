@@ -38,7 +38,10 @@ export function PlaceChip({ memory }: { memory: AtlasMemory | null }) {
     : null;
   return (
     <div className="atlas-place-chip">
-      <PinIcon />{memory.place ?? memory.title}
+      {/* With no known place the coordinate carries the chip on its own. The
+          title used to stand in here, which read as though the event's name
+          were the name of a location. */}
+      <PinIcon />{memory.place ?? (coord ? 'Unnamed location' : memory.title)}
       {coord && <>&nbsp;<span className="coord">{coord}</span></>}
     </div>
   );

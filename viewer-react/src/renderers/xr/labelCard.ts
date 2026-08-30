@@ -13,6 +13,21 @@ export interface LabelCard {
   texture: CanvasTexture;
   /** Card width / height, so the caller can size a quad by height alone. */
   aspect: number;
+  /**
+   * Where each line of an info card sits, as a fraction of the card's height
+   * measured from the top.
+   *
+   * A pointable list has to answer "which line is the ray on?", and the answer
+   * has to come from the same numbers that drew the text — deriving it a second
+   * time in the caller means a highlight that drifts off its row the moment the
+   * type metrics here change.
+   */
+  rows?: readonly CardRow[];
+}
+
+export interface CardRow {
+  top: number;
+  bottom: number;
 }
 
 export interface LabelContent {
@@ -141,18 +156,20 @@ export function drawLabelCard({ title, when, place, accent = '#72ddd4' }: LabelC
  * both providers' terms) and the control hints. There is no DOM in an immersive
  * session, so an overlay in the page is not a substitute.
  */
-export function drawInfoCard(heading: string, lines: string[], maxWidth = 900): LabelCard {
+export function drawInfoCard(heading: string, lines: string[], maxWidth = 900, minWidth = 0): LabelCard {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
 
   // Size to the content rather than to a fixed width: the longest line is an
   // imagery credit, and truncating an attribution to fit a card is not a
-  // licence anyone granted.
+  // licence anyone granted. `minWidth` is for the one card that must *not*
+  // resize with its content — a menu whose rows shift under a pointer between
+  // one redraw and the next is a menu you cannot hit.
   ctx.font = `600 ${TITLE_SIZE - 4}px ${FONT}`;
   let width = ctx.measureText(heading).width;
   ctx.font = `500 ${META_SIZE}px ${FONT}`;
   for (const line of lines) width = Math.max(width, ctx.measureText(line).width);
-  width = Math.min(width + PAD * 2, maxWidth);
+  width = Math.max(minWidth, Math.min(width + PAD * 2, maxWidth));
   const height = PAD * 2 + LINE + lines.length * (META_SIZE + 7);
 
   canvas.width = Math.ceil(width * SCALE);
@@ -174,18 +191,37 @@ export function drawInfoCard(heading: string, lines: string[], maxWidth = 900): 
   let y = PAD + LINE + META_SIZE - 4;
   ctx.font = `500 ${META_SIZE}px ${FONT}`;
   ctx.fillStyle = MUTED;
-  for (const line of lines) {
+  const rows: CardRow[] = [];
+  lines.forEach((line, i) => {
     let text = line;
     while (text.length > 1 && ctx.measureText(text).width > width - PAD * 2) text = text.slice(0, -1);
     ctx.fillText(text === line ? text : `${text}…`, PAD, y);
     y += META_SIZE + 7;
-  }
+    const top = PAD + LINE + i * (META_SIZE + 7);
+    rows.push({ top: top / height, bottom: (top + META_SIZE + 7) / height });
+  });
 
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   texture.minFilter = LinearFilter;
   texture.anisotropy = 4;
-  return { texture, aspect: width / height };
+  return { texture, aspect: width / height, rows };
+}
+
+/**
+ * Which row of an info card a point lands on, in card coordinates: `u` across
+ * from the left, `y` down from the top, both 0–1. -1 for a miss.
+ *
+ * Down from the top, not up from the bottom, because that is the order the rows
+ * were drawn in; a caller holding a three.js `uv` passes `1 - uv.y`.
+ */
+export function rowAtPoint(rows: readonly CardRow[] | undefined, u: number, y: number): number {
+  if (!rows || u < 0 || u > 1 || y < 0 || y > 1) return -1;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
+    if (y >= row.top && y < row.bottom) return i;
+  }
+  return -1;
 }
 
 /**

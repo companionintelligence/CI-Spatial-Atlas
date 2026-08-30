@@ -211,7 +211,11 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .tm-btn { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--atlas-fg-dim); background: transparent; border: 1px solid transparent; cursor: pointer; }
 .tm-btn:hover { color: var(--atlas-teal); background: rgba(64,155,155,.1); }
 .tm-btn svg { width: 17px; height: 17px; }
-.tm-track { position: relative; height: 100%; cursor: pointer; }
+.tm-btn.tm-sun.active { color: var(--atlas-mint); background: rgba(88,235,191,.12); border-color: rgba(88,235,191,.35); }
+/* `touch-action: none` is what makes the track draggable with a thumb: without
+   it the browser claims the gesture for panning after ~10px and the pointer
+   events stop arriving mid-scrub. */
+.tm-track { position: relative; height: 100%; cursor: pointer; touch-action: none; }
 /* A canvas is a REPLACED element: with `height` unset its used height comes
    from the intrinsic ratio of its width/height attributes, not from the
    top/bottom offsets. Sizing the attributes from the measured box therefore
@@ -411,7 +415,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 /* Header used when a memory has no real media — most of them. Carries the
    time-of-day cue the photo hero used to, without pretending a photo exists. */
 .atlas-insp-plainhead {
-  padding: 14px 16px 0; display: flex;
+  padding: 14px 16px 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
 }
 .atlas-insp-plainhead .now {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
@@ -501,26 +505,50 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-search { width: 38px; flex: 0 0 38px; justify-content: center; padding: 8px 0; }
   .atlas-search span:first-of-type, .atlas-search .kbd { display: none; }
 
-  /* Inspector → bottom sheet, above the time machine and tab bar. */
+  /* Inspector → bottom sheet, above the time machine and tab bar.
+     `display` is load-bearing: the 980px rule above hides the inspector to get
+     it out of a tablet's way, and that rule still matches on a phone. Every
+     other declaration in this block was dead — the whole bottom sheet, the
+     Street View hero and all — because nothing ever turned it back on. */
   .atlas-inspector {
+    display: flex;
     left: 8px; right: 8px; width: auto;
-    top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+    /* 64px tab bar + 92px time machine + 8px gap. Keep this in step with
+       `.atlas-timemachine`'s height below — it was 6px short after the bar
+       grew, and the sheet sat over the scrub track's top edge. */
+    top: auto; bottom: calc(164px + env(safe-area-inset-bottom, 0px));
     max-height: 42vh;
   }
   .atlas-insp-hero { max-height: 120px; }
 
-  /* Time machine: sits above the tab bar; readout compresses to the date. */
+  /* Time machine: two rows, not three columns.
+   *
+   * The desktop layout is `controls | track | date` on one line. Measured on a
+   * 390px phone that gave the track 124.5px — a third of the bar, and less room
+   * than the four buttons beside it — to carry seven years of history at ~15px
+   * per year. The tick labels wrapped onto two lines inside it and collided
+   * with the histogram. Stacking gives the track the full 354px, which is 2.8x
+   * the scrubbing resolution for the same 92px of screen. */
   .atlas-timemachine {
     left: 8px; right: 8px;
     bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-    height: 78px; gap: 10px; padding: 0 10px;
+    height: 92px; gap: 2px 10px; padding: 6px 10px 4px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "controls date" "track track";
+    align-items: center;
   }
-  /* The date was overflowing the bar and clipping mid-word ("Sep 24,"). */
-  .tm-readout { min-width: 0; max-width: 92px; overflow: hidden; }
-  .tm-readout .date { font-size: 11.5px; line-height: 1.25; white-space: normal; }
+  .tm-controls { grid-area: controls; }
+  .tm-track { grid-area: track; height: 100%; min-height: 40px; }
+  /* The date sits beside the controls now, so it has the rest of the row: no
+     more 92px box clipping "Sep 24," mid-word. */
+  .tm-readout { grid-area: date; min-width: 0; overflow: hidden; }
+  .tm-readout .date { font-size: 13px; line-height: 1.2; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
   .tm-readout .sub { display: none; }
-  .tm-axis { font-size: 9px; }
-  /* Half the ticks would collide at this width. */
+  /* The track is short now, so its furniture rides higher inside it. */
+  .tm-histogram { top: 4px; height: calc(100% - 22px); }
+  .tm-axis { font-size: 9px; bottom: 1px; }
+  .tm-playhead { top: 2px; bottom: 13px; }
+  /* Half the ticks would collide even at full width. */
   .tm-axis span:nth-child(even) { display: none; }
 
   /* Overlays: keep the globe legible. */
@@ -540,6 +568,11 @@ body { background: var(--atlas-bg); overflow: hidden; }
 @media (pointer: coarse) {
   .atlas-rail-btn, .atlas-icon-btn, .tm-btn { min-width: 40px; min-height: 40px; }
   .tm-play { min-width: 44px; min-height: 44px; }
+  /* A 12px dot is findable with a mouse and invisible under a fingertip. The
+     knob is the only part of the playhead a thumb can aim at, so it grows with
+     the pointer rather than with the viewport — a tablet with a stylus gets the
+     small one, a wide phone gets the big one. */
+  .tm-playhead::before { top: -7px; left: -8px; width: 18px; height: 18px; }
 }
 /* Historical weather, folded into the time-of-day chip. Scoped to the inspector
    rather than to each head: the badge is one component now, and per-head copies
@@ -551,8 +584,27 @@ body { background: var(--atlas-bg); overflow: hidden; }
 /* Street View hero — credited, because it is Google's imagery of the place,
    not the user's photo of the moment. */
 .atlas-insp-street { position: relative; display: block; }
+/* Hold the bottom of the frame. Google burns its own attribution into the
+   bottom-left of every Street View image, and `object-fit: cover` centres the
+   crop — which quietly cut that attribution off at phone widths, where the hero
+   is squeezed to 120px and the crop is deep. Anchoring low keeps it, and costs
+   only sky. */
+.atlas-insp-street .hero-media { object-position: 50% 100%; }
 .atlas-insp-street .sv-credit {
   position: absolute; right: 8px; bottom: 8px; padding: 3px 7px; border-radius: 6px;
   background: rgba(2,10,14,.6); border: 1px solid var(--atlas-line);
   font: 500 9px/1 var(--atlas-mono); color: var(--atlas-fg-dim); letter-spacing: .03em;
 }
+
+/* The other outcome: Google has no panorama of this spot. Drawn as a deliberate
+   band rather than left as a gap, because an unexplained empty head looks like
+   imagery that failed to load. */
+.atlas-insp-plainhead .sv-absent {
+  margin: 0; width: 100%; display: flex; gap: 9px; align-items: flex-start;
+  padding: 9px 11px; border-radius: 10px;
+  background: rgba(4,18,26,.42); border: 1px dashed var(--atlas-line-2);
+  font-size: 11.5px; line-height: 1.35; color: var(--atlas-fg-dim);
+}
+.atlas-insp-plainhead .sv-absent svg { width: 14px; height: 14px; flex: 0 0 14px; margin-top: 1px; opacity: .7; }
+.atlas-insp-plainhead .sv-absent span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.atlas-insp-plainhead .sv-absent small { font-size: 10.5px; opacity: .72; }

@@ -167,7 +167,7 @@ export function deriveModel(story: Story): AtlasModel {
       ...solarLocal(t, loc?.lon),
       lat: loc?.lat,
       lon: loc?.lon,
-      place: extra?.place ?? sc.title,
+      place: extra?.place,
       gradient: GRADIENTS[i % GRADIENTS.length]!,
       media: extra?.media,
       tags: extra?.tags,
@@ -208,7 +208,14 @@ export function deriveModel(story: Story): AtlasModel {
       ...solarLocal(x.ms, x.lon),
       lat: x.lat,
       lon: x.lon,
-      place: x.place ?? x.title ?? `Memory ${i + 1}`,
+      // Left undefined when the source gave no place, rather than falling back
+      // to the memory's own title. 147 of 791 located memories in a real archive
+      // have no resolved place — every Amazon delivery (75/75) and 72 calendar
+      // entries — so the fallback was rendering "Amazon order — 9 items" as
+      // though it were a venue, in the place chip, the inspector's location row
+      // and the time-machine readout. A coordinate with no name is honest; a
+      // title standing in for a name is not.
+      place: x.place,
       gradient: GRADIENTS[i % GRADIENTS.length]!,
       media: x.media,
       tags: x.tags,
@@ -278,6 +285,61 @@ export function deriveModel(story: Story): AtlasModel {
 
 /** The memory whose time is closest to `ms` (used for the current place/readout). */
 /**
+ * Fill in the place of memories the server could not resolve one for, using the
+ * nearest known Place.
+ *
+ * A real archive leaves a lot of these: every Amazon delivery (75 of 75) and 72
+ * calendar entries arrive with coordinates but no place, because the source
+ * never carried an address the geocoder could pin. They are not junk — the 75
+ * deliveries sit at 44 distinct points, one of them a hotel near SFO that the
+ * owner was evidently staying in — so dropping them loses real history, and
+ * naming them after their own title ("Amazon order — 9 items") invents a venue
+ * that does not exist.
+ *
+ * The Places already loaded for the places layer are enough to name most of
+ * them, so this costs no extra request. The radius is deliberately tight: a
+ * delivery is at an address, and borrowing a name from 500 m away would assert
+ * something false rather than leave a coordinate honestly unnamed.
+ */
+export function nameUnplacedMemories(
+  memories: AtlasMemory[],
+  places: { id: string; name?: string; latitude?: number; longitude?: number }[],
+  radiusMetres = 150,
+): AtlasMemory[] {
+  const located = places.filter(
+    (p) => p.name && typeof p.latitude === 'number' && typeof p.longitude === 'number',
+  );
+  if (located.length === 0) return memories;
+
+  return memories.map((m) => {
+    if (m.place || m.lat == null || m.lon == null) return m;
+
+    let best: { id: string; name?: string } | undefined;
+    let bestMetres = radiusMetres;
+    for (const p of located) {
+      const metres = haversineMetres(m.lat, m.lon, p.latitude!, p.longitude!);
+      if (metres < bestMetres) {
+        bestMetres = metres;
+        best = p;
+      }
+    }
+    return best ? { ...m, place: best.name, placeId: m.placeId ?? best.id } : m;
+  });
+}
+
+/** Great-circle distance in metres. Exact enough at the scale that matters here. */
+export function haversineMetres(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6_371_000;
+  const toRad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * toRad;
+  const dLon = (lon2 - lon1) * toRad;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
  * Group the loaded memories by place, most-visited first.
  *
  * This is the shape a real archive actually has: a person's located history is
@@ -299,7 +361,7 @@ export function placeSummaries(memories: AtlasMemory[]): AtlasPlaceSummary[] {
     } else {
       byPlace.set(key, {
         id: key,
-        name: m.place ?? m.title,
+        name: m.place ?? m.title, // only reached when m.place exists (see key guard)
         visits: 1,
         firstMs: m.timeMs,
         lastMs: m.timeMs,

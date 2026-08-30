@@ -14,7 +14,7 @@ const googleMapsAvailable = Boolean(
 );
 import { Starfield } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
-import { placeSummaries } from './model/atlasModel.js';
+import { nameUnplacedMemories, placeSummaries } from './model/atlasModel.js';
 import { useWeather } from './story/useWeather.js';
 import { useStreetView } from './story/useStreetView.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
@@ -101,8 +101,16 @@ export function AtlasApp() {
   // "What was this place to me": the other memories sharing the focused
   // memory's place, which is how a real archive is actually structured — a
   // handful of venues returned to dozens of times.
+  // Name the memories the server could not place, from the Places already
+  // loaded for the places layer — no extra request. Without this a delivery
+  // renders as "Unnamed location" even when a known venue sits metres away.
+  const memoriesNamed = useMemo(
+    () => (model ? nameUnplacedMemories(model.memories, places) : []),
+    [model, places],
+  );
+
   const placeIndex = useMemo(() => {
-    const summaries = placeSummaries(model?.memories ?? []);
+    const summaries = placeSummaries(memoriesNamed);
     // The local tally only counts memories currently loaded (the client pages a
     // bounded window), so it under-reports: a venue visited 50 times shows 37.
     // CI-Server's Places API carries the true lifetime count, so prefer it and
@@ -119,7 +127,7 @@ export function AtlasApp() {
       if (server.name) s.name = server.name;
     }
     return new Map(summaries.map((p) => [p.id, p]));
-  }, [model, places]);
+  }, [memoriesNamed, places]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // Named-places layer: opt-in (the memory layer is the primary surface), and
   // its own focus state — independent of `focusedId`/`focused`, which are memory-only.
@@ -253,6 +261,11 @@ export function AtlasApp() {
       duration: reduceMotion ? 0 : 1.6,
     });
   }, [viewer, reduceMotion]);
+
+  // One switch, two places to reach it: the layers menu (where map layers
+  // live) and the time bar (where the moment lives). Same state, so they can
+  // never disagree about whether the globe is lit for the moment on screen.
+  const toggleSun = useCallback(() => setSunLighting((v) => !v), []);
 
   const closePlace = useCallback(() => setFocusedPlace(null), []);
   const togglePlaces = useCallback(() => setShowPlaces((v) => !v), []);
@@ -521,7 +534,7 @@ export function AtlasApp() {
             buildings={buildings}
             buildingsAvailable={Boolean(googleMapsAvailable)}
             onBasemap={setBasemap}
-            onToggleSun={() => setSunLighting((v) => !v)}
+            onToggleSun={toggleSun}
             onToggleBuildings={() => setBuildings((v) => !v)}
             onToggle={() => setLayersOpen((o) => !o)}
             onClose={() => setLayersOpen(false)}
@@ -567,7 +580,8 @@ export function AtlasApp() {
             related={related}
             place={focused ? placeIndex.get(focused.placeId ?? `name:${focused.place ?? ''}`) ?? null : null}
             weather={weather}
-            streetView={streetView}
+            streetView={streetView.shot}
+            streetViewStatus={streetView.status}
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}
@@ -579,7 +593,9 @@ export function AtlasApp() {
         model={model}
         currentMs={currentMs || model.timeline.startMs}
         playing={playing}
+        sunLighting={sunLighting}
         onTogglePlay={togglePlay}
+        onToggleSun={toggleSun}
         onScrub={scrub}
         onStep={step}
       />

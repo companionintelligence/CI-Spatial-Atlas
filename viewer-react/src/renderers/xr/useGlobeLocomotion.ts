@@ -32,6 +32,19 @@ import {
   type WorldLimits,
   type WorldTransform,
 } from './worldTransform.js';
+import {
+  anyInputActive,
+  createSnapTurnState,
+  createWorldMotion,
+  DEFAULT_COMFORT,
+  measureMotion,
+  rollExcess,
+  SNAP_TURN_RAD,
+  snapTurnTick,
+  type ComfortSettings,
+  type MotionSample,
+  type WorldMotion,
+} from './comfort.js';
 
 /** An eased move to a new framing — what "take me to this memory" runs. */
 export interface WorldFlight {
@@ -50,7 +63,7 @@ export interface WorldHandle {
   head: Vector3;
   /** How many hands are currently holding the world (0, 1 or 2). */
   hands: number;
-  /** In-progress fly-to, cancelled the moment the viewer grabs. */
+  /** In-progress fly-to, cancelled by any input at all (see `cancelFlight`). */
   flight: WorldFlight | null;
   /**
    * Pixels the mouse has travelled during the current flat-screen drag. A drag
@@ -58,6 +71,27 @@ export interface WorldHandle {
    * "I picked this memory" from "I spun the globe past it".
    */
   dragged: number;
+  /**
+   * How fast the world is sweeping across the viewer's field, refreshed each
+   * frame. The comfort layer reads it; nothing writes it but the frame loop.
+   */
+  motion: WorldMotion;
+  /**
+   * Live comfort settings. Kept on the handle rather than passed as props
+   * because the things that consume them run inside `useFrame`, and a toggle
+   * must take effect on the next frame rather than the next render.
+   */
+  comfort: ComfortSettings;
+}
+
+/**
+ * Stop an in-progress fly-to where it stands. Returns whether there was one —
+ * the caller usually wants to know whether it just interrupted something.
+ */
+export function cancelFlight(world: WorldHandle): boolean {
+  if (!world.flight) return false;
+  world.flight = null;
+  return true;
 }
 
 /**
@@ -106,6 +140,31 @@ const _right = new Vector3();
 const _up = new Vector3();
 const _axis = new Vector3();
 const _drag = new Vector3();
+const _forward = new Vector3();
+const _deltaQuat = new Quaternion();
+const _prevQuat = new Quaternion();
+/** Player +Y: snap turn is about the room's vertical, never the world's. */
+const TURN_AXIS = new Vector3(0, 1, 0);
+
+/**
+ * The thumbstick, as one number.
+ *
+ * `axes[2]` is the thumbstick X of the xr-standard mapping and `axes[0]` the
+ * touchpad's; controllers that have only a stick report it in `axes[0]`
+ * instead. Take whichever the device actually has, from whichever hand is
+ * pushing hardest, so snap turn works on either controller without the viewer
+ * having to know which one it was bound to.
+ */
+function readTurnAxis(session: XRSession): number {
+  let strongest = 0;
+  for (const source of session.inputSources) {
+    const axes = source.gamepad?.axes;
+    if (!axes || axes.length === 0) continue;
+    const value = (axes.length >= 4 ? axes[2] : axes[0]) ?? 0;
+    if (Math.abs(value) > Math.abs(strongest)) strongest = value;
+  }
+  return strongest;
+}
 
 /** Sources currently pinching, so the pinch has hysteresis instead of chattering. */
 const pinching = new WeakSet<XRInputSource>();
@@ -257,19 +316,29 @@ export function useGlobeLocomotion(world: WorldHandle, group: { current: Object3
   const grab = useRef({ hands: 0, worldStart: new Matrix4(), grabStart: new Matrix4() });
   const poses = useRef<GrabPose[]>([]);
   const depth = useRef({ near: 0, far: 0 });
+  const snap = useRef(createSnapTurnState());
+  // Last frame's world pose, for measuring how fast it is moving. Seeded on the
+  // first frame so the session does not open with a spurious velocity.
+  const previous = useRef<MotionSample & { seeded: boolean }>({
+    position: new Vector3(),
+    quaternion: new Quaternion(),
+    scale: 1,
+    seeded: false,
+  });
   const { onHandsChanged } = opts;
 
-  useFrame((state, _delta, frame) => {
+  useFrame((state, delta, frame) => {
     const xr = state.gl.xr;
     const session = xr.getSession?.() ?? undefined;
     const space = xr.getReferenceSpace?.() ?? undefined;
     readHead(frame, space, state.camera, world.head);
+    const comfort = world.comfort ?? DEFAULT_COMFORT;
 
     const held = poses.current;
     if (session && frame && space) readGrabPoses(session, frame, space, opts.origin?.(), held);
     else held.length = 0;
 
-    if (held.length > 0 && grabFrame(held, _grabNow)) {
+    if (held.length > 0 && grabFrame(held, _grabNow, comfort.levelHorizon)) {
       // Re-anchor whenever the number of hands changes: going from one hand to
       // two redefines the frame completely, and carrying the old start matrix
       // across snaps the planet across the room.
@@ -301,12 +370,46 @@ export function useGlobeLocomotion(world: WorldHandle, group: { current: Object3
       }
     } else {
       if (grab.current.hands !== 0) grab.current.hands = 0;
+      // Any button, trigger or stick stops a fly-to. Grabbing already did; this
+      // covers everything else, because someone who wants a 1.4-second ride
+      // across seven orders of magnitude to stop will reach for whatever is
+      // under their fingers, not for the one control that happens to be bound.
+      if (world.flight && session && anyInputActive(session.inputSources)) cancelFlight(world);
       advanceFlight(world, performance.now());
     }
 
     if (world.hands !== grab.current.hands) {
       world.hands = grab.current.hands;
       onHandsChanged?.(world.hands);
+    }
+
+    // Snap turn. The player never moves in this app — the world does — so a
+    // view rotation is the world turning the other way about the room's
+    // vertical, through the head. Doing it that way also leaves the room grid
+    // and the panels where they are, which is what makes them a rest frame.
+    if (comfort.snapTurn && session) {
+      const step = snapTurnTick(snap.current, readTurnAxis(session));
+      if (step !== 0) {
+        cancelFlight(world);
+        rotateAbout(world.transform, world.head, TURN_AXIS, -step * SNAP_TURN_RAD);
+        // Re-anchor an in-progress grab, exactly as a change of hand count
+        // does: `applyGrab` rebuilds from the start matrices every frame and
+        // would otherwise wipe the turn on the next one.
+        if (grab.current.hands > 0) {
+          grab.current.grabStart.copy(_grabNow);
+          toMatrix(world.transform, grab.current.worldStart);
+        }
+      }
+    }
+
+    // Cap how fast the horizon may roll (see `rollExcess`). Applied to whatever
+    // moved the world — grab, snap turn or fly-to — because the eye does not
+    // care which of them tilted it.
+    if (comfort.levelHorizon && previous.current.seeded) {
+      state.camera.getWorldDirection(_forward);
+      _deltaQuat.copy(world.transform.quaternion).multiply(_prevQuat.copy(previous.current.quaternion).invert());
+      const excess = rollExcess(_deltaQuat, _forward, delta);
+      if (excess !== 0) rotateAbout(world.transform, world.head, _forward, -excess);
     }
 
     clampWorld(world.transform, world.head, world.limits);
@@ -329,6 +432,17 @@ export function useGlobeLocomotion(world: WorldHandle, group: { current: Object3
       camera.far = far;
       camera.updateProjectionMatrix();
     }
+
+    // Last, so what the comfort layer reads is the world as it will actually be
+    // drawn this frame — after the clamps and the roll cap, not before them.
+    const prev = previous.current;
+    if (prev.seeded) {
+      measureMotion(prev, world.transform, world.head.distanceTo(world.transform.position), delta, world.motion);
+    }
+    prev.position.copy(world.transform.position);
+    prev.quaternion.copy(world.transform.quaternion);
+    prev.scale = world.transform.scale;
+    prev.seeded = true;
   }, -100);
 }
 
@@ -366,7 +480,7 @@ export function useFlatGlobeControls(world: WorldHandle, enabled = true): void {
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      world.flight = null;
+      cancelFlight(world);
       world.dragged = 0;
       const distance = pick(e.offsetX, e.offsetY, _pos);
       drag.current = { id: e.pointerId, x: e.offsetX, y: e.offsetY, distance };
@@ -406,9 +520,13 @@ export function useFlatGlobeControls(world: WorldHandle, enabled = true): void {
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
     };
 
+    // Same contract as the controllers: any input stops a fly-to. On a flat
+    // screen the keyboard is the third one, after the pointer and the wheel.
+    const onKey = () => cancelFlight(world);
+
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      world.flight = null;
+      cancelFlight(world);
       pick(e.offsetX, e.offsetY, _pos);
       const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0016));
       setScaleAbout(world.transform, world.transform.scale * factor, _pos);
@@ -420,7 +538,9 @@ export function useFlatGlobeControls(world: WorldHandle, enabled = true): void {
     el.addEventListener('pointerup', onUp);
     el.addEventListener('pointercancel', onUp);
     el.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('keydown', onKey);
     return () => {
+      window.removeEventListener('keydown', onKey);
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);

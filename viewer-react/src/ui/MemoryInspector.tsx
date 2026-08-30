@@ -2,6 +2,7 @@ import { PinIcon, ClockIcon, CameraIcon, SunIcon, MoonIcon, PlaneIcon, PlusIcon 
 import { mediaThumb, type AtlasMemory, type AtlasPlaceSummary } from '../model/atlasModel.js';
 import type { MemoryWeather } from '../memory/weather.js';
 import type { StreetViewShot } from '../memory/streetview.js';
+import type { StreetViewStatus } from '../story/useStreetView.js';
 
 const fmtDate = (ms: number) =>
   new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -45,7 +46,7 @@ function MomentBadge({ memory, weather }: { memory: AtlasMemory; weather?: Memor
   );
 }
 
-export function MemoryInspector({ memory, related, place, weather, streetView, onFly, onExpand, collected, onCollect }: {
+export function MemoryInspector({ memory, related, place, weather, streetView, streetViewStatus = 'idle', onFly, onExpand, collected, onCollect }: {
   memory: AtlasMemory | null;
   related: AtlasMemory[];
   /** Everything else that happened at this memory's place, for the visit history. */
@@ -54,6 +55,8 @@ export function MemoryInspector({ memory, related, place, weather, streetView, o
   weather?: MemoryWeather | null;
   /** Street View of the venue — the real preview when the memory has no photo. */
   streetView?: StreetViewShot | null;
+  /** Whether the lookup found imagery, found none, or hasn't run — see below. */
+  streetViewStatus?: StreetViewStatus;
   onFly: (m: AtlasMemory) => void;
   onExpand: () => void;
   /** Whether this memory is already in the scrapbook draft. */
@@ -94,8 +97,24 @@ export function MemoryInspector({ memory, related, place, weather, streetView, o
           <span className="sv-credit">Street View{streetView.captured ? ` · ${streetView.captured}` : ''}</span>
         </div>
       ) : (
+        /* No photo and no panorama. The absence is stated rather than left as a
+           gap: a memory with nothing to look at used to render an unexplained
+           strip of chrome, which reads as something that failed to load. Most
+           places genuinely have no Street View — indoors, private land, rural
+           roads — and saying so is more honest than an empty frame. The line is
+           held back until the lookup has actually finished, so it never claims
+           there is no imagery while the request is still out. */
         <div className="atlas-insp-plainhead">
           <MomentBadge memory={memory} weather={weather} />
+          {streetViewStatus === 'none' && (
+            <p className="sv-absent">
+              <CameraIcon />
+              <span>
+                No Street View of this place
+                <small>Google has no panorama here — it’s indoors, private, or off the road.</small>
+              </span>
+            </p>
+          )}
         </div>
       )}
       <div className="atlas-insp-body">
