@@ -496,7 +496,7 @@ export function AtlasApp() {
           <div className="atlas-overlay">
             <StatsRibbon stats={model.stats} />
             <PlaceChip memory={currentPlace} />
-            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} />
+            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
             <Legend />
           </div>
         )}
