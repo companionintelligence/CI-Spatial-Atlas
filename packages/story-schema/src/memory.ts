@@ -15,23 +15,29 @@
  * Kept free of `fetch` so every mapping is unit-tested; the server connector
  * (`server/src/connectors.ts`) does the transport with a Portal OIDC bearer.
  */
-import { STORY_SCHEMA_ID, type GeoPoint, type MediaItem, type Story } from './schema.js';
+import { STORY_SCHEMA_ID, type GeoPoint, type Item, type MediaItem, type Story } from './schema.js';
 import { loadStory, storyEntities, timelineBounds } from './normalize.js';
 
 /** Located media memories, chronological, paginated. `query:""` takes CI-Server's
  *  "timed" path; `includeTypes:["event"]` + `hasLocation:true` restricts to
  *  located events (the MapView surface). */
 export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
-  query AtlasLocatedMedia($first: Int = 100, $after: String, $startTime: String, $endTime: String, $bbox: [Float!]) {
+  query AtlasLocatedMedia($first: Int = 100, $after: String, $startTime: String, $endTime: String, $bbox: [Float!], $eventTypes: [String!]) {
     search(
       input: {
         query: ""
         includeTypes: ["event"]
-        # Cover BOTH ingest lanes: the importer writes the G1 kind
-        # (capture.photo), while other paths store the bare classification.
-        # eventTypes is an exact IN match, so listing only the bare form
-        # silently matched zero rows for imported media.
-        eventTypes: ["capture.photo", "capture.video", "photo", "video"]
+        # Left unfiltered by default (null == no filter, confirmed against a
+        # live server). This used to hardcode
+        # ["capture.photo","capture.video","photo","video"], which is an exact
+        # IN match and therefore matched zero rows on a real import — that data
+        # types its located events as "event"/"trip"/"order"/"transaction", so
+        # Atlas connected successfully and then rendered an empty globe. The
+        # capture.* list had already been widened once for the same reason; the
+        # taxonomy is open-ended, so enumerating it is the wrong shape. Any
+        # located event is a memory worth placing. Callers that genuinely want
+        # only photos/videos can pass $eventTypes.
+        eventTypes: $eventTypes
         hasLocation: true
         startTime: $startTime
         endTime: $endTime
@@ -195,8 +201,14 @@ export function memoryToStory(
   opts: MemoryMapOptions & { id?: string; title?: string } = {},
 ): Story {
   const media = mediaItemsFromMemory(result, opts);
-  const times = media
-    .map((m) => (m.capturedAt ? Date.parse(m.capturedAt) : NaN))
+  const markers = locatedMarkersFromMemory(result);
+  const times = [
+    ...media.map((m) => m.capturedAt),
+    // TimeSpec is `string | { at?, start? }`, so narrow before reading `at`
+    // (on the string branch `.at` is String.prototype.at, not a timestamp).
+    ...markers.map((k) => (typeof k.time === 'object' && k.time ? k.time.at ?? k.time.start : k.time)),
+  ]
+    .map((t) => (t ? Date.parse(t) : NaN))
     .filter((n) => !Number.isNaN(n))
     .sort((a, b) => a - b);
   const timeline = times.length
@@ -208,8 +220,48 @@ export function memoryToStory(
     title: opts.title ?? 'Companion Memory',
     ...(timeline ? { timeline } : {}),
     media,
+    items: markers,
     scenes: [],
   });
+}
+
+/**
+ * Located events that carry no media, projected as `marker` items.
+ *
+ * `mediaItemsFromMemory` drops any event `mediaKind` can't classify, which is
+ * correct for building *media* — but it meant a real Companion Memory rendered
+ * an empty globe. A personal import's located events are overwhelmingly
+ * calendar entries, trips and orders with a place and a time but no photo
+ * (`mediaContentType`, `previewUrl` and `mediaUrl` all null); every one of them
+ * was silently discarded, so the viewer connected, reported success, and showed
+ * nothing. A memory with a location and a time is worth a pin whether or not a
+ * picture is attached, so those become markers here. Anything media-bearing is
+ * left to `mediaItemsFromMemory` so it is not placed twice.
+ */
+export function locatedMarkersFromMemory(result: unknown): Extract<Item, { type: 'marker' }>[] {
+  const edges = (result as { search?: { edges?: unknown } })?.search?.edges;
+  if (!Array.isArray(edges)) return [];
+
+  const out: Extract<Item, { type: 'marker' }>[] = [];
+  for (const edge of edges) {
+    const node = (edge as { node?: MemoryEventNode })?.node;
+    if (!node || node.__typename !== 'EventType' || !node.id) continue;
+    if (mediaKind(node)) continue; // media-bearing rows belong to mediaItemsFromMemory
+
+    const position = readGeoJsonPoint(node.locationCoordinates);
+    if (!position) continue;
+
+    out.push({
+      id: `mem:${node.id}`,
+      type: 'marker',
+      position,
+      ...(node.startTime ? { time: { at: node.startTime } } : {}),
+      source: { kind: 'ci-memory', memoryId: node.id },
+      title: node.title ?? node.locationName ?? undefined,
+      description: node.description ?? undefined,
+    });
+  }
+  return out;
 }
 
 /** The `$input` for the `createEvent` write-back mutation, built from a story. */

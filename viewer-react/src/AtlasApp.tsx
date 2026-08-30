@@ -5,13 +5,14 @@ import { useStory } from './story/useStory.js';
 import { usePlaces } from './story/usePlaces.js';
 import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
-import { Rail, TopBar, type AtlasView } from './ui/Shell.js';
+import { Rail, TopBar } from './ui/Shell.js';
+import { MapLayers } from './ui/MapLayers.js';
+import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 import { Starfield, GridHorizon } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
 import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
-import { AltView } from './ui/AltViews.js';
 import { CommandPalette } from './ui/CommandPalette.js';
 import { Lightbox } from './ui/Lightbox.js';
 import { useScrapbook } from './scrapbook/useScrapbook.js';
@@ -84,8 +85,10 @@ export function AtlasApp() {
     [],
   );
 
-  const [view, setView] = useState<AtlasView>('globe');
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
+  const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
+  const [sunLighting, setSunLighting] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // Named-places layer: opt-in (the memory layer is the primary surface), and
   // its own focus state — independent of `focusedId`/`focused`, which are memory-only.
@@ -247,7 +250,6 @@ export function AtlasApp() {
 
   // "Fit all places": frame the camera on every located memory at once.
   const frameAll = useCallback(() => {
-    setView('globe');
     if (!viewer || !model) return;
     const positions = model.memories
       .filter((m) => m.lat != null && m.lon != null)
@@ -331,7 +333,6 @@ export function AtlasApp() {
     flownToRef.current = null;
     setFocusedId(null);
     setJourney(s);
-    setView('globe');
     setSbOpen(false);
     setPeopleOpen(false);
     play();
@@ -452,15 +453,12 @@ export function AtlasApp() {
     );
   }
 
-  const isGlobe = view === 'globe';
 
   return (
     <div className="atlas-app">
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
       <Rail
-        view={view}
-        onView={setView}
         onSearch={() => setPaletteOpen(true)}
         onFrameAll={frameAll}
         onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
@@ -470,14 +468,23 @@ export function AtlasApp() {
         scrapbookCount={sbEntries.length}
       />
       <TopBar
-        view={view}
-        onView={setView}
         onSearch={() => setPaletteOpen(true)}
         onShare={share}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}
         onTogglePlaces={togglePlaces}
+        layers={(
+          <MapLayers
+            open={layersOpen}
+            basemap={basemap}
+            sunLighting={sunLighting}
+            onBasemap={setBasemap}
+            onToggleSun={() => setSunLighting((v) => !v)}
+            onToggle={() => setLayersOpen((o) => !o)}
+            onClose={() => setLayersOpen(false)}
+          />
+        )}
       />
       <main className="atlas-stage">
         <CesiumStoryViewer
@@ -485,23 +492,22 @@ export function AtlasApp() {
           memories={model.memories}
           places={showPlaces ? places : []}
           focusedId={focused?.id ?? null}
+          basemap={basemap}
+          sunLighting={sunLighting}
           onViewer={setViewer}
           onPick={inspect}
           onPickPlace={setFocusedPlace}
           onHover={setHoveredId}
           onInteract={pause}
         />
-        {isGlobe && <GridHorizon />}
-        {isGlobe && (
+        <GridHorizon />
+        {(
           <div className="atlas-overlay">
             <StatsRibbon stats={model.stats} />
             <PlaceChip memory={currentPlace} />
             <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
             <Legend />
           </div>
-        )}
-        {!isGlobe && (
-          <AltView view={view} memories={model.memories} focusedId={focused?.id ?? null} onSelect={inspect} />
         )}
         {journey && (
           <div className="atlas-journey-chip" role="status">
@@ -510,7 +516,7 @@ export function AtlasApp() {
           </div>
         )}
       </main>
-      {isGlobe && (
+      {(
         focusedPlace ? (
           <PlaceCard place={focusedPlace} onFly={flyToPlace} onClose={closePlace} />
         ) : (
@@ -556,7 +562,6 @@ export function AtlasApp() {
         memories={model.memories}
         onClose={closePalette}
         onSelect={(m) => { inspect(m); closePalette(); }}
-        onView={(v) => { setView(v); closePalette(); }}
       />
       <Lightbox memory={lightbox} onClose={closeLightbox} />
     </div>

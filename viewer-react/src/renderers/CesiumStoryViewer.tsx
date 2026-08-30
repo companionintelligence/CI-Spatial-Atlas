@@ -3,6 +3,7 @@ import * as Cesium from 'cesium';
 import { Viewer, CzmlDataSource, Cesium3DTileset, type CesiumComponentRef } from 'resium';
 import { storyToCzml, type Story, type Place } from '@companion-atlas/story';
 import type { AtlasMemory } from '../model/atlasModel.js';
+import { BASEMAPS, DEFAULT_BASEMAP, offlineImagery } from './basemaps.js';
 
 const PLACEHOLDER_TOKEN = 'your_cesium_ion_token_here';
 type Located = AtlasMemory & { lat: number; lon: number };
@@ -26,18 +27,28 @@ type Located = AtlasMemory & { lat: number; lon: number };
  * default) so it never competes with the memory layer for attention.
  */
 export function CesiumStoryViewer({
-  story, memories, places = [], focusedId, onViewer, onPick, onPickPlace, onHover, onInteract,
+  story, memories, places = [], focusedId, basemap = DEFAULT_BASEMAP, sunLighting = false,
+  onViewer, onPick, onPickPlace, onHover, onInteract,
 }: {
   story: Story;
   memories: AtlasMemory[];
   places?: Place[];
   focusedId: string | null;
+  /** Keyless basemap id from BASEMAPS. */
+  basemap?: string;
+  /** Cast the real sun terminator across the globe. */
+  sunLighting?: boolean;
   onViewer?: (v: Cesium.Viewer | null) => void;
   onPick?: (m: AtlasMemory) => void;
   onPickPlace?: (p: Place) => void;
   onHover?: (id: string | null) => void;
   onInteract?: () => void;
 }) {
+  // Read inside the mount effect without making it a dependency (remounting
+  // the viewer to change basemap would tear down the whole scene).
+  const basemapRef = useRef(basemap);
+  basemapRef.current = basemap;
+
   const { czml, tilesets } = useMemo(() => storyToCzml(story), [story]);
   // The interactive memory-pin layer is the canonical 2D representation of
   // memories, so keep only the document (clock), authored tracks (`path`), and
@@ -82,12 +93,18 @@ export function CesiumStoryViewer({
       const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =>
         Promise.race([p, new Promise<T>((_, r) => setTimeout(() => r(new Error(`${label} timed out`)), ms))]);
 
-      const loadOffline = async () => {
+      // `replace` is for the ion failure path, which owns the whole stack.
+      // The keyless path must NOT clear: the basemap effect can attach its Esri
+      // overlay before this async load resolves, and a removeAll() here would
+      // silently delete it — the globe then sits on two-level Natural Earth and
+      // goes black as soon as the camera drops below orbit. Insert underneath
+      // instead, so the base and the overlay coexist whatever order they land in.
+      const loadOffline = async ({ replace = false }: { replace?: boolean } = {}) => {
         try {
-          const offline = await Cesium.TileMapServiceImageryProvider.fromUrl(Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII'));
+          const offline = await offlineImagery();
           if (!alive()) return;
-          v.imageryLayers.removeAll();
-          v.imageryLayers.add(new Cesium.ImageryLayer(offline));
+          if (replace) v.imageryLayers.removeAll();
+          v.imageryLayers.add(new Cesium.ImageryLayer(offline), 0);
         } catch (e) {
           if (alive()) console.error('[cesium] offline imagery failed', e);
         }
@@ -101,16 +118,36 @@ export function CesiumStoryViewer({
             v.imageryLayers.removeAll();
             v.imageryLayers.add(new Cesium.ImageryLayer(world));
             let swapped = false;
-            const onImageryError = () => { if (swapped || !alive()) return; swapped = true; void loadOffline(); };
+            const onImageryError = () => { if (swapped || !alive()) return; swapped = true; void loadOffline({ replace: true }); };
             world.errorEvent.addEventListener(onImageryError);
             cleanupImageryError = () => world.errorEvent.removeEventListener(onImageryError);
           } catch {
-            await loadOffline();
+            await loadOffline({ replace: true });
           }
           void withTimeout(Cesium.createWorldTerrainAsync(), 8000, 'ion terrain')
             .then((t) => { if (alive()) v.terrainProvider = t; })
             .catch(() => {});
         } else {
+          // No ion token. Two layers, deliberately:
+          //
+          //  base    Cesium's bundled NaturalEarthII raster. Local, always
+          //          resolves, so the globe has ground the instant it mounts.
+          //  overlay the keyless Esri basemap CI-Server's own map uses, which
+          //          carries the real detail once its tiles arrive.
+          //
+          // The overlay alone is not enough: until its first tiles land — and
+          // on any network that cannot reach ArcGIS at all — a single online
+          // layer leaves the globe drawing nothing but starfield, which reads
+          // as a broken app rather than a loading one. Keeping the offline
+          // raster underneath makes the online basemap a progressive
+          // enhancement instead of a hard dependency.
+          // Offline Natural Earth is the layer the globe mounts with: it is
+          // local, so it always resolves and there is never a black globe. The
+          // richer keyless Esri basemaps are layered on top by the basemap
+          // effect below, once the viewer is fully constructed — attaching a
+          // remote layer during mount makes every root tile wait on it, and a
+          // slow or throttled tile server then holds the whole globe in
+          // LOADING with nothing drawn and no error raised.
           await loadOffline();
         }
       })();
@@ -230,6 +267,50 @@ export function CesiumStoryViewer({
     };
   }, [viewer, places]);
 
+  // ---- basemap switching ----
+  // Swap the imagery layer in place rather than remounting the viewer, so the
+  // camera, clock and entity layers all survive a basemap change. Only applies
+  // to the keyless Esri set; with an ion token the ion imagery stays.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const token = Cesium.Ion.defaultAccessToken;
+    if (token && token !== PLACEHOLDER_TOKEN) return;
+    let cancelled = false;
+    // Always keep the offline base at index 0 and swap only what sits above it,
+    // so the globe still has ground while a new basemap's tiles arrive.
+    const clearOverlay = () => {
+      while (viewer.imageryLayers.length > 1) {
+        viewer.imageryLayers.remove(viewer.imageryLayers.get(viewer.imageryLayers.length - 1), true);
+      }
+    };
+
+    const entry = BASEMAPS.find((b) => b.id === basemap);
+    // No `create` means the offline base is the choice — just drop any overlay.
+    if (!entry?.create) { clearOverlay(); return; }
+
+    try {
+      const provider = entry.create();
+      if (cancelled || viewer.isDestroyed()) return;
+      clearOverlay();
+      viewer.imageryLayers.add(new Cesium.ImageryLayer(provider));
+    } catch (e) {
+      console.error('[cesium] basemap swap failed', e);
+    }
+    return () => { cancelled = true; };
+  }, [viewer, basemap]);
+
+  // ---- sun / day-night terminator ----
+  // Off by default: sun-accurate lighting puts every memory on the night side
+  // into darkness, and half of them always are. As an opt-in it is the whole
+  // point of a globe — you see where it is day, where it is night, and the
+  // terminator sweeping between them.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    viewer.scene.globe.enableLighting = sunLighting;
+    viewer.scene.globe.dynamicAtmosphereLighting = sunLighting;
+    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
+  }, [viewer, sunLighting]);
+
   return (
     <div className="atlas-globe" ref={hostRef}>
       <Viewer
@@ -299,6 +380,14 @@ function buildMemoryLayer(memories: AtlasMemory[], getFocusedId: () => string | 
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         disableDepthTestDistance: onTop,
         translucencyByDistance: new Cesium.NearFarScalar(2.0e6, 1.0, 1.2e7, 0.0),
+        // Only label pins the camera is actually near. A real Companion Memory
+        // has hundreds of located events (290 here), and with every label drawn
+        // depth-test-disabled they overlap into unreadable horizontal bars
+        // across the globe — it looked fine only because the demo story had
+        // three. Below ~600km the pins are sparse enough on screen to name;
+        // above it the point markers alone carry the distribution, and the
+        // focused title is shown in the place chip and inspector regardless.
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 6.0e5),
       },
     });
   }

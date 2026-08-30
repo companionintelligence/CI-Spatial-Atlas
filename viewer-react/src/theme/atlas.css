@@ -327,3 +327,41 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
 @media (prefers-reduced-motion: reduce) { .atlas-app *, .atlas-overlay * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (max-width: 980px) { .atlas-inspector, .atlas-stats, .atlas-legend, .atlas-scrap { display: none; } }
+
+/* ---- Map layers popover (basemap + sun) ---------------------------------- */
+.atlas-layers { position: relative; display: inline-flex; }
+.atlas-layers-pop {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+  width: 268px; padding: 12px; border-radius: 12px;
+  background: var(--atlas-card); border: 1px solid var(--atlas-line);
+  box-shadow: var(--atlas-shadow);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.atlas-layers-pop .lay-head {
+  font-size: 10px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--atlas-fg-dim); font-weight: 700;
+}
+.lay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.lay-opt, .lay-row {
+  display: grid; align-items: center; gap: 2px 8px; padding: 8px;
+  border-radius: 9px; border: 1px solid var(--atlas-line);
+  background: rgba(4,18,26,.5); color: var(--atlas-fg);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.lay-opt { grid-template-columns: 18px 1fr; grid-template-areas: 'sw label' 'sw hint'; }
+.lay-row { grid-template-columns: 18px 1fr; grid-template-areas: 'ic label' 'ic hint'; }
+.lay-row svg { grid-area: ic; width: 16px; height: 16px; }
+.lay-swatch { grid-area: sw; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--atlas-line-2); }
+.lay-label { grid-area: label; font-size: 12px; font-weight: 600; }
+.lay-hint { grid-area: hint; font-size: 10px; color: var(--atlas-fg-dim); line-height: 1.35; }
+.lay-opt:hover, .lay-row:hover { border-color: var(--atlas-line-2); }
+.lay-opt.active, .lay-row.active {
+  border-color: var(--atlas-teal); background: rgba(64,155,155,.14); color: var(--atlas-fg);
+}
+.lay-opt:focus-visible, .lay-row:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
+/* Swatches approximate each basemap so the choice reads without loading tiles. */
+.lay-imagery { background: linear-gradient(135deg,#1f3d2a,#3f6b3a 45%,#243b52); }
+.lay-streets { background: linear-gradient(135deg,#e8e3d8,#cfd6c8); }
+.lay-terrain { background: linear-gradient(135deg,#cbb894,#8fa07a); }
+.lay-dark    { background: linear-gradient(135deg,#2a2f33,#43494e); }
+.lay-natural { background: linear-gradient(135deg,#3c5a3a,#6b7f4e 50%,#2c4a63); }
