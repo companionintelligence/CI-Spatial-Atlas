@@ -28,6 +28,22 @@ export interface AtlasMemory {
   media?: AtlasMedia; // real media co-located with this memory (CI-Server)
   tags?: string[]; // real entity tags when present
   people?: string[]; // participant entity ids from Companion Memory
+  /** Named place this happened at, and the join key for its visit history. */
+  placeId?: string;
+  /** calendar | travel | commerce — where this memory came from. */
+  category?: string;
+  /** Minutes, when the source knew how long it lasted. */
+  durationMinutes?: number;
+}
+
+/** A place the person returned to, aggregated from the loaded memories. */
+export interface AtlasPlaceSummary {
+  id: string;
+  name: string;
+  visits: number;
+  firstMs: number;
+  lastMs: number;
+  memories: AtlasMemory[];
 }
 
 export interface AtlasModel {
@@ -156,6 +172,9 @@ export function deriveModel(story: Story): AtlasModel {
       media: extra?.media,
       tags: extra?.tags,
       people: extra?.people,
+      placeId: (sc as { placeId?: string }).placeId,
+      category: (sc as { category?: string }).category,
+      durationMinutes: (sc as { durationMinutes?: number }).durationMinutes,
     };
   });
 
@@ -163,13 +182,21 @@ export function deriveModel(story: Story): AtlasModel {
   // authored scenes — project those entities into memories so every memory
   // surface (scrapbook / inspector / time-machine / globe) still populates.
   if (memories.length === 0) {
-    const located: { id: string; title?: string; description?: string; place?: string; lat: number; lon: number; ms: number; media?: AtlasMedia; tags?: string[] }[] = [];
+    const located: { id: string; title?: string; description?: string; place?: string; lat: number; lon: number; ms: number; media?: AtlasMedia; tags?: string[]; placeId?: string; category?: string; durationMinutes?: number }[] = [];
     for (const e of entities) {
       const pos = 'position' in e ? e.position : undefined;
       const ms = timeSpecMs(e.time);
       if (pos && Number.isFinite(ms)) {
         const extra = extraFor(pos.lat, pos.lon);
-        located.push({ id: e.id, title: e.title, description: e.description, place: extra?.place, lat: pos.lat, lon: pos.lon, ms, media: extra?.media, tags: extra?.tags ?? e.tags });
+        const ex = e as { placeId?: string; placeName?: string; category?: string; durationMinutes?: number };
+        located.push({
+          id: e.id, title: e.title, description: e.description,
+          // The resolved Place name beats the per-event label, which is often
+          // the event's own title echoed back.
+          place: ex.placeName ?? extra?.place,
+          lat: pos.lat, lon: pos.lon, ms, media: extra?.media, tags: extra?.tags ?? e.tags,
+          placeId: ex.placeId, category: ex.category, durationMinutes: ex.durationMinutes,
+        });
       }
     }
     located.sort((a, b) => a.ms - b.ms);
@@ -186,12 +213,19 @@ export function deriveModel(story: Story): AtlasModel {
       media: x.media,
       tags: x.tags,
       people: extraFor(x.lat, x.lon)?.people,
+      placeId: x.placeId,
+      category: x.category,
+      durationMinutes: x.durationMinutes,
     }));
   }
 
+  // Count distinct places by the server's place identity where it resolved one,
+  // falling back to a rounded coordinate. Coordinate-keying alone counted one
+  // venue twice whenever two sources geocoded it a few metres apart.
   const places = new Set<string>();
   for (const m of memories) {
-    if (m.lat != null && m.lon != null) places.add(locKey(m.lat, m.lon));
+    if (m.placeId) places.add(`id:${m.placeId}`);
+    else if (m.lat != null && m.lon != null) places.add(locKey(m.lat, m.lon));
   }
   // Memory ids come straight from the source (scene ids, or CI-Server entity
   // ids), and a single CI-Server event can surface more than once — e.g. the
@@ -243,6 +277,39 @@ export function deriveModel(story: Story): AtlasModel {
 }
 
 /** The memory whose time is closest to `ms` (used for the current place/readout). */
+/**
+ * Group the loaded memories by place, most-visited first.
+ *
+ * This is the shape a real archive actually has: a person's located history is
+ * dominated by a handful of places they returned to — one venue 50 times, an
+ * airport 19 — and "what was this place to me" is the question the flat list of
+ * pins cannot answer.
+ */
+export function placeSummaries(memories: AtlasMemory[]): AtlasPlaceSummary[] {
+  const byPlace = new Map<string, AtlasPlaceSummary>();
+  for (const m of memories) {
+    const key = m.placeId ?? (m.place ? `name:${m.place}` : null);
+    if (!key) continue;
+    const cur = byPlace.get(key);
+    if (cur) {
+      cur.visits += 1;
+      cur.firstMs = Math.min(cur.firstMs, m.timeMs);
+      cur.lastMs = Math.max(cur.lastMs, m.timeMs);
+      cur.memories.push(m);
+    } else {
+      byPlace.set(key, {
+        id: key,
+        name: m.place ?? m.title,
+        visits: 1,
+        firstMs: m.timeMs,
+        lastMs: m.timeMs,
+        memories: [m],
+      });
+    }
+  }
+  return [...byPlace.values()].sort((a, b) => b.visits - a.visits);
+}
+
 export function nearestMemory(memories: AtlasMemory[], ms: number): AtlasMemory | null {
   let best: AtlasMemory | null = null;
   let bd = Infinity;

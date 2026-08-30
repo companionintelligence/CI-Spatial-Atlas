@@ -10,6 +10,7 @@ import { MapLayers } from './ui/MapLayers.js';
 import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 import { Starfield, GridHorizon } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
+import { placeSummaries } from './model/atlasModel.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
 import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
@@ -89,6 +90,29 @@ export function AtlasApp() {
   const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
   const [sunLighting, setSunLighting] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+
+  // "What was this place to me": the other memories sharing the focused
+  // memory's place, which is how a real archive is actually structured — a
+  // handful of venues returned to dozens of times.
+  const placeIndex = useMemo(() => {
+    const summaries = placeSummaries(model?.memories ?? []);
+    // The local tally only counts memories currently loaded (the client pages a
+    // bounded window), so it under-reports: a venue visited 50 times shows 37.
+    // CI-Server's Places API carries the true lifetime count, so prefer it and
+    // keep the local figure only as the offline fallback.
+    const byId = new Map(places.map((p) => [p.id, p]));
+    for (const s of summaries) {
+      const server = byId.get(s.id);
+      if (!server) continue;
+      if (server.visitStats?.visitCount) s.visits = server.visitStats.visitCount;
+      const first = server.visitStats?.firstVisitAt ? Date.parse(server.visitStats.firstVisitAt) : NaN;
+      const last = server.visitStats?.lastVisitAt ? Date.parse(server.visitStats.lastVisitAt) : NaN;
+      if (Number.isFinite(first)) s.firstMs = Math.min(s.firstMs, first);
+      if (Number.isFinite(last)) s.lastMs = Math.max(s.lastMs, last);
+      if (server.name) s.name = server.name;
+    }
+    return new Map(summaries.map((p) => [p.id, p]));
+  }, [model, places]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // Named-places layer: opt-in (the memory layer is the primary surface), and
   // its own focus state — independent of `focusedId`/`focused`, which are memory-only.
@@ -523,6 +547,7 @@ export function AtlasApp() {
           <MemoryInspector
             memory={focused}
             related={related}
+            place={focused ? placeIndex.get(focused.placeId ?? `name:${focused.place ?? ''}`) ?? null : null}
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}

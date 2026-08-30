@@ -144,10 +144,24 @@ export function ScrapbookFrames({ memories, hoveredId, onSelect, viewer }: {
             }}
             aria-label={`${m.title}, ${m.whenDate} ${m.whenTime}`}
           >
-            {thumb
-              ? <img className="ph" src={thumb} alt="" loading="lazy" />
-              : <div className="ph" style={{ background: m.gradient }} aria-hidden="true" />}
-            <div className="cap"><b>{m.title}</b><span>{m.whenDate} · {m.whenTime}</span></div>
+            {/* Only draw a picture frame when there is a picture. Most located
+                memories in a real archive are calendar entries, rides and
+                orders with no media, and filling the frame with `m.gradient` —
+                an invented colour wash — made every card look like a photo the
+                app could not load. Without media the card is typographic. */}
+            {thumb ? (
+              <>
+                <img className="ph" src={thumb} alt="" loading="lazy" />
+                <div className="cap"><b>{m.title}</b><span>{m.whenDate} · {m.whenTime}</span></div>
+              </>
+            ) : (
+              <div className="cap cap-only">
+                {m.category && <span className="cat">{m.category}</span>}
+                <b>{m.title}</b>
+                <span>{m.whenDate} · {m.whenTime}</span>
+                {m.place && <span className="where">{m.place.split(',')[0]}</span>}
+              </div>
+            )}
           </button>
         );
       })}

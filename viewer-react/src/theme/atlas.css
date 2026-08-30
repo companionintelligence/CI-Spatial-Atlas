@@ -391,3 +391,50 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .lay-terrain { background: linear-gradient(135deg,#cbb894,#8fa07a); }
 .lay-dark    { background: linear-gradient(135deg,#2a2f33,#43494e); }
 .lay-natural { background: linear-gradient(135deg,#3c5a3a,#6b7f4e 50%,#2c4a63); }
+
+/* ---- Inspector: place identity & visit history --------------------------- */
+/* Header used when a memory has no real media — most of them. Carries the
+   time-of-day cue the photo hero used to, without pretending a photo exists. */
+.atlas-insp-plainhead {
+  padding: 14px 16px 0; display: flex;
+}
+.atlas-insp-plainhead .now {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border-radius: 999px; background: rgba(4,18,26,.6); border: 1px solid var(--atlas-line);
+  font-size: 11px; color: var(--atlas-fg-dim);
+}
+.atlas-insp-plainhead .now svg { width: 13px; height: 13px; }
+
+.atlas-visits { display: flex; align-items: baseline; gap: 14px; }
+.atlas-visits .v-count { display: flex; align-items: baseline; gap: 5px; }
+.atlas-visits .v-count b { font-size: 26px; font-weight: 800; color: var(--atlas-aqua-light); line-height: 1; }
+.atlas-visits .v-count span { font-size: 11px; color: var(--atlas-fg-dim); }
+.atlas-visits .v-span { font-size: 11.5px; color: var(--atlas-fg-dim); display: flex; flex-direction: column; }
+.atlas-visits .v-span small { opacity: .75; }
+
+.atlas-visit-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.visit-row {
+  display: grid; grid-template-columns: 82px 1fr; gap: 8px; align-items: baseline;
+  padding: 6px 8px; border-radius: 8px; border: 0; background: transparent;
+  color: var(--atlas-fg); font: inherit; text-align: left; cursor: pointer;
+}
+.visit-row:hover { background: rgba(64,155,155,.12); }
+.visit-row:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 1px; }
+.visit-row .vr-date { font: 500 10.5px/1.4 var(--atlas-mono); color: var(--atlas-fg-dim); }
+.visit-row .vr-title { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Typographic card for a memory with no media — the common case. */
+.atlas-scrap .cap-only { padding: 10px 11px 11px; display: flex; flex-direction: column; gap: 3px; }
+.atlas-scrap .cap-only .cat {
+  align-self: flex-start; font: 600 8.5px/1 var(--atlas-mono); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--atlas-aqua-light);
+  background: rgba(114,221,212,.12); border: 1px solid rgba(114,221,212,.28);
+  border-radius: 999px; padding: 3px 6px; margin-bottom: 2px;
+}
+.atlas-scrap .cap-only .where { color: var(--atlas-fg-dim); font-size: 9.5px; }
+/* Text stand-in inside the small "around this time" tiles. */
+.atlas-rel .ph-text {
+  display: flex; align-items: center; padding: 6px; font-size: 9px; line-height: 1.25;
+  color: var(--atlas-fg-dim); background: rgba(4,18,26,.55);
+  border: 1px solid var(--atlas-line); overflow: hidden;
+}

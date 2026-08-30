@@ -20,39 +20,63 @@ export function TimeMachine({
   const span = Number.isFinite(rawSpan) ? Math.max(1, rawSpan) : 1;
   const frac = Math.min(1, Math.max(0, (currentMs - startMs) / span));
 
-  // Static memory-density histogram (gaussian bumps around each memory time).
-  // Keyed on the model/bounds only — NOT on `frac` — so it isn't torn down and
-  // re-rasterized on every clock tick; the moving playhead is a separate DOM
-  // element (.tm-playhead) layered over this canvas.
+  // Memory-density histogram, bucketed by calendar month and normalised to the
+  // busiest month.
+  //
+  // The previous version summed a gaussian per memory and then clamped with
+  // `Math.min(1, v * 0.9 + 0.06)`. With a real archive (290 memories over 8
+  // years) that saturates: almost every column reaches 1.0, so the track drew
+  // solid blocks of full-height bars — a barcode that said "there is data" and
+  // nothing about when life was busy. Normalising against the peak is what
+  // makes the shape mean something, and month buckets match how a person
+  // actually remembers a year.
   useEffect(() => {
     const c = canvas.current;
     if (!c) return;
-    const times = model.memories.map((m) => (m.timeMs - startMs) / span).filter((v) => v >= 0 && v <= 1);
+
     const draw = () => {
       const r = c.getBoundingClientRect();
+      if (r.width === 0) return;
       const dpr = devicePixelRatio || 1;
       c.width = r.width * dpr;
       c.height = r.height * dpr;
       const x = c.getContext('2d');
       if (!x) return;
-      x.scale(dpr, dpr);
-      const W = r.width, H = r.height, n = 90, sigma = 0.045;
-      for (let i = 0; i < n; i++) {
-        const t = i / n;
-        let v = 0;
-        for (const tm of times) v += Math.exp(-Math.pow((t - tm) / sigma, 2));
-        v = Math.min(1, v * 0.9 + 0.06);
-        const bh = Math.max(2, v * H);
+      x.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const W = r.width, H = r.height;
+      x.clearRect(0, 0, W, H);
+
+      // One bucket per month across the span, capped so a very long archive
+      // still gets bars wide enough to see.
+      const months = Math.max(1, Math.round(span / 2.628e9));
+      const buckets = Math.min(months, Math.max(12, Math.floor(W / 4)));
+      const counts = new Array(buckets).fill(0);
+      for (const m of model.memories) {
+        const t = (m.timeMs - startMs) / span;
+        if (t < 0 || t > 1) continue;
+        counts[Math.min(buckets - 1, Math.floor(t * buckets))] += 1;
+      }
+      const peak = Math.max(...counts, 1);
+
+      const bw = W / buckets;
+      for (let i = 0; i < buckets; i++) {
+        if (counts[i] === 0) continue;
+        // sqrt keeps a single-memory month visible next to a 30-memory one
+        // without letting the peak flatten everything else.
+        const v = Math.sqrt(counts[i] / peak);
+        const bh = Math.max(2, v * (H - 6));
         const g = x.createLinearGradient(0, H, 0, H - bh);
-        g.addColorStop(0, 'rgba(64,155,155,.10)');
-        g.addColorStop(1, 'rgba(64,155,155,.5)');
+        g.addColorStop(0, 'rgba(64,155,155,.16)');
+        g.addColorStop(1, 'rgba(114,221,212,.62)');
         x.fillStyle = g;
-        x.fillRect(t * W, H - bh, W / n - 1.5, bh);
+        x.fillRect(i * bw, H - bh, Math.max(1, bw - 1), bh);
       }
     };
+
     draw();
-    addEventListener('resize', draw);
-    return () => removeEventListener('resize', draw);
+    const ro = new ResizeObserver(draw);
+    ro.observe(c);
+    return () => ro.disconnect();
   }, [model, startMs, span]);
 
   const scrub = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -84,7 +108,11 @@ export function TimeMachine({
   const finite = Number.isFinite(currentMs);
   const dateStr = finite ? when.whenDate : '—';
   const timeStr = finite ? when.whenTime : '';
-  const place = near?.place ? ` over ${near.place}` : '';
+  // Real place names are full postal addresses ("Adler Theater for the Arts,
+  // 1305 Allenford Ave, Los Angeles, CA, US, 90049"). Keep the leading name for
+  // the readout — the inspector shows the full string.
+  const shortPlace = near?.place ? near.place.split(',')[0]!.trim().slice(0, 38) : '';
+  const place = shortPlace ? ` over ${shortPlace}` : '';
 
   return (
     <div className="atlas-timemachine" role="group" aria-label="Time machine">

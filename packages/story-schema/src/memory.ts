@@ -68,6 +68,13 @@ export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
             mediaUrl
             mediaWidth
             mediaHeight
+            category
+            durationMinutes
+            sourceSystem
+            # 'ingest' means the source gave no date and startTime is only the
+            # import wall clock — such rows must not be placed on a timeline.
+            timeSource
+            location { id name placeKind }
           }
         }
       }
@@ -105,6 +112,12 @@ export function readGeoJsonPoint(value: unknown): GeoPoint | null {
   return { lat, lon: lng };
 }
 
+interface MemoryPlaceRef {
+  id?: string;
+  name?: string;
+  placeKind?: string;
+}
+
 interface MemoryEventNode {
   __typename?: string;
   id?: string;
@@ -120,6 +133,33 @@ interface MemoryEventNode {
   mediaUrl?: string | null;
   mediaWidth?: number | null;
   mediaHeight?: number | null;
+  category?: string | null;
+  durationMinutes?: number | null;
+  sourceSystem?: string | null;
+  timeSource?: string | null;
+  location?: MemoryPlaceRef | null;
+}
+
+/**
+ * CI-Server documents `timeSource: 'ingest'` as "this is not a real date" — the
+ * source carried no time and `startTime` holds the import wall clock only
+ * because the column is NOT NULL. Placing those on a globe's timeline would
+ * scatter a person's history across whatever day the import ran.
+ */
+function hasRealTime(node: MemoryEventNode): boolean {
+  return node.timeSource !== 'ingest';
+}
+
+/** Shared place/category fields both projections attach to their item. */
+function placeFields(node: MemoryEventNode) {
+  return {
+    placeId: node.location?.id ?? undefined,
+    // Prefer the resolved Place's name over the raw event locationName, which
+    // is often the event's own title repeated back ("SUNSESHLA - October 9nd").
+    placeName: node.location?.name ?? node.locationName ?? undefined,
+    category: node.category ?? undefined,
+    durationMinutes: typeof node.durationMinutes === 'number' ? node.durationMinutes : undefined,
+  };
 }
 
 function mediaKind(node: MemoryEventNode): MediaItem['kind'] | null {
@@ -247,6 +287,7 @@ export function locatedMarkersFromMemory(result: unknown): Extract<Item, { type:
     const node = (edge as { node?: MemoryEventNode })?.node;
     if (!node || node.__typename !== 'EventType' || !node.id) continue;
     if (mediaKind(node)) continue; // media-bearing rows belong to mediaItemsFromMemory
+    if (!hasRealTime(node)) continue;
 
     const position = readGeoJsonPoint(node.locationCoordinates);
     if (!position) continue;
@@ -259,6 +300,7 @@ export function locatedMarkersFromMemory(result: unknown): Extract<Item, { type:
       source: { kind: 'ci-memory', memoryId: node.id },
       title: node.title ?? node.locationName ?? undefined,
       description: node.description ?? undefined,
+      ...placeFields(node),
     });
   }
   return out;
