@@ -17,6 +17,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Matrix4, Object3D, PerspectiveCamera, Quaternion, Ray, Sphere, Vector2, Vector3 } from 'three';
 import {
   applyGrab,
+  applyOrbitGrab,
+  fromMatrix,
   clampWorld,
   copyWorldTransform,
   createWorldTransform,
@@ -78,6 +80,22 @@ function advanceFlight(world: WorldHandle, now: number): void {
 
 const _mat = new Matrix4();
 const _grabNow = new Matrix4();
+const _handNow = new Vector3();
+const _handStart = new Vector3();
+const _quatScratch = new Quaternion();
+const _scaleScratch = new Vector3();
+const _worldStartT = createWorldTransform();
+const _worldCentre = new Vector3();
+/**
+ * How far outside the surface the head must be before a one-handed grab spins
+ * the planet rather than dragging it. Expressed as a multiple of the rendered
+ * radius so it holds at every zoom: the question is "am I looking at the
+ * planet, or standing on it?", not any absolute size. A fixed metre threshold
+ * got this wrong — after a two-handed zoom the globe can be metres across with
+ * the viewer just above the ground, where spinning the whole Earth under a
+ * hand is nothing like the pan across the surface the moment calls for.
+ */
+const ORBIT_MIN_HEAD_DISTANCE = 1.15;
 const _pos = new Vector3();
 const _pos2 = new Vector3();
 const _quat = new Quaternion();
@@ -262,7 +280,25 @@ export function useGlobeLocomotion(world: WorldHandle, group: { current: Object3
       }
       // Touching the world always wins over an animation still playing.
       world.flight = null;
-      applyGrab(world.transform, grab.current.worldStart, grab.current.grabStart, _grabNow);
+      // One hand on an object-scale globe spins it about its own centre; a
+      // rigid drag would walk the planet out of reach and never rotate it (see
+      // applyOrbitGrab). Two hands keep the rigid model, because that is what
+      // makes pull-apart-to-zoom and the two-handed re-frame work.
+      // Orbit only while the whole planet reads as an object in front of the
+      // player; once they are down near the surface a grab should pull them
+      // across it instead.
+      _worldCentre.setFromMatrixPosition(grab.current.worldStart);
+      const renderedRadius = grab.current.worldStart.elements[0] * EARTH_RADIUS_M;
+      const headDistance = world.head.distanceTo(_worldCentre);
+      const holdingTheGlobe = headDistance > renderedRadius * ORBIT_MIN_HEAD_DISTANCE;
+      if (held.length === 1 && holdingTheGlobe) {
+        _grabNow.decompose(_handNow, _quatScratch, _scaleScratch);
+        grab.current.grabStart.decompose(_handStart, _quatScratch, _scaleScratch);
+        fromMatrix(grab.current.worldStart, _worldStartT);
+        applyOrbitGrab(world.transform, _worldStartT, _worldStartT.position, _handStart, _handNow);
+      } else {
+        applyGrab(world.transform, grab.current.worldStart, grab.current.grabStart, _grabNow);
+      }
     } else {
       if (grab.current.hands !== 0) grab.current.hands = 0;
       advanceFlight(world, performance.now());
