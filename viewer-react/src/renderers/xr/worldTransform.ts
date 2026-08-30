@@ -287,6 +287,46 @@ export function setScaleAbout(t: WorldTransform, scale: number, pivot: Vector3):
   return t;
 }
 
+/**
+ * One-handed grab as a trackball spin about the globe's own centre.
+ *
+ * `applyGrab` applies the hand's rigid delta, which is the right model when the
+ * player is *inside* the world — drag and you pull yourself across the surface,
+ * the Google Earth VR flying idiom. It is the wrong one when the whole planet
+ * is a graspable object in front of you: dragging then shoves the globe
+ * sideways and it never comes back. Measured in an emulated session, three
+ * ordinary drags walked the centre from 1.33 m to 1.71 m from the head, with
+ * the rotation untouched the whole time — a few more and the globe is out of
+ * arm's reach and can no longer be grabbed at all.
+ *
+ * At object scale the hand therefore spins the planet instead: the rotation
+ * that carries the grab-start direction (centre → hand) onto the current one,
+ * applied about the centre, which stays put. That is a desk globe, and it is
+ * what "grab the world and drag it" means when the world fits between your
+ * hands.
+ */
+export function applyOrbitGrab(
+  t: WorldTransform,
+  worldStart: WorldTransform,
+  centre: Vector3,
+  grabStart: Vector3,
+  grabNow: Vector3,
+): WorldTransform {
+  _e.copy(grabStart).sub(centre);
+  _n.copy(grabNow).sub(centre);
+  if (_e.lengthSq() < 1e-8 || _n.lengthSq() < 1e-8) return t;
+  _e.normalize();
+  _n.normalize();
+
+  // setFromUnitVectors handles the antiparallel case; guard only the identity.
+  _q.setFromUnitVectors(_e, _n);
+
+  t.scale = worldStart.scale;
+  t.position.copy(centre);
+  t.quaternion.copy(worldStart.quaternion).premultiply(_q).normalize();
+  return t;
+}
+
 /** Spin the world about a player-space axis through a player-space pivot. */
 export function rotateAbout(t: WorldTransform, pivot: Vector3, axis: Vector3, angle: number): WorldTransform {
   _q.setFromAxisAngle(axis, angle);
