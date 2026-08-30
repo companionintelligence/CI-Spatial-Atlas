@@ -15,23 +15,29 @@
  * Kept free of `fetch` so every mapping is unit-tested; the server connector
  * (`server/src/connectors.ts`) does the transport with a Portal OIDC bearer.
  */
-import { STORY_SCHEMA_ID, type GeoPoint, type MediaItem, type Story } from './schema.js';
+import { STORY_SCHEMA_ID, type GeoPoint, type Item, type MediaItem, type Story } from './schema.js';
 import { loadStory, storyEntities, timelineBounds } from './normalize.js';
 
 /** Located media memories, chronological, paginated. `query:""` takes CI-Server's
  *  "timed" path; `includeTypes:["event"]` + `hasLocation:true` restricts to
  *  located events (the MapView surface). */
 export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
-  query AtlasLocatedMedia($first: Int = 100, $after: String, $startTime: String, $endTime: String, $bbox: [Float!]) {
+  query AtlasLocatedMedia($first: Int = 100, $after: String, $startTime: String, $endTime: String, $bbox: [Float!], $eventTypes: [String!]) {
     search(
       input: {
         query: ""
         includeTypes: ["event"]
-        # Cover BOTH ingest lanes: the importer writes the G1 kind
-        # (capture.photo), while other paths store the bare classification.
-        # eventTypes is an exact IN match, so listing only the bare form
-        # silently matched zero rows for imported media.
-        eventTypes: ["capture.photo", "capture.video", "photo", "video"]
+        # Left unfiltered by default (null == no filter, confirmed against a
+        # live server). This used to hardcode
+        # ["capture.photo","capture.video","photo","video"], which is an exact
+        # IN match and therefore matched zero rows on a real import — that data
+        # types its located events as "event"/"trip"/"order"/"transaction", so
+        # Atlas connected successfully and then rendered an empty globe. The
+        # capture.* list had already been widened once for the same reason; the
+        # taxonomy is open-ended, so enumerating it is the wrong shape. Any
+        # located event is a memory worth placing. Callers that genuinely want
+        # only photos/videos can pass $eventTypes.
+        eventTypes: $eventTypes
         hasLocation: true
         startTime: $startTime
         endTime: $endTime
@@ -62,6 +68,13 @@ export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
             mediaUrl
             mediaWidth
             mediaHeight
+            category
+            durationMinutes
+            sourceSystem
+            # 'ingest' means the source gave no date and startTime is only the
+            # import wall clock — such rows must not be placed on a timeline.
+            timeSource
+            location { id name placeKind }
           }
         }
       }
@@ -99,6 +112,12 @@ export function readGeoJsonPoint(value: unknown): GeoPoint | null {
   return { lat, lon: lng };
 }
 
+interface MemoryPlaceRef {
+  id?: string;
+  name?: string;
+  placeKind?: string;
+}
+
 interface MemoryEventNode {
   __typename?: string;
   id?: string;
@@ -114,6 +133,33 @@ interface MemoryEventNode {
   mediaUrl?: string | null;
   mediaWidth?: number | null;
   mediaHeight?: number | null;
+  category?: string | null;
+  durationMinutes?: number | null;
+  sourceSystem?: string | null;
+  timeSource?: string | null;
+  location?: MemoryPlaceRef | null;
+}
+
+/**
+ * CI-Server documents `timeSource: 'ingest'` as "this is not a real date" — the
+ * source carried no time and `startTime` holds the import wall clock only
+ * because the column is NOT NULL. Placing those on a globe's timeline would
+ * scatter a person's history across whatever day the import ran.
+ */
+function hasRealTime(node: MemoryEventNode): boolean {
+  return node.timeSource !== 'ingest';
+}
+
+/** Shared place/category fields both projections attach to their item. */
+function placeFields(node: MemoryEventNode) {
+  return {
+    placeId: node.location?.id ?? undefined,
+    // Prefer the resolved Place's name over the raw event locationName, which
+    // is often the event's own title repeated back ("SUNSESHLA - October 9nd").
+    placeName: node.location?.name ?? node.locationName ?? undefined,
+    category: node.category ?? undefined,
+    durationMinutes: typeof node.durationMinutes === 'number' ? node.durationMinutes : undefined,
+  };
 }
 
 function mediaKind(node: MemoryEventNode): MediaItem['kind'] | null {
@@ -195,8 +241,14 @@ export function memoryToStory(
   opts: MemoryMapOptions & { id?: string; title?: string } = {},
 ): Story {
   const media = mediaItemsFromMemory(result, opts);
-  const times = media
-    .map((m) => (m.capturedAt ? Date.parse(m.capturedAt) : NaN))
+  const markers = locatedMarkersFromMemory(result);
+  const times = [
+    ...media.map((m) => m.capturedAt),
+    // TimeSpec is `string | { at?, start? }`, so narrow before reading `at`
+    // (on the string branch `.at` is String.prototype.at, not a timestamp).
+    ...markers.map((k) => (typeof k.time === 'object' && k.time ? k.time.at ?? k.time.start : k.time)),
+  ]
+    .map((t) => (t ? Date.parse(t) : NaN))
     .filter((n) => !Number.isNaN(n))
     .sort((a, b) => a - b);
   const timeline = times.length
@@ -208,8 +260,50 @@ export function memoryToStory(
     title: opts.title ?? 'Companion Memory',
     ...(timeline ? { timeline } : {}),
     media,
+    items: markers,
     scenes: [],
   });
+}
+
+/**
+ * Located events that carry no media, projected as `marker` items.
+ *
+ * `mediaItemsFromMemory` drops any event `mediaKind` can't classify, which is
+ * correct for building *media* — but it meant a real Companion Memory rendered
+ * an empty globe. A personal import's located events are overwhelmingly
+ * calendar entries, trips and orders with a place and a time but no photo
+ * (`mediaContentType`, `previewUrl` and `mediaUrl` all null); every one of them
+ * was silently discarded, so the viewer connected, reported success, and showed
+ * nothing. A memory with a location and a time is worth a pin whether or not a
+ * picture is attached, so those become markers here. Anything media-bearing is
+ * left to `mediaItemsFromMemory` so it is not placed twice.
+ */
+export function locatedMarkersFromMemory(result: unknown): Extract<Item, { type: 'marker' }>[] {
+  const edges = (result as { search?: { edges?: unknown } })?.search?.edges;
+  if (!Array.isArray(edges)) return [];
+
+  const out: Extract<Item, { type: 'marker' }>[] = [];
+  for (const edge of edges) {
+    const node = (edge as { node?: MemoryEventNode })?.node;
+    if (!node || node.__typename !== 'EventType' || !node.id) continue;
+    if (mediaKind(node)) continue; // media-bearing rows belong to mediaItemsFromMemory
+    if (!hasRealTime(node)) continue;
+
+    const position = readGeoJsonPoint(node.locationCoordinates);
+    if (!position) continue;
+
+    out.push({
+      id: `mem:${node.id}`,
+      type: 'marker',
+      position,
+      ...(node.startTime ? { time: { at: node.startTime } } : {}),
+      source: { kind: 'ci-memory', memoryId: node.id },
+      title: node.title ?? node.locationName ?? undefined,
+      description: node.description ?? undefined,
+      ...placeFields(node),
+    });
+  }
+  return out;
 }
 
 /** The `$input` for the `createEvent` write-back mutation, built from a story. */

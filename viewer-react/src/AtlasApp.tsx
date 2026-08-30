@@ -5,13 +5,21 @@ import { useStory } from './story/useStory.js';
 import { usePlaces } from './story/usePlaces.js';
 import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
-import { Rail, TopBar, type AtlasView } from './ui/Shell.js';
-import { Starfield, GridHorizon } from './ui/Backdrop.js';
+import { Rail, TopBar } from './ui/Shell.js';
+import { MapLayers } from './ui/MapLayers.js';
+import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
+
+const googleMapsAvailable = Boolean(
+  (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GOOGLE_MAPS_API_KEY,
+);
+import { Starfield } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
+import { placeSummaries } from './model/atlasModel.js';
+import { useWeather } from './story/useWeather.js';
+import { useStreetView } from './story/useStreetView.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
 import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
-import { AltView } from './ui/AltViews.js';
 import { CommandPalette } from './ui/CommandPalette.js';
 import { Lightbox } from './ui/Lightbox.js';
 import { useScrapbook } from './scrapbook/useScrapbook.js';
@@ -84,8 +92,34 @@ export function AtlasApp() {
     [],
   );
 
-  const [view, setView] = useState<AtlasView>('globe');
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
+  const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
+  const [sunLighting, setSunLighting] = useState(false);
+  const [buildings, setBuildings] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
+
+  // "What was this place to me": the other memories sharing the focused
+  // memory's place, which is how a real archive is actually structured — a
+  // handful of venues returned to dozens of times.
+  const placeIndex = useMemo(() => {
+    const summaries = placeSummaries(model?.memories ?? []);
+    // The local tally only counts memories currently loaded (the client pages a
+    // bounded window), so it under-reports: a venue visited 50 times shows 37.
+    // CI-Server's Places API carries the true lifetime count, so prefer it and
+    // keep the local figure only as the offline fallback.
+    const byId = new Map(places.map((p) => [p.id, p]));
+    for (const s of summaries) {
+      const server = byId.get(s.id);
+      if (!server) continue;
+      if (server.visitStats?.visitCount) s.visits = server.visitStats.visitCount;
+      const first = server.visitStats?.firstVisitAt ? Date.parse(server.visitStats.firstVisitAt) : NaN;
+      const last = server.visitStats?.lastVisitAt ? Date.parse(server.visitStats.lastVisitAt) : NaN;
+      if (Number.isFinite(first)) s.firstMs = Math.min(s.firstMs, first);
+      if (Number.isFinite(last)) s.lastMs = Math.max(s.lastMs, last);
+      if (server.name) s.name = server.name;
+    }
+    return new Map(summaries.map((p) => [p.id, p]));
+  }, [model, places]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // Named-places layer: opt-in (the memory layer is the primary surface), and
   // its own focus state — independent of `focusedId`/`focused`, which are memory-only.
@@ -122,6 +156,10 @@ export function AtlasApp() {
     [model, focused],
   );
 
+  // What the weather actually was, at this place, that hour.
+  const weather = useWeather(focused);
+  const streetView = useStreetView(focused);
+
   // The scrapbook always collects against the *base* story, so a draft survives
   // playing a journey built from it.
   const sbEntries = useMemo(() => {
@@ -140,9 +178,13 @@ export function AtlasApp() {
     () => (model ? memoriesAround(model.memories, currentMs, 3) : []),
     [model, currentMs],
   );
+  // The chip names the place the user is actually looking at. It used to track
+  // only the clock playhead, so clicking a pin left it naming a different
+  // memory than the inspector — two competing "current" labels on screen at
+  // once. An explicit selection wins; with none, it follows playback.
   const currentPlace = useMemo(
-    () => (model ? nearestMemory(model.memories, currentMs) : null),
-    [model, currentMs],
+    () => (focusedId && focused ? focused : model ? nearestMemory(model.memories, currentMs) : null),
+    [model, currentMs, focusedId, focused],
   );
 
   // Sync React state from the Cesium clock (throttled) so the Time Machine + the
@@ -247,7 +289,6 @@ export function AtlasApp() {
 
   // "Fit all places": frame the camera on every located memory at once.
   const frameAll = useCallback(() => {
-    setView('globe');
     if (!viewer || !model) return;
     const positions = model.memories
       .filter((m) => m.lat != null && m.lon != null)
@@ -331,7 +372,6 @@ export function AtlasApp() {
     flownToRef.current = null;
     setFocusedId(null);
     setJourney(s);
-    setView('globe');
     setSbOpen(false);
     setPeopleOpen(false);
     play();
@@ -452,15 +492,12 @@ export function AtlasApp() {
     );
   }
 
-  const isGlobe = view === 'globe';
 
   return (
     <div className="atlas-app">
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
       <Rail
-        view={view}
-        onView={setView}
         onSearch={() => setPaletteOpen(true)}
         onFrameAll={frameAll}
         onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
@@ -470,14 +507,26 @@ export function AtlasApp() {
         scrapbookCount={sbEntries.length}
       />
       <TopBar
-        view={view}
-        onView={setView}
         onSearch={() => setPaletteOpen(true)}
         onShare={share}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}
         onTogglePlaces={togglePlaces}
+        layers={(
+          <MapLayers
+            open={layersOpen}
+            basemap={basemap}
+            sunLighting={sunLighting}
+            buildings={buildings}
+            buildingsAvailable={Boolean(googleMapsAvailable)}
+            onBasemap={setBasemap}
+            onToggleSun={() => setSunLighting((v) => !v)}
+            onToggleBuildings={() => setBuildings((v) => !v)}
+            onToggle={() => setLayersOpen((o) => !o)}
+            onClose={() => setLayersOpen(false)}
+          />
+        )}
       />
       <main className="atlas-stage">
         <CesiumStoryViewer
@@ -485,23 +534,22 @@ export function AtlasApp() {
           memories={model.memories}
           places={showPlaces ? places : []}
           focusedId={focused?.id ?? null}
+          basemap={basemap}
+          sunLighting={sunLighting}
+          buildings={buildings}
           onViewer={setViewer}
           onPick={inspect}
           onPickPlace={setFocusedPlace}
           onHover={setHoveredId}
           onInteract={pause}
         />
-        {isGlobe && <GridHorizon />}
-        {isGlobe && (
+        {(
           <div className="atlas-overlay">
             <StatsRibbon stats={model.stats} />
             <PlaceChip memory={currentPlace} />
             <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
             <Legend />
           </div>
-        )}
-        {!isGlobe && (
-          <AltView view={view} memories={model.memories} focusedId={focused?.id ?? null} onSelect={inspect} />
         )}
         {journey && (
           <div className="atlas-journey-chip" role="status">
@@ -510,13 +558,16 @@ export function AtlasApp() {
           </div>
         )}
       </main>
-      {isGlobe && (
+      {(
         focusedPlace ? (
           <PlaceCard place={focusedPlace} onFly={flyToPlace} onClose={closePlace} />
         ) : (
           <MemoryInspector
             memory={focused}
             related={related}
+            place={focused ? placeIndex.get(focused.placeId ?? `name:${focused.place ?? ''}`) ?? null : null}
+            weather={weather}
+            streetView={streetView}
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}
@@ -556,7 +607,6 @@ export function AtlasApp() {
         memories={model.memories}
         onClose={closePalette}
         onSelect={(m) => { inspect(m); closePalette(); }}
-        onView={(v) => { setView(v); closePalette(); }}
       />
       <Lightbox memory={lightbox} onClose={closeLightbox} />
     </div>

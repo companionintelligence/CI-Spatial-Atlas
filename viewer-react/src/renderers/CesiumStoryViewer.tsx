@@ -3,9 +3,38 @@ import * as Cesium from 'cesium';
 import { Viewer, CzmlDataSource, Cesium3DTileset, type CesiumComponentRef } from 'resium';
 import { storyToCzml, type Story, type Place } from '@companion-atlas/story';
 import type { AtlasMemory } from '../model/atlasModel.js';
+import { BASEMAPS, DEFAULT_BASEMAP, offlineImagery } from './basemaps.js';
 
 const PLACEHOLDER_TOKEN = 'your_cesium_ion_token_here';
 type Located = AtlasMemory & { lat: number; lon: number };
+
+/**
+ * Day/night shading, applied so it survives the descent to a memory.
+ *
+ * `enableLighting` alone is not enough, and that is why the toggle looked dead:
+ * Cesium's globe shader multiplies the sun term by a `fade` that goes to zero
+ * once the camera is nearer than `lightingFadeOutDistance`, handing back a
+ * fully lit pixel whatever the sun is doing. That distance is measured from the
+ * earth's *centre*, so the ~9.99e6 m default is only ~3,600 km of altitude —
+ * and AtlasApp flies to 1.8e6 m to frame a memory. The terminator existed the
+ * whole time; it was simply never rendered anywhere the app actually looks.
+ * Collapsing the band pins `fade` at 1 from orbit down to the street.
+ *
+ * `nightFade*` is deliberately left alone. Narrowing it too also darkens the
+ * ground atmosphere, and the night side drops from "dim but readable" to solid
+ * black — a memory you cannot look at, which is the thing this toggle was off
+ * by default to avoid. With only the lighting band narrowed the shader's 0.3
+ * floor keeps night-side terrain legible.
+ */
+const LIT_FADE_OUT = 1.0e4;
+const LIT_FADE_IN = 1.0e5;
+
+function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number; in: number }): void {
+  globe.enableLighting = on;
+  globe.dynamicAtmosphereLighting = on;
+  globe.lightingFadeOutDistance = on ? LIT_FADE_OUT : stock.out;
+  globe.lightingFadeInDistance = on ? LIT_FADE_IN : stock.in;
+}
 
 /**
  * The globe. CesiumJS via Resium, framed inside the redesign shell (not
@@ -26,18 +55,31 @@ type Located = AtlasMemory & { lat: number; lon: number };
  * default) so it never competes with the memory layer for attention.
  */
 export function CesiumStoryViewer({
-  story, memories, places = [], focusedId, onViewer, onPick, onPickPlace, onHover, onInteract,
+  story, memories, places = [], focusedId, basemap = DEFAULT_BASEMAP, sunLighting = false,
+  buildings = false,
+  onViewer, onPick, onPickPlace, onHover, onInteract,
 }: {
   story: Story;
   memories: AtlasMemory[];
   places?: Place[];
   focusedId: string | null;
+  /** Keyless basemap id from BASEMAPS. */
+  basemap?: string;
+  /** Cast the real sun terminator across the globe. */
+  sunLighting?: boolean;
+  /** Google Photorealistic 3D Tiles — real buildings and terrain geometry. */
+  buildings?: boolean;
   onViewer?: (v: Cesium.Viewer | null) => void;
   onPick?: (m: AtlasMemory) => void;
   onPickPlace?: (p: Place) => void;
   onHover?: (id: string | null) => void;
   onInteract?: () => void;
 }) {
+  // Read inside the mount effect without making it a dependency (remounting
+  // the viewer to change basemap would tear down the whole scene).
+  const basemapRef = useRef(basemap);
+  basemapRef.current = basemap;
+
   const { czml, tilesets } = useMemo(() => storyToCzml(story), [story]);
   // The interactive memory-pin layer is the canonical 2D representation of
   // memories, so keep only the document (clock), authored tracks (`path`), and
@@ -58,6 +100,10 @@ export function CesiumStoryViewer({
   const onHoverRef = useRef(onHover); onHoverRef.current = onHover;
   const onInteractRef = useRef(onInteract); onInteractRef.current = onInteract;
   const focusedIdRef = useRef(focusedId); focusedIdRef.current = focusedId;
+  const sunLightingRef = useRef(sunLighting); sunLightingRef.current = sunLighting;
+  // Cesium's own fade band, read off the globe before we ever narrow it, so
+  // turning the sun back off restores exactly what it shipped with.
+  const stockFadeRef = useRef<{ out: number; in: number } | null>(null);
   const memMapRef = useRef(new Map<string, AtlasMemory>());
   memMapRef.current = useMemo(() => new Map(memories.map((m) => [m.id, m])), [memories]);
   const placeMapRef = useRef(new Map<string, Place>());
@@ -82,12 +128,20 @@ export function CesiumStoryViewer({
       const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =>
         Promise.race([p, new Promise<T>((_, r) => setTimeout(() => r(new Error(`${label} timed out`)), ms))]);
 
-      const loadOffline = async () => {
+      // Nothing here ever clears the whole stack. Either path can land while the
+      // basemap effect has already attached the chosen overlay on top, and a
+      // removeAll() would silently delete it — the globe then sits on two-level
+      // Natural Earth and goes black as soon as the camera drops below orbit.
+      // Insert underneath instead, so base and overlay coexist whatever order
+      // they land in. `replace` is the one layer being given up on (the ion
+      // layer whose tiles are erroring), removed by identity after the offline
+      // floor is in place so there is never a frame with no ground at all.
+      const loadOffline = async ({ replace }: { replace?: Cesium.ImageryLayer } = {}) => {
         try {
-          const offline = await Cesium.TileMapServiceImageryProvider.fromUrl(Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII'));
+          const offline = await offlineImagery();
           if (!alive()) return;
-          v.imageryLayers.removeAll();
-          v.imageryLayers.add(new Cesium.ImageryLayer(offline));
+          v.imageryLayers.add(new Cesium.ImageryLayer(offline), 0);
+          if (replace) v.imageryLayers.remove(replace, true);
         } catch (e) {
           if (alive()) console.error('[cesium] offline imagery failed', e);
         }
@@ -98,10 +152,10 @@ export function CesiumStoryViewer({
           try {
             const world = await withTimeout(Cesium.createWorldImageryAsync(), 8000, 'ion imagery');
             if (!alive()) return;
-            v.imageryLayers.removeAll();
-            v.imageryLayers.add(new Cesium.ImageryLayer(world));
+            const ionLayer = new Cesium.ImageryLayer(world);
+            v.imageryLayers.add(ionLayer, 0);
             let swapped = false;
-            const onImageryError = () => { if (swapped || !alive()) return; swapped = true; void loadOffline(); };
+            const onImageryError = () => { if (swapped || !alive()) return; swapped = true; void loadOffline({ replace: ionLayer }); };
             world.errorEvent.addEventListener(onImageryError);
             cleanupImageryError = () => world.errorEvent.removeEventListener(onImageryError);
           } catch {
@@ -111,16 +165,40 @@ export function CesiumStoryViewer({
             .then((t) => { if (alive()) v.terrainProvider = t; })
             .catch(() => {});
         } else {
+          // No ion token. Two layers, deliberately:
+          //
+          //  base    Cesium's bundled NaturalEarthII raster. Local, always
+          //          resolves, so the globe has ground the instant it mounts.
+          //  overlay the keyless Esri basemap CI-Server's own map uses, which
+          //          carries the real detail once its tiles arrive.
+          //
+          // The overlay alone is not enough: until its first tiles land — and
+          // on any network that cannot reach ArcGIS at all — a single online
+          // layer leaves the globe drawing nothing but starfield, which reads
+          // as a broken app rather than a loading one. Keeping the offline
+          // raster underneath makes the online basemap a progressive
+          // enhancement instead of a hard dependency.
+          // Offline Natural Earth is the layer the globe mounts with: it is
+          // local, so it always resolves and there is never a black globe. The
+          // richer keyless Esri basemaps are layered on top by the basemap
+          // effect below, once the viewer is fully constructed — attaching a
+          // remote layer during mount makes every root tile wait on it, and a
+          // slow or throttled tile server then holds the whole globe in
+          // LOADING with nothing drawn and no error raised.
           await loadOffline();
         }
       })();
 
-      // Keep the globe lit. Sun-accurate lighting plunges any memory on the night
-      // side into blackness — for a scrapbook that's a memory you can't see, and
-      // half of them are always night somewhere. Google Earth makes the same
-      // call. The moment's time-of-day still reads in the inspector badge and the
-      // Time Machine ("Dawn · sky set to 6:32 AM").
-      v.scene.globe.enableLighting = false;
+      // Apply the *current* lighting choice rather than a hard-coded `false`.
+      // This runs a frame or more after mount (Resium hands the viewer over on a
+      // later tick), so whether it lands before or after the sunLighting effect
+      // below is a race — and hard-coding either answer here means one of the two
+      // orders silently wins. Reading the prop makes both orders agree.
+      stockFadeRef.current ??= {
+        out: v.scene.globe.lightingFadeOutDistance,
+        in: v.scene.globe.lightingFadeInDistance,
+      };
+      applySunLighting(v.scene.globe, sunLightingRef.current, stockFadeRef.current);
       v.scene.fog.enabled = true;
       if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
       // Render the globe at device resolution (crisp on HiDPI), capped for perf.
@@ -230,6 +308,88 @@ export function CesiumStoryViewer({
     };
   }, [viewer, places]);
 
+  // ---- basemap switching ----
+  // Swap the imagery layer in place rather than remounting the viewer, so the
+  // camera, clock and entity layers all survive a basemap change.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const token = Cesium.Ion.defaultAccessToken;
+    const hasIon = Boolean(token) && token !== PLACEHOLDER_TOKEN;
+    let cancelled = false;
+    // Always keep the mounted base at index 0 and swap only what sits above it,
+    // so the globe still has ground while a new basemap's tiles arrive.
+    const clearOverlay = () => {
+      while (viewer.imageryLayers.length > 1) {
+        viewer.imageryLayers.remove(viewer.imageryLayers.get(viewer.imageryLayers.length - 1), true);
+      }
+    };
+
+    const entry = BASEMAPS.find((b) => b.id === basemap);
+    // Two ways the answer is "no overlay at all": an entry with no `create` is
+    // the mounted base layer itself, and under ion the default choice already
+    // *is* what is mounted — ion World Imagery is satellite imagery, so laying
+    // Esri's on top of it would fetch a second set of tiles to draw the same
+    // ground. Every other choice applies whether or not ion is configured;
+    // this effect used to bail outright when it was, which quietly turned the
+    // whole picker into a no-op the moment the ion token was wired up.
+    if (!entry?.create || (hasIon && entry.id === DEFAULT_BASEMAP)) { clearOverlay(); return; }
+
+    try {
+      const provider = entry.create();
+      if (cancelled || viewer.isDestroyed()) return;
+      clearOverlay();
+      viewer.imageryLayers.add(new Cesium.ImageryLayer(provider));
+    } catch (e) {
+      console.error('[cesium] basemap swap failed', e);
+    }
+    return () => { cancelled = true; };
+  }, [viewer, basemap]);
+
+  // ---- sun / day-night terminator ----
+  // Off by default: sun-accurate lighting puts every memory on the night side
+  // into darkness, and half of them always are. As an opt-in it is the whole
+  // point of a globe — you see where it is day, where it is night, and the
+  // terminator sweeping between them.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    stockFadeRef.current ??= {
+      out: viewer.scene.globe.lightingFadeOutDistance,
+      in: viewer.scene.globe.lightingFadeInDistance,
+    };
+    applySunLighting(viewer.scene.globe, sunLighting, stockFadeRef.current);
+    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
+  }, [viewer, sunLighting]);
+
+  // ---- Google Photorealistic 3D Tiles (buildings) ----
+  // Loaded on demand, not at mount: it is a metered Google service and a heavy
+  // stream, so it should only bill and download when the user asks for it.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed() || !buildings) return;
+    if (!Cesium.GoogleMaps.defaultApiKey) {
+      console.warn('[atlas] buildings need VITE_GOOGLE_MAPS_API_KEY');
+      return;
+    }
+    let cancelled = false;
+    let tileset: Cesium.Cesium3DTileset | undefined;
+    void Cesium.createGooglePhotorealistic3DTileset()
+      .then((ts) => {
+        if (cancelled || viewer.isDestroyed()) { ts.destroy?.(); return; }
+        tileset = ts;
+        viewer.scene.primitives.add(ts);
+        // Google's tiles carry their own surface; the ellipsoid globe underneath
+        // would z-fight through the streets.
+        viewer.scene.globe.show = false;
+      })
+      .catch((e) => console.error('[atlas] photorealistic tiles failed', e));
+    return () => {
+      cancelled = true;
+      if (!viewer.isDestroyed()) {
+        if (tileset) viewer.scene.primitives.remove(tileset);
+        viewer.scene.globe.show = true;
+      }
+    };
+  }, [viewer, buildings]);
+
   return (
     <div className="atlas-globe" ref={hostRef}>
       <Viewer
@@ -299,6 +459,14 @@ function buildMemoryLayer(memories: AtlasMemory[], getFocusedId: () => string | 
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         disableDepthTestDistance: onTop,
         translucencyByDistance: new Cesium.NearFarScalar(2.0e6, 1.0, 1.2e7, 0.0),
+        // Only label pins the camera is actually near. A real Companion Memory
+        // has hundreds of located events (290 here), and with every label drawn
+        // depth-test-disabled they overlap into unreadable horizontal bars
+        // across the globe — it looked fine only because the demo story had
+        // three. Below ~600km the pins are sparse enough on screen to name;
+        // above it the point markers alone carry the distribution, and the
+        // focused title is shown in the place chip and inspector regardless.
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 6.0e5),
       },
     });
   }

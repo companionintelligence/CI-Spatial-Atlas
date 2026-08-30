@@ -44,8 +44,6 @@ export function PlaceChip({ memory }: { memory: AtlasMemory | null }) {
   );
 }
 
-/** Floating scrapbook frames for the memories nearest the playhead (time-driven:
- *  scrubbing/playing repopulates them). Real media when the story carries it. */
 /**
  * Scrapbook cards anchored to where their memory actually is on the globe.
  *
@@ -55,6 +53,11 @@ export function PlaceChip({ memory }: { memory: AtlasMemory | null }) {
  * Cesium and hide when the globe rotates them out of view, so what you see is
  * the data's geography rather than a fixed decorative arrangement.
  */
+/** Card footprint used for overlap rejection; matches `.atlas-scrap` in the
+ *  theme (130px wide) plus its caption, with a little breathing room. */
+const CARD_W = 138;
+const CARD_H = 132;
+
 export function ScrapbookFrames({ memories, hoveredId, onSelect, viewer }: {
   memories: AtlasMemory[];
   hoveredId?: string | null;
@@ -89,6 +92,20 @@ export function ScrapbookFrames({ memories, hoveredId, onSelect, viewer }: {
         if (Cesium.Cartesian3.dot(normal, toCamera) <= 0) continue;
         const win = Cesium.SceneTransforms.worldToWindowCoordinates(scene, carto);
         if (!win) continue;
+
+        // Drop a card that would land on one already placed. Memories cluster
+        // geographically — a person's are mostly in a handful of cities — so
+        // projecting the few nearest the playhead put all of them inside the
+        // same city block: every card overlapped every other, the stack read as
+        // one jumbled card, and only the topmost could be clicked. Keeping the
+        // first (earliest) at each spot means every card left on screen is
+        // legible and hits its own memory. The pins underneath still show the
+        // full distribution.
+        const clashes = next.some(
+          (p) => Math.abs(p.x - win.x) < CARD_W && Math.abs(p.y - win.y) < CARD_H,
+        );
+        if (clashes) continue;
+
         next.push({ m, x: win.x, y: win.y });
       }
       // Only commit when something actually moved. Setting state unconditionally
@@ -127,10 +144,24 @@ export function ScrapbookFrames({ memories, hoveredId, onSelect, viewer }: {
             }}
             aria-label={`${m.title}, ${m.whenDate} ${m.whenTime}`}
           >
-            {thumb
-              ? <img className="ph" src={thumb} alt="" loading="lazy" />
-              : <div className="ph" style={{ background: m.gradient }} aria-hidden="true" />}
-            <div className="cap"><b>{m.title}</b><span>{m.whenDate} · {m.whenTime}</span></div>
+            {/* Only draw a picture frame when there is a picture. Most located
+                memories in a real archive are calendar entries, rides and
+                orders with no media, and filling the frame with `m.gradient` —
+                an invented colour wash — made every card look like a photo the
+                app could not load. Without media the card is typographic. */}
+            {thumb ? (
+              <>
+                <img className="ph" src={thumb} alt="" loading="lazy" />
+                <div className="cap"><b>{m.title}</b><span>{m.whenDate} · {m.whenTime}</span></div>
+              </>
+            ) : (
+              <div className="cap cap-only">
+                {m.category && <span className="cat">{m.category}</span>}
+                <b>{m.title}</b>
+                <span>{m.whenDate} · {m.whenTime}</span>
+                {m.place && <span className="where">{m.place.split(',')[0]}</span>}
+              </div>
+            )}
           </button>
         );
       })}

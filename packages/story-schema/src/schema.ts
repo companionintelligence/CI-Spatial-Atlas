@@ -137,6 +137,20 @@ const itemBase = {
   tags: z.array(z.string()).optional(),
   time: TimeSpec.optional(),
   source: Provenance.optional(),
+  /**
+   * The named place this happened at. Intrinsic to a located item ("this
+   * happened at the Adler Theater"), and the key that lets a viewer group a
+   * person's memories by where they keep going back to — which is the dominant
+   * structure in a real archive: 50 visits to one venue, 19 to an airport.
+   * `placeName` is denormalised so a story renders standalone; `placeId` is the
+   * join key when a live Companion Memory is connected.
+   */
+  placeId: z.string().optional(),
+  placeName: z.string().optional(),
+  /** e.g. calendar | travel | commerce — how this memory came to exist. */
+  category: z.string().optional(),
+  /** Minutes, when the source knew a duration. */
+  durationMinutes: z.number().optional(),
 };
 
 /** Typed renderable entities (from Earth-2). `photo`/`video` may additionally

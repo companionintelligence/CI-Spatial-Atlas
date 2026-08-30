@@ -1,32 +1,23 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { GlobeIcon, ImagesIcon, ClockIcon, GraphIcon, PinIcon, SearchIcon } from './icons.js';
 import type { AtlasMemory } from '../model/atlasModel.js';
-import type { AtlasView } from './Shell.js';
 
 type Item =
-  | { kind: 'view'; id: string; label: string; sub: string; view: AtlasView; Icon: typeof GlobeIcon }
   | { kind: 'memory'; id: string; label: string; sub: string; memory: AtlasMemory };
 
-const VIEW_ACTIONS: { view: AtlasView; label: string; Icon: typeof GlobeIcon }[] = [
-  { view: 'globe', label: 'Globe', Icon: GlobeIcon },
-  { view: 'gallery', label: 'Gallery', Icon: ImagesIcon },
-  { view: 'timeline', label: 'Timeline', Icon: ClockIcon },
-  { view: 'graph', label: 'Graph', Icon: GraphIcon },
-];
 
 const LIST_ID = 'atlas-cmdk-list';
 const optId = (i: number) => `atlas-cmdk-opt-${i}`;
 
 /** The ⌘K palette — the redesign's replacement for XR SavedSearches: jump to a
- *  memory/place or switch views by keyboard. Implemented as an ARIA
+ *  memory or place by keyboard. Implemented as an ARIA
  *  combobox+listbox (focus stays on the input; the active option is announced
  *  via aria-activedescendant) inside a focus-trapped modal dialog. */
-export function CommandPalette({ open, memories, onClose, onSelect, onView }: {
+export function CommandPalette({ open, memories, onClose, onSelect }: {
   open: boolean;
   memories: AtlasMemory[];
   onClose: () => void;
   onSelect: (m: AtlasMemory) => void;
-  onView: (v: AtlasView) => void;
 }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
@@ -55,21 +46,17 @@ export function CommandPalette({ open, memories, onClose, onSelect, onView }: {
 
   const items = useMemo<Item[]>(() => {
     const q = query.trim().toLowerCase();
-    const views: Item[] = VIEW_ACTIONS
-      .filter((v) => !q || v.label.toLowerCase().includes(q))
-      .map((v) => ({ kind: 'view', id: `v:${v.view}`, label: `${v.label} view`, sub: 'Switch view', view: v.view, Icon: v.Icon }));
     const mem: Item[] = memories
       .filter((m) => !q || `${m.title} ${m.place ?? ''} ${m.narrative ?? ''}`.toLowerCase().includes(q))
       .map((m) => ({ kind: 'memory', id: `m:${m.id}`, label: m.title, sub: `${m.place ?? 'Memory'} · ${m.whenDate}`, memory: m }));
-    return [...views, ...mem];
+    return mem;
   }, [query, memories]);
 
   if (!open) return null;
 
   const run = (it: Item | undefined) => {
     if (!it) return;
-    if (it.kind === 'view') onView(it.view);
-    else onSelect(it.memory);
+    onSelect(it.memory);
   };
 
   // Handled on the dialog so it works regardless of which descendant has focus.
@@ -122,7 +109,7 @@ export function CommandPalette({ open, memories, onClose, onSelect, onView }: {
               onMouseEnter={() => setActive(i)}
               onClick={() => run(it)}
             >
-              <span className="cmdk-ico">{it.kind === 'view' ? <it.Icon /> : <PinIcon />}</span>
+              <span className="cmdk-ico"><PinIcon /></span>
               <span className="cmdk-label">{it.label}</span>
               <span className="cmdk-sub">{it.sub}</span>
             </li>
