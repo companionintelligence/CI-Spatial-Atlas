@@ -5,12 +5,15 @@ import { solarLocal, nearestMemory, type AtlasModel } from '../model/atlasModel.
 const DAY = 86_400_000;
 
 export function TimeMachine({
-  model, currentMs, playing, onTogglePlay, onScrub, onStep,
+  model, currentMs, playing, sunLighting, onTogglePlay, onToggleSun, onScrub, onStep,
 }: {
   model: AtlasModel;
   currentMs: number;
   playing: boolean;
+  /** Whether the globe is lit by the real sun for the moment being viewed. */
+  sunLighting: boolean;
   onTogglePlay: () => void;
+  onToggleSun: () => void;
   onScrub: (ms: number) => void;
   onStep: (dir: -1 | 1) => void;
 }) {
@@ -83,10 +86,59 @@ export function TimeMachine({
     return () => ro.disconnect();
   }, [model, startMs, span]);
 
-  const scrub = (e: React.MouseEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const ratio = r.width > 0 ? (e.clientX - r.left) / r.width : 0;
+  /**
+   * Dragging the track, not just clicking it.
+   *
+   * A click-only scrubber is usable with a mouse and close to useless with a
+   * thumb: on a phone the track is the whole control, and tapping a single
+   * point of a seven-year archive to within a month asks for pixel accuracy
+   * nobody has. Pointer events cover mouse, pen and touch in one path, and the
+   * capture is what keeps the drag alive once the finger leaves the 76px-tall
+   * strip — which, on a phone, is almost immediately.
+   */
+  const dragging = useRef(false);
+
+  const scrubTo = (clientX: number, el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    const ratio = r.width > 0 ? (clientX - r.left) / r.width : 0;
     onScrub(startMs + span * Math.min(1, Math.max(0, ratio)));
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    // Taking hold of the scrubber stops playback, the way it does in every
+    // video player. Without it the clock keeps running under the finger — and
+    // at this multiplier (a whole archive in ~60 s) it runs *fast*, so the
+    // playhead fights the drag and lands somewhere neither party chose.
+    if (playing) onTogglePlay();
+    dragging.current = true;
+    // Scrub first, capture second. The other order loses a *tap* entirely:
+    // `setPointerCapture` throws for a pointer the element cannot capture, and
+    // with the scrub behind it the throw takes the one thing the gesture was
+    // for. Dragging still worked, which is what made it hard to see — the
+    // move handler picked up from the flag that had already been set.
+    scrubTo(e.clientX, e.currentTarget);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // No capture: the drag still tracks while the finger is over the track,
+      // which is strictly worse than capturing but far better than nothing.
+    }
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    scrubTo(e.clientX, e.currentTarget);
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Already gone — the browser releases capture on its own at pointerup.
+    }
   };
 
   // Keyboard scrubbing (WCAG 2.1.1): Arrows step, Page keys jump, Home/End snap.
@@ -126,10 +178,30 @@ export function TimeMachine({
           {playing ? <PauseIcon /> : <PlayIcon />}
         </button>
         <button className="tm-btn" title="Next memory" aria-label="Next memory" onClick={() => onStep(1)}><NextIcon /></button>
+        {/* The sun lives in the time bar, not in the layers menu.
+            Cesium already swings the terminator with `clock.currentTime`, so
+            scrubbing has always moved the sun — but with the lighting off by
+            default and its switch two clicks deep in a popover, nothing on
+            screen ever showed it. The readout would say "10:06 PM · night"
+            over a globe in full daylight: two claims about the same moment,
+            contradicting each other. Putting the switch here, wearing the
+            glyph that already tracks the moment, is the connection. */}
+        <button
+          className={`tm-btn tm-sun${sunLighting ? ' active' : ''}`}
+          title={sunLighting ? 'Turn off day/night lighting' : 'Light the globe for this moment'}
+          aria-label="Day and night lighting"
+          aria-pressed={sunLighting}
+          onClick={onToggleSun}
+        >
+          {when.tod === 'night' ? <MoonIcon /> : <SunIcon />}
+        </button>
       </div>
       <div
         className="tm-track"
-        onClick={scrub}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         onKeyDown={onKey}
         role="slider"
         aria-label="Scrub time"

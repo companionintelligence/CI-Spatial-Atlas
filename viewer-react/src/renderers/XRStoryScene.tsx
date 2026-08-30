@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { XR, createXRStore } from '@react-three/xr';
+import { XR, createXRStore, useXRSessionModeSupported } from '@react-three/xr';
 import type { Story } from '@companion-atlas/story';
 import { deriveModel, type AtlasMemory } from '../model/atlasModel.js';
 import { GlobeScene } from './xr/GlobeScene.js';
@@ -62,6 +62,7 @@ export function XRStoryScene({ story, memories, focusedId, onPick }: XRStoryScen
   const [source, setSource] = useState<TileSource>(initialTileSource);
   const [credits, setCredits] = useState<string[]>([]);
   const [vrSupported, setVrSupported] = useState<boolean | null>(null);
+  const arSupported = useXRSessionModeSupported('immersive-ar');
 
   useEffect(() => {
     if (focusedId !== undefined) setFocused(focusedId);
@@ -103,7 +104,11 @@ export function XRStoryScene({ story, memories, focusedId, onPick }: XRStoryScen
       <Canvas
         style={styles.canvas}
         dpr={[1, 1.75]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        // `alpha` must be on at context-creation time: a canvas made without
+        // it can never composite over passthrough, and the AR session then
+        // shows a black rectangle where the room should be. Harmless in VR,
+        // where the scene fills the frame anyway.
+        gl={{ antialias: true, powerPreference: 'high-performance', alpha: true }}
         // `rotation` is load-bearing: without it R3F aims the default camera at
         // the scene origin, which here is the floor between the viewer's feet —
         // the globe sits in front of them at eye height and never enters the
@@ -129,6 +134,14 @@ export function XRStoryScene({ story, memories, focusedId, onPick }: XRStoryScen
         <button type="button" style={styles.enter} onClick={() => void xrStore.enterVR()}>
           Enter VR
         </button>
+        {/* AR is offered only where the device actually has passthrough; on a
+            headset without it the session request just fails, and a button that
+            can only disappoint is worse than one that was never there. */}
+        {arSupported && (
+          <button type="button" style={styles.enter} onClick={() => void xrStore.enterAR()}>
+            Enter AR
+          </button>
+        )}
         <span style={styles.note}>
           {vrSupported === false
             ? 'No headset detected — drag to turn the globe, scroll to zoom.'

@@ -25,6 +25,23 @@ type Located = AtlasMemory & { lat: number; lon: number };
  * black — a memory you cannot look at, which is the thing this toggle was off
  * by default to avoid. With only the lighting band narrowed the shader's 0.3
  * floor keeps night-side terrain legible.
+ *
+ * **Where the sun's position comes from: `viewer.clock.currentTime`, and
+ * nothing else.** Cesium derives the sun vector from the frame's time every
+ * render, so the Time Machine already moves the sun — scrubbing writes the
+ * clock (`AtlasApp.scrub`) and the terminator follows on the next frame,
+ * whether the clock is animating or paused. Measured on the real archive, one
+ * simulated day at a whole-globe framing: mean scene luminance 5.5 at 00:00
+ * UTC, 50.6 at 12:00, 17.5 at 18:00, with the lit limb sweeping across the
+ * disc between them. Nothing here needs to push the sun around, and anything
+ * that tried would be a second writer racing the clock.
+ *
+ * So the thing that was actually broken was never the coupling — it was that
+ * you could not see it. The lighting is off by default (half of any archive is
+ * on the night side) and its switch lived two clicks into the layers popover,
+ * so the Time Machine's readout would say "10:06 PM · night" over a globe in
+ * full daylight. The switch now also sits in the time bar itself, wearing the
+ * sun/moon glyph that already tracks the moment (`ui/TimeMachine.tsx`).
  */
 const LIT_FADE_OUT = 1.0e4;
 const LIT_FADE_IN = 1.0e5;

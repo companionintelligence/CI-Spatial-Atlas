@@ -8,12 +8,24 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { BufferAttribute, BufferGeometry, Mesh, Points, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Color, Mesh, Points, PointsMaterial, Vector3 } from 'three';
 import { drawInfoCard, labelFontReady, type LabelCard } from './labelCard.js';
 import type { WorldHandle } from './useGlobeLocomotion.js';
+import {
+  approach,
+  DEFAULT_COMFORT,
+  motionAmount,
+  STAR_FALL_S,
+  STAR_RISE_S,
+  starfieldFollowsWorld,
+} from './comfort.js';
 
 const _viewer = new Vector3();
 const _toViewer = new Vector3();
+
+const STAR_INK = new Color('#bcd9e2');
+/** The scene's clear colour — fading a star to it is fading it to nothing. */
+const VOID_INK = new Color('#020c14');
 
 /**
  * Stars, on a unit sphere in player space.
@@ -24,10 +36,20 @@ const _toViewer = new Vector3();
  * first with depth testing off puts them behind everything regardless.
  *
  * They carry the world's rotation but not its position or scale, so spinning
- * the planet spins the sky with it.
+ * the planet spins the sky with it — which is astronomically right and, while
+ * the world is *moving*, the single most provocative thing this scene could do.
+ * A one-handed orbit turns the planet, the pins and the sky together: the whole
+ * visual field rotates and there is no static reference left anywhere, which is
+ * the textbook recipe for rotational vection and the sickness that follows it.
+ *
+ * So the stars are a rest frame first and an ephemeris second. Above a rotation
+ * threshold they stop following the world and fade towards the background;
+ * below it they fade back in and re-lock, and the re-lock happens while they
+ * are under 5% brightness so the correction is never seen (`STAR_HIDDEN`).
  */
 export function Starfield({ world, count = 1400 }: { world: WorldHandle; count?: number }) {
   const points = useRef<Points>(null);
+  const dim = useRef(0);
   const geometry = useMemo(() => {
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -44,8 +66,20 @@ export function Starfield({ world, count = 1400 }: { world: WorldHandle; count?:
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
-  useFrame(() => {
-    if (points.current) points.current.quaternion.copy(world.transform.quaternion);
+  useFrame((_state, delta) => {
+    const node = points.current;
+    if (!node) return;
+    const comfort = world.comfort ?? DEFAULT_COMFORT;
+    // Rotation only. A world that is being dragged or zoomed does not drag the
+    // sky with it, so the stars are still a valid rest frame and there is
+    // nothing to hide.
+    const target = comfort.steadyStars ? motionAmount(world.motion?.angular ?? 0) : 0;
+    dim.current = approach(dim.current, target, delta, STAR_RISE_S, STAR_FALL_S);
+    if (starfieldFollowsWorld(dim.current)) node.quaternion.copy(world.transform.quaternion);
+    // Fade by colour, not opacity: `transparent` would move the stars into the
+    // transparency pass, where depth-tested-off geometry drawn after the globe
+    // paints straight over the planet (see the material below).
+    (node.material as PointsMaterial).color.lerpColors(VOID_INK, STAR_INK, 1 - dim.current);
   });
 
   return (

@@ -220,8 +220,11 @@ function setOrientation(t: WorldTransform, lat: number, lon: number, north: Vect
  * same three lines as "drag with one hand".
  *
  * Returns `false` when there is nothing to grab with.
+ *
+ * `lockRoll` takes the roll term out: see the comment on the `up` vector below
+ * for why that is a comfort setting rather than a taste one.
  */
-export function grabFrame(hands: readonly GrabPose[], target: Matrix4): boolean {
+export function grabFrame(hands: readonly GrabPose[], target: Matrix4, lockRoll = false): boolean {
   if (hands.length === 0) return false;
   if (hands.length === 1) {
     target.compose(hands[0]!.position, hands[0]!.quaternion, _s.setScalar(1));
@@ -242,9 +245,24 @@ export function grabFrame(hands: readonly GrabPose[], target: Matrix4): boolean 
   const east = span.divideScalar(distance);
   // Roll about the hand-to-hand axis comes from the average of the two grips,
   // so rolling both wrists rolls the world (as it does in Earth VR).
-  const up = _v2.set(0, 1, 0).applyQuaternion(_q.copy(a.quaternion).slerp(b.quaternion, 0.5));
+  //
+  // Earth VR can afford that because the viewer is always standing on
+  // something: the horizon it rolls is one they can put their feet back on.
+  // Atlas has no such invariant — the same wrists roll a planet held at arm's
+  // length — and an unbidden horizon roll has no vestibular counterpart at all,
+  // which is why `lockRoll` (on by default) takes the wrists out of it and
+  // keeps player +Y as up.
+  const up = _v2.set(0, 1, 0);
+  if (!lockRoll) up.applyQuaternion(_q.copy(a.quaternion).slerp(b.quaternion, 0.5));
   up.addScaledVector(east, -up.dot(east));
-  if (up.lengthSq() < 1e-6) up.set(0, 1, 0).addScaledVector(east, -east.y);
+  if (up.lengthSq() < 1e-6) {
+    // Hands stacked vertically, so +Y *is* the grab axis. Fall back to another
+    // axis: re-projecting +Y (what this used to do) is the same degenerate
+    // vector again, and a zero-length up makes the basis — and with it the
+    // world — flip about wherever the hands happen to be.
+    up.set(0, 0, 1).addScaledVector(east, -east.z);
+    if (up.lengthSq() < 1e-6) up.set(1, 0, 0).addScaledVector(east, -east.x);
+  }
   up.normalize();
   const north = _u.copy(east).cross(up).multiplyScalar(-1);
 
