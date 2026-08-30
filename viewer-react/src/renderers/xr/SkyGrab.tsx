@@ -135,16 +135,28 @@ export function useSkyGrab(world: WorldHandle, opts: SkyGrabOptions): void {
     let held = 0;
     let first = false;
     // "Against the sky" is how a drag *starts*, not a condition it has to keep
-    // satisfying. A full revolution sweeps the hand right across the planet's
-    // silhouette, and re-testing every frame dropped the grab there and
-    // silently re-anchored on the far side: a whole turn came out as a few
-    // hours in the wrong direction. Once you have hold of the sky you keep it
-    // until you let go — the same contract the grip grab makes with the globe.
+    // satisfying. Re-testing every frame means a hand that sweeps across the
+    // planet's silhouette — which a full revolution does, twice — drops the
+    // grab there and silently re-anchors on the far side, turning one
+    // continuous drag into two whose angles do not add up. Once you have hold
+    // of the sky you keep it until you let go, the same contract the grip grab
+    // makes with the globe.
     const engaged = hands.current > 0 && drag.current !== null;
     for (const wanted of ['left', 'right', 'none'] as const) {
       for (const source of session.inputSources) {
         if (source.handedness !== wanted || held === 2) continue;
         if (!triggerDown(source) || gripDown(source)) continue;
+        // A hand pointing at a panel is not reaching for the sky. The globe
+        // silhouette test below cannot tell the difference — a hand held down
+        // by the off wrist is ~58 degrees off-axis and misses the globe just as
+        // cleanly as a hand raised to the stars — so pressing a wrist-menu row
+        // or a comfort toggle used to begin a sky drag on the same press. That
+        // was not cosmetic: one frame of drag, or simply releasing, moves
+        // `activeMs` off null, and nothing ever sets it back, so the scene
+        // stayed clamped to a 30-day window with ~283 of 290 pins gone for the
+        // rest of the session. The panels claim their hand ahead of this hook
+        // by frame priority.
+        if (world.uiHands.has(source.handedness)) continue;
         const pose = frame.getPose(source.gripSpace ?? source.targetRaySpace, space);
         if (!pose) continue;
         _hand.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
