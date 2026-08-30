@@ -67,7 +67,7 @@ const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
  * back into Companion Memory (which is what shares it). See docs/REDESIGN.md.
  */
 export function AtlasApp() {
-  const { story: loadedStory, error, loading, source, memory } = useStory();
+  const { story: loadedStory, error, loading, source, isSample, memory } = useStory();
   const { places } = usePlaces(memory);
 
   // A curated scrapbook journey temporarily takes over the globe; the loaded
@@ -475,6 +475,7 @@ export function AtlasApp() {
         onSearch={() => setPaletteOpen(true)}
         onShare={share}
         live={source === 'memory'}
+        sample={isSample}
         showPlaces={showPlaces}
         onTogglePlaces={togglePlaces}
       />
@@ -495,7 +496,7 @@ export function AtlasApp() {
           <div className="atlas-overlay">
             <StatsRibbon stats={model.stats} />
             <PlaceChip memory={currentPlace} />
-            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} />
+            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
             <Legend />
           </div>
         )}

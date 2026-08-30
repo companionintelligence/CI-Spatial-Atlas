@@ -20,12 +20,20 @@ export function useStory(): {
   error: string | null;
   loading: boolean;
   source: StorySource;
+  /**
+   * True when the globe is showing the bundled demo story because nothing real
+   * was configured. The UI must say so — synthetic places rendered with no
+   * marking are indistinguishable from real memories, which reads as a fake
+   * product rather than a disconnected one.
+   */
+  isSample: boolean;
   /** The connected Companion Memory (for write-back), or null when offline. */
   memory: { url: string; token?: string } | null;
 } {
   const [story, setStory] = useState<Story | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSample, setIsSample] = useState(false);
 
   const params = new URLSearchParams(window.location.search);
   const memoryUrl = params.get('memory') ?? env.VITE_MEMORY_URL;
@@ -40,10 +48,15 @@ export function useStory(): {
         if (memoryUrl) {
           s = await fetchMemoryStory({ url: memoryUrl, token: memoryToken });
         } else {
-          const url = params.get('story') ?? '/stories/sample-pacific-journey.json';
+          const explicit = params.get('story');
+          const url = explicit ?? '/stories/sample-pacific-journey.json';
           const res = await fetch(url);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           s = loadStory(await res.json());
+          // No `?story=` and no memory source means we fell back to the bundled
+          // demo. Flag it so the shell can label it rather than passing fixtures
+          // off as the user's own memories.
+          if (!explicit && !cancelled) setIsSample(true);
         }
         if (!cancelled) setStory(s);
       } catch (e) {
@@ -56,5 +69,5 @@ export function useStory(): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { story, error, loading, source, memory: memoryUrl ? { url: memoryUrl, token: memoryToken } : null };
+  return { story, error, loading, source, isSample, memory: memoryUrl ? { url: memoryUrl, token: memoryToken } : null };
 }

@@ -109,7 +109,15 @@ export function TimeMachine({
       >
         <canvas ref={canvas} className="tm-histogram" aria-hidden="true" />
         <div className="tm-playhead" style={{ left: `${frac * 100}%` }} />
-        <div className="tm-axis">{ticks.map((t, i) => <span key={i} className={t.hot ? 'hot' : ''}>{t.label}</span>)}</div>
+        {/* `hot` marks the tick the playhead is currently nearest, so the
+            highlight follows playback instead of sitting on a fixed index. */}
+        <div className="tm-axis">{ticks.map((t, i) => {
+          const nearest = ticks.reduce(
+            (best, cand, idx) => (Math.abs(cand.ms - currentMs) < Math.abs(ticks[best].ms - currentMs) ? idx : best),
+            0,
+          );
+          return <span key={i} className={i === nearest ? 'hot' : ''}>{t.label}</span>;
+        })}</div>
       </div>
       <div className="tm-readout">
         <div className="date">{dateStr}</div>
