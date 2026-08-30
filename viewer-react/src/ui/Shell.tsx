@@ -1,6 +1,6 @@
 import {
-  BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon, SparkIcon, GearIcon,
-  SearchIcon, ShareIcon, MoonIcon, FlagIcon,
+  BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon, SparkIcon,
+  SearchIcon, ShareIcon, FlagIcon,
 } from './icons.js';
 
 
@@ -31,7 +31,9 @@ export function Rail({ onSearch, onFrameAll, onPeople, onCollections, scrapbookC
         </button>
       ))}
       <div className="atlas-rail-spacer" />
-      <button className="atlas-rail-btn" title="Settings (coming soon)" aria-label="Settings" disabled><GearIcon /></button>
+      {/* A disabled "Settings (coming soon)" button sat here. Chrome that can
+          only be clicked to discover it does nothing is worse than absent —
+          bring it back when there are settings. */}
       <div className="atlas-rail-avatar" title="Liam Broza">LB</div>
     </nav>
   );
@@ -79,7 +81,6 @@ export function TopBar({ onSearch, onShare, live, sample, showPlaces, onTogglePl
       )}
       {layers}
       <button className="atlas-icon-btn" title="Copy link to this view" aria-label="Copy link to this view" onClick={onShare}><ShareIcon /></button>
-      <button className="atlas-icon-btn" title="Theme (coming soon)" aria-label="Theme" disabled><MoonIcon /></button>
     </header>
   );
 }

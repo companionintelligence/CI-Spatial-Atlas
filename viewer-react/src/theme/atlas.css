@@ -21,6 +21,34 @@
   --atlas-shadow: 0 18px 50px rgba(0,0,0,.55), 0 2px 0 rgba(114,221,212,.04) inset;
 }
 
+/* ---- Stacking order -------------------------------------------------------
+ * One scale for the whole shell, because ad-hoc z-index values had already
+ * produced a real bug: the top bar and rail sat at 20 while the inspector and
+ * time machine sat at 25, so the *chrome* painted below the *panels*. A
+ * positioned element with a z-index creates a stacking context, which meant a
+ * popover anchored in the header could never escape it — the layers popover
+ * asked for 40 and still rendered under the inspector, and clicks landed on
+ * the panel behind it.
+ *
+ * Rule: chrome outranks panels, because chrome owns menus that must overlay
+ * them. Anything anchored inside the header stacks within --z-chrome, so its
+ * own value only competes with its siblings.
+ * ------------------------------------------------------------------------- */
+:root {
+  --z-backdrop: 0;   /* starfield, aurora */
+  --z-globe: 1;      /* cesium canvas */
+  --z-horizon: 2;    /* grid horizon */
+  --z-overlay: 3;    /* pins, scrapbook cards, legend */
+  --z-credit: 4;     /* cesium attribution */
+  --z-chip: 6;       /* journey status chip */
+  --z-panel: 25;     /* inspector, time machine */
+  --z-drawer: 30;    /* scrapbook / people drawers */
+  --z-chrome: 50;    /* rail + top bar — above panels, so header menus work */
+  --z-popover: 5;    /* inside --z-chrome */
+  --z-modal: 60;     /* command palette */
+  --z-lightbox: 70;  /* full-screen media */
+}
+
 .atlas-app *, .atlas-overlay * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--atlas-bg); overflow: hidden; }
@@ -34,9 +62,9 @@ body { background: var(--atlas-bg); overflow: hidden; }
 }
 
 /* backdrop layers (behind the globe) */
-.atlas-stars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.atlas-stars { position: fixed; inset: 0; z-index: var(--z-backdrop); pointer-events: none; }
 .atlas-aurora {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  position: fixed; inset: 0; z-index: var(--z-backdrop); pointer-events: none;
   background:
     radial-gradient(120% 80% at 50% -12%, rgba(64,155,155,.30), transparent 58%),
     radial-gradient(90% 60% at 12% 8%, rgba(0,169,167,.14), transparent 60%),
@@ -45,7 +73,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
 /* left icon rail */
 .atlas-rail {
-  grid-area: rail; z-index: 20;
+  grid-area: rail; z-index: var(--z-chrome);
   display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0;
   background: linear-gradient(180deg, rgba(6,25,34,.9), rgba(4,18,26,.86));
   border-right: 1px solid var(--atlas-line); backdrop-filter: blur(14px);
@@ -66,7 +94,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
 /* top bar */
 .atlas-top {
-  grid-area: top; z-index: 20; display: flex; align-items: center; gap: 16px; padding: 0 16px;
+  grid-area: top; z-index: var(--z-chrome); display: flex; align-items: center; gap: 16px; padding: 0 16px;
   background: linear-gradient(180deg, rgba(7,28,38,.86), rgba(5,22,30,.62));
   border-bottom: 1px solid var(--atlas-line); backdrop-filter: blur(14px);
 }
@@ -98,7 +126,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
 /* stage (holds the Cesium globe + overlays) */
 .atlas-stage { grid-area: stage; position: relative; overflow: hidden; }
-.atlas-globe { position: absolute; inset: 0; z-index: 1; }
+.atlas-globe { position: absolute; inset: 0; z-index: var(--z-globe); }
 /* Cesium must fill its container. `.atlas-globe > div` is Resium's own wrapper:
    without an explicit height on it the `height:100%` chain below resolves
    against an auto-height parent and collapses to the widget's initial content
@@ -109,12 +137,12 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-globe .cesium-widget canvas, .atlas-globe canvas { image-rendering: auto !important; }
 /* Keep Cesium/ion attribution on-screen (ion ToS) but subtle, lifted clear of
    the time-machine panel that otherwise covers the bottom edge. */
-.atlas-globe .cesium-viewer-bottom { position: absolute; right: 8px; bottom: 114px; z-index: 4; }
+.atlas-globe .cesium-viewer-bottom { position: absolute; right: 8px; bottom: 114px; z-index: var(--z-credit); }
 .atlas-globe .cesium-widget-credits { font-size: 10px; opacity: .5; color: var(--atlas-fg-dim); }
 .atlas-globe .cesium-credit-logoContainer { filter: grayscale(1) brightness(1.4) opacity(.6); }
-.atlas-grid-horizon { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: 2; pointer-events: none; opacity: .5; -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 92%); mask-image: linear-gradient(to top, #000 0%, transparent 92%); }
+.atlas-grid-horizon { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: var(--z-horizon); pointer-events: none; opacity: .5; -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 92%); mask-image: linear-gradient(to top, #000 0%, transparent 92%); }
 
-.atlas-overlay { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.atlas-overlay { position: absolute; inset: 0; z-index: var(--z-overlay); pointer-events: none; }
 /* Only the interactive scrapbook frames take pointer events. The stats ribbon,
    place chip, and legend are informational — letting them swallow pointers
    creates dead zones where globe drag/zoom (and pause-on-interact) fail. */
@@ -141,7 +169,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-legend .dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 8px 1px currentColor; }
 
 /* right inspector */
-.atlas-inspector { position: absolute; grid-area: stage; z-index: 25; top: 14px; right: 14px; bottom: 118px; width: 320px; background: var(--atlas-glass); border: 1px solid var(--atlas-line-2); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); display: flex; flex-direction: column; overflow: hidden; }
+.atlas-inspector { position: absolute; grid-area: stage; z-index: var(--z-panel); top: 14px; right: 14px; bottom: 118px; width: 320px; background: var(--atlas-glass); border: 1px solid var(--atlas-line-2); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); display: flex; flex-direction: column; overflow: hidden; }
 .atlas-insp-hero { height: 168px; position: relative; flex: none; display: block; width: 100%; border: 0; padding: 0; cursor: pointer; overflow: hidden; background: var(--atlas-card); }
 .atlas-insp-hero .hero-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .atlas-insp-hero .expand-hint { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: rgba(4,18,26,.55); border: 1px solid var(--atlas-line-2); color: var(--atlas-teal); font-size: 13px; opacity: 0; transition: opacity .15s; }
@@ -168,7 +196,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-btn.primary { background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua)); border-color: transparent; color: var(--atlas-ink); box-shadow: 0 6px 22px rgba(0,169,167,.28); }
 
 /* bottom time machine */
-.atlas-timemachine { position: absolute; grid-area: stage; z-index: 25; left: 14px; right: 14px; bottom: 14px; height: 92px; background: linear-gradient(180deg, rgba(8,30,40,.82), rgba(5,22,30,.9)); border: 1px solid var(--atlas-line-2); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding: 0 16px; }
+.atlas-timemachine { position: absolute; grid-area: stage; z-index: var(--z-panel); left: 14px; right: 14px; bottom: 14px; height: 92px; background: linear-gradient(180deg, rgba(8,30,40,.82), rgba(5,22,30,.9)); border: 1px solid var(--atlas-line-2); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding: 0 16px; }
 .tm-controls { display: flex; align-items: center; gap: 6px; }
 .tm-play { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; border: 0; cursor: pointer; color: var(--atlas-ink); background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light)); box-shadow: 0 0 22px rgba(114,221,212,.3); }
 .tm-play svg { width: 20px; height: 20px; }
@@ -196,8 +224,6 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-emptyview { display: grid; place-items: center; color: var(--atlas-fg-dim); font-size: 14px; }
 
 /* ————— alternate views (Gallery / Timeline / Graph) ————— */
-.atlas-altview { position: absolute; inset: 0; z-index: 5; overflow: auto; padding: 22px 26px 130px; background: rgba(4,18,26,.9); backdrop-filter: blur(8px); }
-.atlas-altview::-webkit-scrollbar { width: 10px; } .atlas-altview::-webkit-scrollbar-thumb { background: var(--atlas-line-2); border-radius: 8px; }
 
 .atlas-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; align-content: start; max-width: 1200px; margin: 0 auto; }
 .av-card { display: flex; flex-direction: column; border: 1px solid var(--atlas-line); border-radius: 12px; overflow: hidden; background: var(--atlas-card); cursor: pointer; padding: 0; text-align: left; color: inherit; font: inherit; transition: border-color .15s, transform .15s; }
@@ -238,7 +264,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .graph-node:focus-visible circle { stroke: var(--atlas-aqua-light); stroke-width: 3; }
 
 /* ————— ⌘K command palette ————— */
-.atlas-cmdk-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(2,10,14,.6); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
+.atlas-cmdk-backdrop { position: fixed; inset: 0; z-index: var(--z-modal); background: rgba(2,10,14,.6); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
 .atlas-cmdk { width: min(560px, 92vw); background: var(--atlas-card); border: 1px solid var(--atlas-line-2); border-radius: 14px; box-shadow: var(--atlas-shadow); overflow: hidden; }
 .cmdk-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--atlas-line); }
 .cmdk-input svg { width: 17px; height: 17px; color: var(--atlas-teal); }
@@ -255,7 +281,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .cmdk-sub { margin-left: auto; font: 500 11px/1 var(--atlas-mono); color: var(--atlas-fg-dim); }
 
 /* ————— lightbox ————— */
-.atlas-lightbox { position: fixed; inset: 0; z-index: 70; background: rgba(2,8,12,.92); display: grid; place-items: center; padding: 4vh; backdrop-filter: blur(4px); }
+.atlas-lightbox { position: fixed; inset: 0; z-index: var(--z-lightbox); background: rgba(2,8,12,.92); display: grid; place-items: center; padding: 4vh; backdrop-filter: blur(4px); }
 .lb-close { position: absolute; top: 18px; right: 20px; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--atlas-line-2); background: rgba(9,32,43,.66); color: var(--atlas-fg-hi); font-size: 16px; cursor: pointer; }
 .lb-figure { margin: 0; max-width: min(1100px, 94vw); max-height: 90vh; display: flex; flex-direction: column; gap: 12px; }
 .lb-media { max-width: 100%; max-height: 76vh; object-fit: contain; border-radius: 14px; border: 1px solid var(--atlas-line-2); }
@@ -274,7 +300,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 }
 
 .atlas-sbdrawer {
-  position: absolute; grid-area: stage; z-index: 30; top: 14px; right: 14px; bottom: 118px; width: 336px;
+  position: absolute; grid-area: stage; z-index: var(--z-drawer); top: 14px; right: 14px; bottom: 118px; width: 336px;
   display: flex; flex-direction: column; gap: 11px; padding: 14px;
   background: var(--atlas-glass); border: 1px solid var(--atlas-line-2); border-radius: 16px;
   backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); overflow: auto;
@@ -316,7 +342,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .people-avatar { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--atlas-bg); font-weight: 700; font-size: 13px; background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua)); }
 
 .atlas-journey-chip {
-  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%); bottom: 16px;
+  position: absolute; z-index: var(--z-chip); left: 50%; transform: translateX(-50%); bottom: 16px;
   display: flex; align-items: center; gap: 11px; padding: 8px 8px 8px 14px;
   background: var(--atlas-glass); border: 1px solid var(--atlas-mint); border-radius: 999px;
   backdrop-filter: blur(10px); box-shadow: var(--atlas-shadow); font-size: 12px; color: var(--atlas-fg);
@@ -331,7 +357,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 /* ---- Map layers popover (basemap + sun) ---------------------------------- */
 .atlas-layers { position: relative; display: inline-flex; }
 .atlas-layers-pop {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: var(--z-popover);
   width: 268px; padding: 12px; border-radius: 12px;
   background: var(--atlas-card); border: 1px solid var(--atlas-line);
   box-shadow: var(--atlas-shadow);
