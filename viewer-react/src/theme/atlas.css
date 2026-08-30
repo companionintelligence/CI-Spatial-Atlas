@@ -140,7 +140,6 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-globe .cesium-viewer-bottom { position: absolute; right: 8px; bottom: 114px; z-index: var(--z-credit); }
 .atlas-globe .cesium-widget-credits { font-size: 10px; opacity: .5; color: var(--atlas-fg-dim); }
 .atlas-globe .cesium-credit-logoContainer { filter: grayscale(1) brightness(1.4) opacity(.6); }
-.atlas-grid-horizon { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: var(--z-horizon); pointer-events: none; opacity: .5; -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 92%); mask-image: linear-gradient(to top, #000 0%, transparent 92%); }
 
 .atlas-overlay { position: absolute; inset: 0; z-index: var(--z-overlay); pointer-events: none; }
 /* Only the interactive scrapbook frames take pointer events. The stats ribbon,
@@ -396,6 +395,8 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .lay-terrain { background: linear-gradient(135deg,#cbb894,#8fa07a); }
 .lay-dark    { background: linear-gradient(135deg,#2a2f33,#43494e); }
 .lay-natural { background: linear-gradient(135deg,#3c5a3a,#6b7f4e 50%,#2c4a63); }
+.lay-mapbox-satellite { background: linear-gradient(135deg,#20303f,#4a6b4a 45%,#8a7c5e); }
+.lay-mapbox-outdoors  { background: linear-gradient(135deg,#e6e1d3,#bcd6a8 55%,#8fae86); }
 
 /* ---- Inspector: place identity & visit history --------------------------- */
 /* Header used when a memory has no real media — most of them. Carries the
@@ -526,8 +527,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-rail-btn, .atlas-icon-btn, .tm-btn { min-width: 40px; min-height: 40px; }
   .tm-play { min-width: 44px; min-height: 44px; }
 }
-/* Historical weather, folded into the time-of-day chip. */
-.atlas-insp-plainhead .now .wx {
+/* Historical weather, folded into the time-of-day chip. Scoped to the inspector
+   rather than to each head: the badge is one component now, and per-head copies
+   of this rule are how the photo hero ended up the only head without it. */
+.atlas-inspector .now .wx {
   padding-left: 8px; margin-left: 6px; border-left: 1px solid var(--atlas-line-2);
   color: var(--atlas-fg); font-variant-numeric: tabular-nums;
 }
@@ -538,7 +541,4 @@ body { background: var(--atlas-bg); overflow: hidden; }
   position: absolute; right: 8px; bottom: 8px; padding: 3px 7px; border-radius: 6px;
   background: rgba(2,10,14,.6); border: 1px solid var(--atlas-line);
   font: 500 9px/1 var(--atlas-mono); color: var(--atlas-fg-dim); letter-spacing: .03em;
-}
-.atlas-insp-street .now .wx {
-  padding-left: 8px; margin-left: 6px; border-left: 1px solid var(--atlas-line-2); color: var(--atlas-fg);
 }

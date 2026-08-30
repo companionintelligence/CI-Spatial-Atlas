@@ -12,7 +12,7 @@ import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 const googleMapsAvailable = Boolean(
   (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GOOGLE_MAPS_API_KEY,
 );
-import { Starfield, GridHorizon } from './ui/Backdrop.js';
+import { Starfield } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { placeSummaries } from './model/atlasModel.js';
 import { useWeather } from './story/useWeather.js';
@@ -178,9 +178,13 @@ export function AtlasApp() {
     () => (model ? memoriesAround(model.memories, currentMs, 3) : []),
     [model, currentMs],
   );
+  // The chip names the place the user is actually looking at. It used to track
+  // only the clock playhead, so clicking a pin left it naming a different
+  // memory than the inspector — two competing "current" labels on screen at
+  // once. An explicit selection wins; with none, it follows playback.
   const currentPlace = useMemo(
-    () => (model ? nearestMemory(model.memories, currentMs) : null),
-    [model, currentMs],
+    () => (focusedId && focused ? focused : model ? nearestMemory(model.memories, currentMs) : null),
+    [model, currentMs, focusedId, focused],
   );
 
   // Sync React state from the Cesium clock (throttled) so the Time Machine + the
@@ -539,7 +543,6 @@ export function AtlasApp() {
           onHover={setHoveredId}
           onInteract={pause}
         />
-        <GridHorizon />
         {(
           <div className="atlas-overlay">
             <StatsRibbon stats={model.stats} />

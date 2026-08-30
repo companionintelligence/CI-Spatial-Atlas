@@ -38,26 +38,3 @@ export function Starfield() {
 }
 
 /** Teal synthwave grid horizon at the base of the stage (the "time-machine floor"). */
-export function GridHorizon() {
-  const lines = useMemo(() => {
-    const verticals: string[] = [];
-    for (let i = 0; i <= 20; i++) {
-      const x = (i / 20) * 1000;
-      const persp = 500 + (x - 500) * 2.4;
-      verticals.push(`M${x} 320 L${persp} 0`);
-    }
-    const horizontals: { d: string; o: number }[] = [];
-    for (let j = 0; j <= 8; j++) {
-      const t = j / 8;
-      const y = 320 * (1 - t * t);
-      horizontals.push({ d: `M0 ${y} L1000 ${y}`, o: 0.5 * (1 - t) + 0.08 });
-    }
-    return { verticals, horizontals };
-  }, []);
-  return (
-    <svg className="atlas-grid-horizon" viewBox="0 0 1000 320" preserveAspectRatio="none" aria-hidden="true">
-      {lines.verticals.map((d, i) => <path key={`v${i}`} d={d} stroke="rgba(64,155,155,.5)" strokeWidth="1" fill="none" />)}
-      {lines.horizontals.map((l, i) => <path key={`h${i}`} d={l.d} stroke={`rgba(114,221,212,${l.o})`} strokeWidth="1" fill="none" />)}
-    </svg>
-  );
-}

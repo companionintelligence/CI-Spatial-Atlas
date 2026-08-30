@@ -27,6 +27,24 @@ function formatDuration(mins: number): string {
 
 const TOD_LABEL: Record<AtlasMemory['tod'], string> = { dawn: 'Dawn', day: 'Daylight', dusk: 'Dusk', night: 'Night' };
 
+/**
+ * The moment badge: time of day, wall clock, and what the sky was actually
+ * doing. One component for all three heads — photo hero, Street View hero, and
+ * the plain head a memory with no imagery gets. It was three hand-copied blocks,
+ * and the copy that leads the *photo* hero never got the weather span, so the
+ * chip vanished on exactly the memories that have something to look at.
+ */
+function MomentBadge({ memory, weather }: { memory: AtlasMemory; weather?: MemoryWeather | null }) {
+  return (
+    <div className="now">
+      {memory.tod === 'night' ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · {memory.whenTime}
+      {/* No weather is the common case — the archive has gaps and lags real time
+          by days — so it drops out silently rather than leaving an empty chip. */}
+      {weather && <span className="wx">{Math.round(weather.tempC)}°C · {weather.label}</span>}
+    </div>
+  );
+}
+
 export function MemoryInspector({ memory, related, place, weather, streetView, onFly, onExpand, collected, onCollect }: {
   memory: AtlasMemory | null;
   related: AtlasMemory[];
@@ -46,7 +64,6 @@ export function MemoryInspector({ memory, related, place, weather, streetView, o
   const coord = memory.lat != null && memory.lon != null
     ? `${Math.abs(memory.lat).toFixed(2)}°${memory.lat >= 0 ? 'N' : 'S'} ${Math.abs(memory.lon).toFixed(2)}°${memory.lon >= 0 ? 'E' : 'W'}`
     : '—';
-  const night = memory.tod === 'night';
   const hero = mediaThumb(memory);
   const tags = memory.tags?.length ? memory.tags : ['this journey', memory.tod, 'located'];
   const mediaLabel = memory.media?.kind === 'video' ? 'Video' : memory.media ? 'Photo' : 'Companion Memory';
@@ -62,7 +79,7 @@ export function MemoryInspector({ memory, related, place, weather, streetView, o
         <button className="atlas-insp-hero" onClick={onExpand} aria-label="Open full media">
           <img className="hero-media" src={hero} alt="" />
           <div className="tint" />
-          <div className="now">{night ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · sky set to {memory.whenTime}</div>
+          <MomentBadge memory={memory} weather={weather} />
           <span className="expand-hint">⤢</span>
         </button>
       ) : streetView ? (
@@ -73,17 +90,12 @@ export function MemoryInspector({ memory, related, place, weather, streetView, o
         <div className="atlas-insp-hero atlas-insp-street">
           <img className="hero-media" src={streetView.url} alt="" loading="lazy" />
           <div className="tint" />
-          <div className="now">{night ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · {memory.whenTime}
-            {weather && <span className="wx">{Math.round(weather.tempC)}°C · {weather.label}</span>}
-          </div>
+          <MomentBadge memory={memory} weather={weather} />
           <span className="sv-credit">Street View{streetView.captured ? ` · ${streetView.captured}` : ''}</span>
         </div>
       ) : (
         <div className="atlas-insp-plainhead">
-          <div className="now">
-            {night ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · {memory.whenTime}
-            {weather && <span className="wx">{Math.round(weather.tempC)}°C · {weather.label}</span>}
-          </div>
+          <MomentBadge memory={memory} weather={weather} />
         </div>
       )}
       <div className="atlas-insp-body">

@@ -4,6 +4,7 @@ import { GoogleMaps, Ion } from 'cesium';
 import './theme/theme.css';
 import './theme/atlas.css';
 import { AtlasApp } from './AtlasApp.js';
+import { rendererForDevice } from './renderers/rendererForDevice.js';
 
 // Use the configured Cesium ion token for real World Imagery / World Terrain.
 // Without one, clear Cesium's *bundled* default token (a short-lived shared JWT)
@@ -22,8 +23,18 @@ if (googleKey) GoogleMaps.defaultApiKey = googleKey;
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');
-createRoot(root).render(
-  <StrictMode>
-    <AtlasApp />
-  </StrictMode>,
-);
+const reactRoot = createRoot(root);
+
+// Choose the renderer before mounting. Resium/Cesium and the R3F/WebXR globe
+// are separate app roots (ADR-0001) rather than two views of one shell, because
+// nothing in the desktop chrome — rails, drawers, the scrubber — exists inside
+// an immersive session. Importing the XR root only when it wins keeps 3D Tiles
+// and WebXR out of the bundle every desktop visitor downloads.
+void rendererForDevice().then(async (kind) => {
+  const App = kind === 'xr' ? (await import('./renderers/xr/XRAtlasApp.js')).XRAtlasApp : AtlasApp;
+  reactRoot.render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});

@@ -99,7 +99,15 @@ export function MapLayers({ open, basemap, sunLighting, buildings, buildingsAvai
             <SunIcon />
             <span className="lay-label">Sun &amp; day/night</span>
             <span className="lay-hint">
-              {sunLighting ? 'Real terminator — night side is dark' : 'Evenly lit globe'}
+              {/* Google's tiles carry their own surface and the renderer hides the
+                  globe underneath them, so globe lighting draws nothing at all
+                  while they are on. Say so, rather than leaving a live-looking
+                  toggle that cannot change the picture. */}
+              {buildings
+                ? 'Hidden while 3D buildings are on'
+                : sunLighting
+                  ? 'Real terminator — night side is dark'
+                  : 'Evenly lit globe'}
             </span>
           </button>
         </div>
