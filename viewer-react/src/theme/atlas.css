@@ -169,6 +169,15 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
 /* right inspector */
 .atlas-inspector { position: absolute; grid-area: stage; z-index: var(--z-panel); top: 14px; right: 14px; bottom: 118px; width: 320px; background: var(--atlas-glass); border: 1px solid var(--atlas-line-2); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); display: flex; flex-direction: column; overflow: hidden; }
+/* The panel clips, but its body scrolls. A place with 50 visits produces more
+   content than the panel is tall, and with the body fixed the last visit rows,
+   the "around this time" strip and BOTH action buttons fell outside the box —
+   unreachable, and overlapping the time machine, which wins the z-index tie by
+   coming later in the DOM. Scrolling the body keeps the rounded frame intact
+   and puts every control back in reach. */
+.atlas-inspector .atlas-insp-body { overflow-y: auto; overscroll-behavior: contain; }
+.atlas-inspector .atlas-insp-body::-webkit-scrollbar { width: 8px; }
+.atlas-inspector .atlas-insp-body::-webkit-scrollbar-thumb { background: var(--atlas-line-2); border-radius: 8px; }
 .atlas-insp-hero { height: 168px; position: relative; flex: none; display: block; width: 100%; border: 0; padding: 0; cursor: pointer; overflow: hidden; background: var(--atlas-card); }
 .atlas-insp-hero .hero-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .atlas-insp-hero .expand-hint { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: rgba(4,18,26,.55); border: 1px solid var(--atlas-line-2); color: var(--atlas-teal); font-size: 13px; opacity: 0; transition: opacity .15s; }
@@ -476,7 +485,12 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-mark, .atlas-rail-spacer, .atlas-rail-avatar { display: none; }
 
   /* Top bar: keep identity + connection state, drop the long search label. */
-  .atlas-top { gap: 6px; padding: 0 8px; min-width: 0; overflow: hidden; }
+  /* No `overflow: hidden` here. It was added to stop the header's buttons
+     widening the grid, but it also clips `.atlas-layers-pop`, which hangs below
+     the 52px header by design — the map-layers popover was invisible and
+     unclickable on every phone. The children are constrained individually
+     instead, which solves the width problem without creating a clip. */
+  .atlas-top { gap: 6px; padding: 0 8px; min-width: 0; }
   .atlas-wordmark { min-width: 0; }
   .atlas-wordmark b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .atlas-wordmark span { display: none; }

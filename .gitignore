@@ -30,3 +30,4 @@ capture/
 /deno.lock
 /*/deno.lock
 /*/*/deno.lock
+.claude/

@@ -36,5 +36,3 @@ export function Starfield() {
   }, []);
   return <canvas ref={ref} className="atlas-stars" aria-hidden="true" />;
 }
-
-/** Teal synthwave grid horizon at the base of the stage (the "time-machine floor"). */
