@@ -74,8 +74,12 @@ export function TimeMachine({
     };
 
     draw();
+    // Observe the TRACK, not the canvas. Observing the canvas while this
+    // callback resizes it is a feedback loop, and the canvas grows without
+    // bound (see the note on .tm-histogram in the theme).
+    const parent = c.parentElement;
     const ro = new ResizeObserver(draw);
-    ro.observe(c);
+    if (parent) ro.observe(parent);
     return () => ro.disconnect();
   }, [model, startMs, span]);
 

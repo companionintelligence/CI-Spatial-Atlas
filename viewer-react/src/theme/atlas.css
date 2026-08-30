@@ -196,7 +196,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-btn.primary { background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua)); border-color: transparent; color: var(--atlas-ink); box-shadow: 0 6px 22px rgba(0,169,167,.28); }
 
 /* bottom time machine */
-.atlas-timemachine { position: absolute; grid-area: stage; z-index: var(--z-panel); left: 14px; right: 14px; bottom: 14px; height: 92px; background: linear-gradient(180deg, rgba(8,30,40,.82), rgba(5,22,30,.9)); border: 1px solid var(--atlas-line-2); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding: 0 16px; }
+.atlas-timemachine { position: absolute; grid-area: stage; z-index: var(--z-panel); left: 14px; right: 14px; bottom: 14px; height: 92px; background: linear-gradient(180deg, rgba(8,30,40,.82), rgba(5,22,30,.9)); border: 1px solid var(--atlas-line-2); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 0 14px; }
 .tm-controls { display: flex; align-items: center; gap: 6px; }
 .tm-play { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; border: 0; cursor: pointer; color: var(--atlas-ink); background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light)); box-shadow: 0 0 22px rgba(114,221,212,.3); }
 .tm-play svg { width: 20px; height: 20px; }
@@ -204,12 +204,17 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .tm-btn:hover { color: var(--atlas-teal); background: rgba(64,155,155,.1); }
 .tm-btn svg { width: 17px; height: 17px; }
 .tm-track { position: relative; height: 100%; cursor: pointer; }
-.tm-histogram { position: absolute; left: 0; right: 0; bottom: 26px; top: 14px; width: 100%; }
+/* A canvas is a REPLACED element: with `height` unset its used height comes
+   from the intrinsic ratio of its width/height attributes, not from the
+   top/bottom offsets. Sizing the attributes from the measured box therefore
+   fed back into layout and the canvas grew every frame — 346px tall inside a
+   90px track, spilling over the globe. Both axes are pinned explicitly. */
+.tm-histogram { position: absolute; left: 0; right: 0; top: 14px; height: calc(100% - 40px); width: 100%; display: block; }
 .tm-axis { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: space-between; font: 500 10px/1 var(--atlas-mono); color: var(--atlas-fg-dim); pointer-events: none; }
 .tm-axis span.hot { color: var(--atlas-teal); }
 .tm-playhead { position: absolute; top: 8px; bottom: 22px; width: 2px; background: linear-gradient(180deg, var(--atlas-mint), rgba(88,235,191,.1)); box-shadow: 0 0 14px 2px rgba(88,235,191,.5); }
 .tm-playhead::before { content: ""; position: absolute; top: -5px; left: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--atlas-mint); box-shadow: 0 0 12px 2px rgba(88,235,191,.7); }
-.tm-readout { text-align: right; min-width: 150px; }
+.tm-readout { text-align: right; min-width: 132px; max-width: 260px; }
 .tm-readout .date { font-size: 15px; font-weight: 700; color: var(--atlas-fg-hi); font-variant-numeric: tabular-nums; letter-spacing: -.2px; }
 .tm-readout .sub { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font: 500 11px/1 var(--atlas-mono); color: var(--atlas-dusk); margin-top: 5px; }
 .tm-readout .sub svg { width: 13px; height: 13px; }
@@ -437,4 +442,87 @@ body { background: var(--atlas-bg); overflow: hidden; }
   display: flex; align-items: center; padding: 6px; font-size: 9px; line-height: 1.25;
   color: var(--atlas-fg-dim); background: rgba(4,18,26,.55);
   border: 1px solid var(--atlas-line); overflow: hidden;
+}
+
+/* ---- Mobile / narrow -----------------------------------------------------
+ * The desktop shell is a two-column grid (60px rail + stage) with a 320px
+ * inspector pinned right and a 92px time machine across the bottom. On a phone
+ * that leaves roughly nothing for the globe, and the inspector covers the map
+ * it is describing. Below 760px the shell re-flows: the rail becomes a bottom
+ * tab bar (thumb-reachable), the inspector becomes a bottom sheet over the
+ * globe rather than beside it, and the time machine keeps only its controls
+ * and date — the scrub track stays, since it is the point of the component.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .atlas-app {
+    /* minmax(0, 1fr), not 1fr: a plain `1fr` track refuses to shrink below its
+       content's min-content width, so the header's buttons pushed the whole
+       grid 56px wider than the phone and the stage overflowed with it. */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 52px 1fr;
+    grid-template-areas: "top" "stage";
+  }
+
+  /* Rail → bottom tab bar. */
+  .atlas-rail {
+    grid-area: auto;
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    flex-direction: row; justify-content: space-around; align-items: center;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding: 0 8px env(safe-area-inset-bottom, 0px);
+    border-right: 0; border-top: 1px solid var(--atlas-line);
+  }
+  .atlas-mark, .atlas-rail-spacer, .atlas-rail-avatar { display: none; }
+
+  /* Top bar: keep identity + connection state, drop the long search label. */
+  .atlas-top { gap: 6px; padding: 0 8px; min-width: 0; overflow: hidden; }
+  .atlas-wordmark { min-width: 0; }
+  .atlas-wordmark b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .atlas-wordmark span { display: none; }
+  .atlas-live, .atlas-sample { flex: 0 0 auto; font-size: 9.5px; padding: 3px 7px; }
+  .atlas-top .atlas-icon-btn { flex: 0 0 auto; }
+  /* Icon-only search. Left as a flex:1 box with its label hidden it rendered
+     as a wide empty pill that looked like a broken input. */
+  .atlas-search { width: 38px; flex: 0 0 38px; justify-content: center; padding: 8px 0; }
+  .atlas-search span:first-of-type, .atlas-search .kbd { display: none; }
+
+  /* Inspector → bottom sheet, above the time machine and tab bar. */
+  .atlas-inspector {
+    left: 8px; right: 8px; width: auto;
+    top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+    max-height: 42vh;
+  }
+  .atlas-insp-hero { max-height: 120px; }
+
+  /* Time machine: sits above the tab bar; readout compresses to the date. */
+  .atlas-timemachine {
+    left: 8px; right: 8px;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    height: 78px; gap: 10px; padding: 0 10px;
+  }
+  /* The date was overflowing the bar and clipping mid-word ("Sep 24,"). */
+  .tm-readout { min-width: 0; max-width: 92px; overflow: hidden; }
+  .tm-readout .date { font-size: 11.5px; line-height: 1.25; white-space: normal; }
+  .tm-readout .sub { display: none; }
+  .tm-axis { font-size: 9px; }
+  /* Half the ticks would collide at this width. */
+  .tm-axis span:nth-child(even) { display: none; }
+
+  /* Overlays: keep the globe legible. */
+  .atlas-legend { display: none; }
+  .atlas-stats { left: 10px; top: 10px; gap: 6px; }
+  .atlas-stat { padding: 7px 10px; }
+  .atlas-stat b { font-size: 17px; }
+  .atlas-place-chip { max-width: calc(100vw - 32px); font-size: 11.5px; }
+  .atlas-place-chip .coord { display: none; }
+
+  /* Panels that assume a desktop gutter. */
+  .atlas-drawer { left: 8px; right: 8px; width: auto; }
+  .atlas-layers-pop { width: min(268px, calc(100vw - 24px)); }
+}
+
+/* Coarse pointers need real tap targets regardless of width. */
+@media (pointer: coarse) {
+  .atlas-rail-btn, .atlas-icon-btn, .tm-btn { min-width: 40px; min-height: 40px; }
+  .tm-play { min-width: 44px; min-height: 44px; }
 }
