@@ -1,6 +1,7 @@
 import { PinIcon, ClockIcon, CameraIcon, SunIcon, MoonIcon, PlaneIcon, PlusIcon } from './icons.js';
 import { mediaThumb, type AtlasMemory, type AtlasPlaceSummary } from '../model/atlasModel.js';
 import type { MemoryWeather } from '../memory/weather.js';
+import type { StreetViewShot } from '../memory/streetview.js';
 
 const fmtDate = (ms: number) =>
   new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -26,13 +27,15 @@ function formatDuration(mins: number): string {
 
 const TOD_LABEL: Record<AtlasMemory['tod'], string> = { dawn: 'Dawn', day: 'Daylight', dusk: 'Dusk', night: 'Night' };
 
-export function MemoryInspector({ memory, related, place, weather, onFly, onExpand, collected, onCollect }: {
+export function MemoryInspector({ memory, related, place, weather, streetView, onFly, onExpand, collected, onCollect }: {
   memory: AtlasMemory | null;
   related: AtlasMemory[];
   /** Everything else that happened at this memory's place, for the visit history. */
   place?: AtlasPlaceSummary | null;
   /** Actual weather at this memory's place and hour, when the archive has it. */
   weather?: MemoryWeather | null;
+  /** Street View of the venue — the real preview when the memory has no photo. */
+  streetView?: StreetViewShot | null;
   onFly: (m: AtlasMemory) => void;
   onExpand: () => void;
   /** Whether this memory is already in the scrapbook draft. */
@@ -62,6 +65,19 @@ export function MemoryInspector({ memory, related, place, weather, onFly, onExpa
           <div className="now">{night ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · sky set to {memory.whenTime}</div>
           <span className="expand-hint">⤢</span>
         </button>
+      ) : streetView ? (
+        /* No photo of the moment, but we can still show the place itself. This
+           is the "real preview" a located memory was missing; it is Google's
+           imagery of the venue, not the user's, so it is labelled as such
+           rather than passed off as their own picture. */
+        <div className="atlas-insp-hero atlas-insp-street">
+          <img className="hero-media" src={streetView.url} alt="" loading="lazy" />
+          <div className="tint" />
+          <div className="now">{night ? <MoonIcon /> : <SunIcon />}{TOD_LABEL[memory.tod]} · {memory.whenTime}
+            {weather && <span className="wx">{Math.round(weather.tempC)}°C · {weather.label}</span>}
+          </div>
+          <span className="sv-credit">Street View{streetView.captured ? ` · ${streetView.captured}` : ''}</span>
+        </div>
       ) : (
         <div className="atlas-insp-plainhead">
           <div className="now">

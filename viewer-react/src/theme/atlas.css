@@ -531,3 +531,14 @@ body { background: var(--atlas-bg); overflow: hidden; }
   padding-left: 8px; margin-left: 6px; border-left: 1px solid var(--atlas-line-2);
   color: var(--atlas-fg); font-variant-numeric: tabular-nums;
 }
+/* Street View hero — credited, because it is Google's imagery of the place,
+   not the user's photo of the moment. */
+.atlas-insp-street { position: relative; display: block; }
+.atlas-insp-street .sv-credit {
+  position: absolute; right: 8px; bottom: 8px; padding: 3px 7px; border-radius: 6px;
+  background: rgba(2,10,14,.6); border: 1px solid var(--atlas-line);
+  font: 500 9px/1 var(--atlas-mono); color: var(--atlas-fg-dim); letter-spacing: .03em;
+}
+.atlas-insp-street .now .wx {
+  padding-left: 8px; margin-left: 6px; border-left: 1px solid var(--atlas-line-2); color: var(--atlas-fg);
+}

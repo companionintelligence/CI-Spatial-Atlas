@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Ion } from 'cesium';
+import { GoogleMaps, Ion } from 'cesium';
 import './theme/theme.css';
 import './theme/atlas.css';
 import { AtlasApp } from './AtlasApp.js';
@@ -12,6 +12,13 @@ import { AtlasApp } from './AtlasApp.js';
 const ionToken = (import.meta as unknown as { env: Record<string, string | undefined> }).env
   .VITE_CESIUM_ION_TOKEN;
 Ion.defaultAccessToken = ionToken ?? '';
+
+// Google Maps Platform key, used for Photorealistic 3D Tiles (the buildings
+// layer) and Street View. Cesium reads it off this global rather than taking it
+// per-call, so it has to be set before any viewer mounts.
+const googleKey = (import.meta as unknown as { env: Record<string, string | undefined> }).env
+  .VITE_GOOGLE_MAPS_API_KEY;
+if (googleKey) GoogleMaps.defaultApiKey = googleKey;
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

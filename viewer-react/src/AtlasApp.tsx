@@ -8,10 +8,15 @@ import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './
 import { Rail, TopBar } from './ui/Shell.js';
 import { MapLayers } from './ui/MapLayers.js';
 import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
+
+const googleMapsAvailable = Boolean(
+  (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GOOGLE_MAPS_API_KEY,
+);
 import { Starfield, GridHorizon } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { placeSummaries } from './model/atlasModel.js';
 import { useWeather } from './story/useWeather.js';
+import { useStreetView } from './story/useStreetView.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
 import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
@@ -90,6 +95,7 @@ export function AtlasApp() {
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
   const [sunLighting, setSunLighting] = useState(false);
+  const [buildings, setBuildings] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
 
   // "What was this place to me": the other memories sharing the focused
@@ -152,6 +158,7 @@ export function AtlasApp() {
 
   // What the weather actually was, at this place, that hour.
   const weather = useWeather(focused);
+  const streetView = useStreetView(focused);
 
   // The scrapbook always collects against the *base* story, so a draft survives
   // playing a journey built from it.
@@ -507,8 +514,11 @@ export function AtlasApp() {
             open={layersOpen}
             basemap={basemap}
             sunLighting={sunLighting}
+            buildings={buildings}
+            buildingsAvailable={Boolean(googleMapsAvailable)}
             onBasemap={setBasemap}
             onToggleSun={() => setSunLighting((v) => !v)}
+            onToggleBuildings={() => setBuildings((v) => !v)}
             onToggle={() => setLayersOpen((o) => !o)}
             onClose={() => setLayersOpen(false)}
           />
@@ -522,6 +532,7 @@ export function AtlasApp() {
           focusedId={focused?.id ?? null}
           basemap={basemap}
           sunLighting={sunLighting}
+          buildings={buildings}
           onViewer={setViewer}
           onPick={inspect}
           onPickPlace={setFocusedPlace}
@@ -553,6 +564,7 @@ export function AtlasApp() {
             related={related}
             place={focused ? placeIndex.get(focused.placeId ?? `name:${focused.place ?? ''}`) ?? null : null}
             weather={weather}
+            streetView={streetView}
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}

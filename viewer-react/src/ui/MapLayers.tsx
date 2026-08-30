@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { BASEMAPS } from '../renderers/basemaps.js';
-import { LayersIcon, SunIcon } from './icons.js';
+import { BuildingIcon, LayersIcon, SunIcon } from './icons.js';
 
 /**
  * Basemap picker + sun toggle.
@@ -10,12 +10,16 @@ import { LayersIcon, SunIcon } from './icons.js';
  * basemaps and a day/night switch needs somewhere to put them that is not more
  * permanent chrome over the map.
  */
-export function MapLayers({ open, basemap, sunLighting, onBasemap, onToggleSun, onToggle, onClose }: {
+export function MapLayers({ open, basemap, sunLighting, buildings, buildingsAvailable, onBasemap, onToggleSun, onToggleBuildings, onToggle, onClose }: {
   open: boolean;
   basemap: string;
   sunLighting: boolean;
+  buildings: boolean;
+  /** False when no Google key is configured — the control explains itself. */
+  buildingsAvailable: boolean;
   onBasemap: (id: string) => void;
   onToggleSun: () => void;
+  onToggleBuildings: () => void;
   onToggle: () => void;
   onClose: () => void;
 }) {
@@ -67,6 +71,24 @@ export function MapLayers({ open, basemap, sunLighting, onBasemap, onToggleSun, 
               </button>
             ))}
           </div>
+
+          <div className="lay-head">Terrain</div>
+          <button
+            className={`lay-row${buildings ? ' active' : ''}`}
+            aria-pressed={buildings}
+            disabled={!buildingsAvailable}
+            onClick={onToggleBuildings}
+          >
+            <BuildingIcon />
+            <span className="lay-label">3D buildings</span>
+            <span className="lay-hint">
+              {!buildingsAvailable
+                ? 'Needs a Google Maps key'
+                : buildings
+                  ? 'Google Photorealistic 3D Tiles'
+                  : 'Real building geometry'}
+            </span>
+          </button>
 
           <div className="lay-head">Lighting</div>
           <button

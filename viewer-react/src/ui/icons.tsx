@@ -80,3 +80,10 @@ export function BrandMark(props: P) {
     </svg>
   );
 }
+
+export const BuildingIcon = (p: P) => (
+  <svg {...S(p)}>
+    <path d="M3 21h18M5 21V6l7-3v18M19 21V11l-7-3" />
+    <path d="M8.5 8.5v.01M8.5 12v.01M8.5 15.5v.01M15.5 13v.01M15.5 16.5v.01" />
+  </svg>
+);

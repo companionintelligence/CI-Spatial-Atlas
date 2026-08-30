@@ -28,6 +28,7 @@ type Located = AtlasMemory & { lat: number; lon: number };
  */
 export function CesiumStoryViewer({
   story, memories, places = [], focusedId, basemap = DEFAULT_BASEMAP, sunLighting = false,
+  buildings = false,
   onViewer, onPick, onPickPlace, onHover, onInteract,
 }: {
   story: Story;
@@ -38,6 +39,8 @@ export function CesiumStoryViewer({
   basemap?: string;
   /** Cast the real sun terminator across the globe. */
   sunLighting?: boolean;
+  /** Google Photorealistic 3D Tiles — real buildings and terrain geometry. */
+  buildings?: boolean;
   onViewer?: (v: Cesium.Viewer | null) => void;
   onPick?: (m: AtlasMemory) => void;
   onPickPlace?: (p: Place) => void;
@@ -310,6 +313,36 @@ export function CesiumStoryViewer({
     viewer.scene.globe.dynamicAtmosphereLighting = sunLighting;
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
   }, [viewer, sunLighting]);
+
+  // ---- Google Photorealistic 3D Tiles (buildings) ----
+  // Loaded on demand, not at mount: it is a metered Google service and a heavy
+  // stream, so it should only bill and download when the user asks for it.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed() || !buildings) return;
+    if (!Cesium.GoogleMaps.defaultApiKey) {
+      console.warn('[atlas] buildings need VITE_GOOGLE_MAPS_API_KEY');
+      return;
+    }
+    let cancelled = false;
+    let tileset: Cesium.Cesium3DTileset | undefined;
+    void Cesium.createGooglePhotorealistic3DTileset()
+      .then((ts) => {
+        if (cancelled || viewer.isDestroyed()) { ts.destroy?.(); return; }
+        tileset = ts;
+        viewer.scene.primitives.add(ts);
+        // Google's tiles carry their own surface; the ellipsoid globe underneath
+        // would z-fight through the streets.
+        viewer.scene.globe.show = false;
+      })
+      .catch((e) => console.error('[atlas] photorealistic tiles failed', e));
+    return () => {
+      cancelled = true;
+      if (!viewer.isDestroyed()) {
+        if (tileset) viewer.scene.primitives.remove(tileset);
+        viewer.scene.globe.show = true;
+      }
+    };
+  }, [viewer, buildings]);
 
   return (
     <div className="atlas-globe" ref={hostRef}>
