@@ -44,8 +44,8 @@ import {
 const _head = new Vector3();
 const _hand = new Vector3();
 const _dir = new Vector3();
-const _u = new Vector3();
-const _v = new Vector3();
+/** Direction to the measuring hand, held while the rest of the loop runs. */
+const _first = new Vector3();
 const _pole = new Vector3();
 const _sun = new Vector3();
 const _sunLocal = new Vector3();
@@ -94,6 +94,18 @@ export interface SkyGrabOptions {
 export function useSkyGrab(world: WorldHandle, opts: SkyGrabOptions): void {
   const drag = useRef<SkyDrag | null>(null);
   const hands = useRef(0);
+  /**
+   * The measuring frame, fixed at the moment the sky is taken hold of.
+   *
+   * Rebuilding it from the live world rotation each frame looks equivalent and
+   * is not: the basis is derived from the Earth's pole, so anything that turns
+   * the planet mid-drag — an easing fly-to, a snap turn, the *other* hand on
+   * the grip — turns the frame too, and the measured angle changes with a hand
+   * that never moved. Time then drifts on its own while the viewer stands
+   * still, which is the worst possible failure for a control whose whole claim
+   * is that you are holding the thing you are moving.
+   */
+  const basis = useRef({ u: new Vector3(1, 0, 0), v: new Vector3(0, 1, 0) });
   const { onTime, onHands, currentMs, startMs, stopMs } = opts;
 
   useFrame((state, _delta, frame) => {
@@ -121,7 +133,14 @@ export function useSkyGrab(world: WorldHandle, opts: SkyGrabOptions): void {
     // first, for the same reason the grab path takes them in a fixed order: a
     // set that reorders between frames makes the anchor jump.
     let held = 0;
-    let angle = 0;
+    let first = false;
+    // "Against the sky" is how a drag *starts*, not a condition it has to keep
+    // satisfying. A full revolution sweeps the hand right across the planet's
+    // silhouette, and re-testing every frame dropped the grab there and
+    // silently re-anchored on the far side: a whole turn came out as a few
+    // hours in the wrong direction. Once you have hold of the sky you keep it
+    // until you let go — the same contract the grip grab makes with the globe.
+    const engaged = hands.current > 0 && drag.current !== null;
     for (const wanted of ['left', 'right', 'none'] as const) {
       for (const source of session.inputSources) {
         if (source.handedness !== wanted || held === 2) continue;
@@ -137,36 +156,46 @@ export function useSkyGrab(world: WorldHandle, opts: SkyGrabOptions): void {
         // which is why it needs no controller orientation — it works with a
         // tracked hand, a controller held any which way, and an emulator that
         // can only move a position.
-        _ray.origin.copy(_head);
-        _ray.direction.copy(_dir);
-        if (_ray.intersectsSphere(_sphere)) continue;
+        if (!engaged) {
+          _ray.origin.copy(_head);
+          _ray.direction.copy(_dir);
+          if (_ray.intersectsSphere(_sphere)) continue;
+        }
 
+        // The first hand found is the one that measures; a second only changes
+        // the gear, so a two-handed drag reads one angle rather than averaging
+        // two that disagree.
         if (held === 0) {
-          // Basis from the *first* hand, reused by the second, so a two-handed
-          // drag measures one angle rather than averaging two.
-          _pole.copy(EARTH_NORTH).applyQuaternion(world.transform.quaternion);
-          orthonormalBasis(_pole, _u, _v);
-          angle = angleAround(_dir, _u, _v);
+          first = true;
+          _first.copy(_dir);
         }
         held++;
       }
     }
 
-    if (held === 0) {
+    if (held === 0 || !first) {
       release();
       return;
     }
 
     // Re-anchor whenever the hand count changes: the gear changes with it, and
-    // carrying the old anchor across would jump the date by a year.
+    // carrying the old anchor across would jump the date by a year. This is
+    // also where the measuring frame is fixed, from the Earth's pole as it
+    // stands at the instant of the grab.
     if (hands.current !== held || !drag.current) {
       hands.current = held;
-      drag.current = beginSkyDrag(currentMs(), angle, held >= 2 ? TURN_YEAR_MS : TURN_DAY_MS);
+      _pole.copy(EARTH_NORTH).applyQuaternion(world.transform.quaternion);
+      orthonormalBasis(_pole, basis.current.u, basis.current.v);
+      drag.current = beginSkyDrag(
+        currentMs(),
+        angleAround(_first, basis.current.u, basis.current.v),
+        held >= 2 ? TURN_YEAR_MS : TURN_DAY_MS,
+      );
       onHands?.(held);
       return;
     }
 
-    advanceSkyDrag(drag.current, angle);
+    advanceSkyDrag(drag.current, angleAround(_first, basis.current.u, basis.current.v));
     onTime(clampToSpan(skyDragTime(drag.current), startMs, stopMs));
   }, -90);
 }

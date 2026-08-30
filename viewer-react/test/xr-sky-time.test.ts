@@ -278,4 +278,41 @@ describe('measuring the drag about the earth s axis', () => {
     }
     expect(skyDragTime(drag) - ANCHOR).toBeCloseTo(12 * HOUR, 0);
   });
+
+  /**
+   * The frame is fixed when the sky is taken hold of, and this is why.
+   *
+   * `SkyGrab` used to rebuild the basis from the live world rotation on every
+   * frame. It looks equivalent — same pole, same maths — and it is not: the
+   * pole moves whenever the planet does, and an easing fly-to, a snap turn or
+   * the other hand on the grip all turn the planet mid-drag. The two cases
+   * below are the same still hand and the same rotation; only the basis
+   * differs.
+   */
+  it('holds the clock still when the world turns under a motionless hand', () => {
+    const pole = new Vector3(0, 0, 1);
+    const u = new Vector3();
+    const v = new Vector3();
+    orthonormalBasis(pole, u, v);
+
+    const hand = new Vector3(0.8, 0.2, 0.55).normalize();
+    const drag = beginSkyDrag(ANCHOR, angleAround(hand, u, v));
+
+    // The globe is spun a third of a turn while the hand does not move at all.
+    const spin = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), TAU / 3);
+    const movedPole = pole.clone().applyQuaternion(spin);
+
+    // Frozen basis (what ships): the hand has not moved, so neither does time.
+    for (let i = 0; i < 12; i++) advanceSkyDrag(drag, angleAround(hand, u, v));
+    expect(skyDragTime(drag)).toBe(ANCHOR);
+
+    // Live basis (the bug): the same still hand reads a different angle the
+    // moment the pole moves, and the clock walks off on its own.
+    const liveU = new Vector3();
+    const liveV = new Vector3();
+    orthonormalBasis(movedPole, liveU, liveV);
+    const drifting = beginSkyDrag(ANCHOR, angleAround(hand, u, v));
+    advanceSkyDrag(drifting, angleAround(hand, liveU, liveV));
+    expect(Math.abs(skyDragTime(drifting) - ANCHOR)).toBeGreaterThan(HOUR);
+  });
 });

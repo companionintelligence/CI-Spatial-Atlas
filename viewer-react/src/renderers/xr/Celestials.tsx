@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { AdditiveBlending, CanvasTexture, Group, Vector3 } from 'three';
 import { moonDirectionEarth, moonIllumination, sunDirectionEarth } from './skyTime.js';
+import { skyRadius } from './skyShell.js';
 import type { WorldHandle } from './useGlobeLocomotion.js';
 
 /**
@@ -19,22 +20,6 @@ import type { WorldHandle } from './useGlobeLocomotion.js';
  */
 
 /**
- * Where on the view frustum to hang the sky, as a fraction of the live far
- * plane rather than a fixed distance.
- *
- * A constant radius does not work here: `depthRange` re-derives near/far every
- * frame from the world's scale, and at globe scale far is only about 13 m, so
- * bodies parked at a "safely distant" 260 m sat exactly on the far plane and
- * were clipped away — the sky rendered black with the sun and moon present,
- * visible and correctly positioned, which is a maddening thing to debug from a
- * screenshot. Measured NDC z of 1.0 is what gave it away.
- *
- * Depth testing is off and these draw first, so they read as behind everything
- * regardless of their actual distance; only staying inside the frustum matters.
- */
-const SKY_FRACTION_OF_FAR = 0.45;
-
-/**
  * Apparent size, as a multiple of the sky radius — so roughly the angle each
  * body subtends. Both are deliberately far larger than life: the real sun and
  * moon are about half a degree across, which at headset resolution is a couple
@@ -42,17 +27,6 @@ const SKY_FRACTION_OF_FAR = 0.45;
  */
 const SUN_ANGULAR_SIZE = 0.075;
 const MOON_ANGULAR_SIZE = 0.05;
-
-/**
- * The far plane a perspective projection matrix is really enforcing.
- *
- * With m10 = (f+n)/(n-f) and m14 = 2fn/(n-f), f falls out as m14 / (m10 + 1).
- */
-function projectionFar(e: ArrayLike<number>): number {
-  const denom = e[10]! + 1;
-  const far = Math.abs(denom) < 1e-9 ? Infinity : e[14]! / denom;
-  return Number.isFinite(far) && far > 0 ? far : 1000;
-}
 
 const _sun = new Vector3();
 const _moon = new Vector3();
@@ -84,8 +58,13 @@ export function Celestials({ world, timeMs, visible = true }: {
   const sunSprite = useRef<Group>(null);
   const moonSprite = useRef<Group>(null);
 
+  // The stops are where the sun stops looking like a bright star. At 0.16 the
+  // solid core was about 0.7 degrees inside a 4.3 degree quad — almost all of
+  // the sprite was corona, so among 1400 stars the sun read as one of them that
+  // happened to be yellow. A disc out to 0.36 gives a photosphere of roughly
+  // 1.5 degrees with the corona still falling away around it.
   const sunMap = useMemo(
-    () => discTexture('rgba(255,246,214,1)', 'rgba(255,196,92,0.55)', [0.16, 0.34, 1]),
+    () => discTexture('rgba(255,246,214,1)', 'rgba(255,196,92,0.55)', [0.36, 0.56, 1]),
     [],
   );
   // The moon's own disc is dimmer and tighter — no corona.
@@ -102,14 +81,9 @@ export function Celestials({ world, timeMs, visible = true }: {
     // world is scaled and the depth range moves under it.
     state.camera.getWorldPosition(g.position);
 
-    // The far plane must come from the projection matrix, not from
-    // `camera.far`. The depth range is only pushed into the matrix when it has
-    // moved materially (an `updateProjectionMatrix` per frame is not free, and
-    // in XR every change costs a `session.updateRenderState`), so the property
-    // routinely runs ahead of the matrix that actually does the clipping.
-    // Trusting the property put the bodies at 6.2 m inside a nominal 13.7 m
-    // far plane and still clipped them, at an NDC z of 1.018.
-    const radius = Math.max(1, projectionFar(state.camera.projectionMatrix.elements) * SKY_FRACTION_OF_FAR);
+    // Shared with the starfield: both were separately clipped away by hanging
+    // the sky at a distance the live far plane does not reach. See skyShell.ts.
+    const radius = skyRadius(state.camera);
 
     // Same treatment as the starfield: rotation only. Position and scale would
     // drag the sky along with the planet.
