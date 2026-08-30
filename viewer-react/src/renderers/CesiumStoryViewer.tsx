@@ -46,6 +46,20 @@ type Located = AtlasMemory & { lat: number; lon: number };
 const LIT_FADE_OUT = 1.0e4;
 const LIT_FADE_IN = 1.0e5;
 
+/**
+ * Ask for one frame.
+ *
+ * Under `requestRenderMode` Cesium only draws when something tells it to. It
+ * works that out for itself for the things it owns — camera moves, entity and
+ * imagery-collection changes, tiles finishing, the clock moving — but a plain
+ * property set on `globe` or `scene` is invisible to it. Every such mutation in
+ * this file is followed by one of these; without it the change is real in the
+ * scene graph and simply never appears, which looks exactly like a frozen app.
+ */
+function nudge(v: Cesium.Viewer | null | undefined): void {
+  if (v && !v.isDestroyed()) v.scene.requestRender();
+}
+
 function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number; in: number }): void {
   globe.enableLighting = on;
   globe.dynamicAtmosphereLighting = on;
@@ -123,6 +137,10 @@ export function CesiumStoryViewer({
   const stockFadeRef = useRef<{ out: number; in: number } | null>(null);
   const memMapRef = useRef(new Map<string, AtlasMemory>());
   memMapRef.current = useMemo(() => new Map(memories.map((m) => [m.id, m])), [memories]);
+  // The live memory layer, so a focus change can repaint its two affected
+  // pins instead of every pin re-evaluating a closure every frame.
+  const memLayerRef = useRef<Cesium.CustomDataSource | null>(null);
+  const highlightedRef = useRef<string | null>(focusedId);
   const placeMapRef = useRef(new Map<string, Place>());
   placeMapRef.current = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
 
@@ -218,9 +236,40 @@ export function CesiumStoryViewer({
       applySunLighting(v.scene.globe, sunLightingRef.current, stockFadeRef.current);
       v.scene.fog.enabled = true;
       if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
+      nudge(v);
       // Render the globe at device resolution (crisp on HiDPI), capped for perf.
+      //
+      // `resolutionScale` is a MULTIPLIER on the device pixel ratio, not a
+      // replacement for it: with `useBrowserRecommendedResolution` false Cesium
+      // already renders at `devicePixelRatio`, and then multiplies by this. So
+      // assigning `min(2, dpr)` asked for dpr * min(2, dpr) — on an ordinary 2x
+      // display that is a pixel ratio of 4, i.e. sixteen times the CSS pixel
+      // count. Measured on this machine: a 1380x846 canvas backed by a
+      // 5520x3384 buffer, 18.7 megapixels, and with 4x MSAA on top of it about
+      // 75 megapixels of samples every frame. The globe ran at 1.6 fps with the
+      // camera sitting still.
+      //
+      // Dividing by the ratio Cesium is already applying leaves exactly the
+      // cap the comment always claimed: pixelRatio = min(2, dpr).
+      const dpr = window.devicePixelRatio || 1;
       v.useBrowserRecommendedResolution = false;
-      v.resolutionScale = Math.min(2, window.devicePixelRatio || 1);
+      v.resolutionScale = Math.min(2, dpr) / dpr;
+
+      // NOT enabled here, deliberately: `v.scene.requestRenderMode = true`.
+      //
+      // Removing the pins' per-frame closures made it *possible* — 580
+      // non-constant properties used to mark the scene dirty on every frame,
+      // which defeats the mode outright — and an idle globe still costs a full
+      // 24.6 ms frame forever, so the win is real and worth taking. What is
+      // missing is proof. Its failure mode is that some mutation nobody thought
+      // to follow with a `requestRender` stops appearing at all, which presents
+      // as a frozen app, and that has to be verified against a *running* render
+      // loop: the mode's gate is in the loop, not in `scene.render()`, so
+      // driving `render()` by hand cannot tell you whether it works.
+      //
+      // The `nudge()` calls below are the groundwork and are already in place;
+      // `requestRender` is a no-op while this stays off. Turning it on is one
+      // line plus a pass over every mutation site.
 
       // Picking: click/hover a pin → map its id back to the AtlasMemory or Place
       // it came from, by the `mem:`/`place:` prefix each layer's entities carry.
@@ -305,15 +354,31 @@ export function CesiumStoryViewer({
   // ---- memory layer: pins + journey arc + traveler (rebuilt on memory change) ----
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    const ds = buildMemoryLayer(memories, () => focusedIdRef.current);
+    const ds = buildMemoryLayer(memories, focusedIdRef.current);
+    memLayerRef.current = ds;
+    // The layer is rebuilt from scratch, so the pin the highlight was last
+    // applied to no longer exists. Forget it, or the next focus change would
+    // try to un-highlight an entity from the previous layer.
+    highlightedRef.current = focusedIdRef.current;
     // dataSources.add resolves on a microtask; remove() is synchronous. Remove
     // in the add promise's resolution so a fast rebuild/unmount can't leave an
     // orphaned layer that was pushed after cleanup ran.
     const added = viewer.dataSources.add(ds);
     return () => {
+      if (memLayerRef.current === ds) memLayerRef.current = null;
       void added.then((d) => { if (!viewer.isDestroyed()) viewer.dataSources.remove(d ?? ds, true); });
     };
   }, [viewer, memories]);
+
+  // ---- focus highlight: repaint two pins, rather than all of them every frame ----
+  useEffect(() => {
+    applyFocusHighlight(memLayerRef.current, highlightedRef.current, focusedId);
+    highlightedRef.current = focusedId;
+    // A constant property does not mark the scene dirty by itself, so ask for
+    // the one frame that shows the change. Harmless while requestRenderMode is
+    // off, and required the moment it is turned on.
+    if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender();
+  }, [viewer, focusedId, memories]);
 
   // ---- places layer: named CI-Server Places (opt-in, empty by default) ----
   useEffect(() => {
@@ -375,6 +440,7 @@ export function CesiumStoryViewer({
     };
     applySunLighting(viewer.scene.globe, sunLighting, stockFadeRef.current);
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
+    nudge(viewer); // plain property sets on `globe`; Cesium cannot see them
   }, [viewer, sunLighting]);
 
   // ---- Google Photorealistic 3D Tiles (buildings) ----
@@ -396,6 +462,7 @@ export function CesiumStoryViewer({
         // Google's tiles carry their own surface; the ellipsoid globe underneath
         // would z-fight through the streets.
         viewer.scene.globe.show = false;
+        nudge(viewer);
       })
       .catch((e) => console.error('[atlas] photorealistic tiles failed', e));
     return () => {
@@ -403,6 +470,7 @@ export function CesiumStoryViewer({
       if (!viewer.isDestroyed()) {
         if (tileset) viewer.scene.primitives.remove(tileset);
         viewer.scene.globe.show = true;
+        nudge(viewer);
       }
     };
   }, [viewer, buildings]);
@@ -439,11 +507,40 @@ export function CesiumStoryViewer({
   );
 }
 
+/** Pin radius in pixels: ordinary, and the one the app is focused on. */
+const PIN_PIXEL_SIZE = 11;
+const FOCUSED_PIXEL_SIZE = 16;
+
+const PIN_TEAL = Cesium.Color.fromCssColorString('#72ddd4');
+const PIN_MINT = Cesium.Color.fromCssColorString('#58ebbf');
+
+/**
+ * Repaint only the pins whose focus state actually changed.
+ *
+ * This is the half of the job a `CallbackProperty` used to do every frame for
+ * every pin. Touching two entities on a discrete focus change costs nothing and
+ * leaves every property constant, which is what lets the scene go quiet.
+ */
+function applyFocusHighlight(
+  ds: Cesium.CustomDataSource | null,
+  previousId: string | null,
+  nextId: string | null,
+): void {
+  if (!ds || previousId === nextId) return;
+  for (const [id, focused] of [[previousId, false], [nextId, true]] as const) {
+    if (!id) continue;
+    const point = ds.entities.getById(`mem:${id}`)?.point;
+    if (!point) continue; // filtered out, or the layer was rebuilt under us
+    point.pixelSize = new Cesium.ConstantProperty(focused ? FOCUSED_PIXEL_SIZE : PIN_PIXEL_SIZE);
+    point.color = new Cesium.ConstantProperty(focused ? PIN_MINT : PIN_TEAL);
+  }
+}
+
 /** Build the interactive memory layer as a CustomDataSource. */
-function buildMemoryLayer(memories: AtlasMemory[], getFocusedId: () => string | null): Cesium.CustomDataSource {
+function buildMemoryLayer(memories: AtlasMemory[], focusedId: string | null): Cesium.CustomDataSource {
   const ds = new Cesium.CustomDataSource('atlas-memories');
-  const teal = Cesium.Color.fromCssColorString('#72ddd4');
-  const mint = Cesium.Color.fromCssColorString('#58ebbf');
+  const teal = PIN_TEAL;
+  const mint = PIN_MINT;
   const dark = Cesium.Color.fromCssColorString('#041620');
   const fg = Cesium.Color.fromCssColorString('#d7e6e6');
   const onTop = Number.POSITIVE_INFINITY;
@@ -459,8 +556,17 @@ function buildMemoryLayer(memories: AtlasMemory[], getFocusedId: () => string | 
       id: `mem:${m.id}`,
       position: Cesium.Cartesian3.fromDegrees(m.lon, m.lat),
       point: {
-        pixelSize: new Cesium.CallbackProperty(() => (getFocusedId() === m.id ? 16 : 11), false),
-        color: new Cesium.CallbackProperty(() => (getFocusedId() === m.id ? mint : teal), false),
+        // Plain values, not `CallbackProperty`. Focus is a discrete user action
+        // — a click, a scrub — but a CallbackProperty constructed with
+        // `isConstant = false` tells Cesium the value changes *every frame*, so
+        // it re-evaluated two closures per pin, 580 of them here, on every
+        // render and held the scene permanently dirty. That is also what made
+        // `requestRenderMode` unusable: a scene that is always dirty never
+        // stops rendering, so an idle globe cost a full frame forever.
+        //
+        // `applyFocusHighlight` repaints the two pins that actually changed.
+        pixelSize: m.id === focusedId ? FOCUSED_PIXEL_SIZE : PIN_PIXEL_SIZE,
+        color: m.id === focusedId ? mint : teal,
         outlineColor: dark,
         outlineWidth: 2,
         disableDepthTestDistance: onTop,
