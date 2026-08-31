@@ -24,11 +24,16 @@
  *  - **No state of its own worth testing.** What the rows say and what they do
  *    is `memoryIndex.ts`, pure and unit-tested; this file is the panel, the
  *    wrist, and the ray.
+ *
+ * How big it is, how far off the hand it hangs and when it is up at all are in
+ * `wristPanel.ts` — the arithmetic that decides whether this is a thing you
+ * hold or a wall you stand behind, with the measurements that settled it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
 import { Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
+import type { MeshBasicMaterial } from 'three';
 import type { AtlasMemory } from '../../model/atlasModel.js';
 import { drawInfoCard, labelFontReady, rowAtPoint, type LabelCard } from './labelCard.js';
 import {
@@ -41,22 +46,24 @@ import {
 } from './memoryIndex.js';
 import type { WorldHandle } from './useGlobeLocomotion.js';
 import { dictate, voiceSearchAvailable, type Dictation } from './voiceSearch.js';
+import {
+  fadeTowards,
+  glanceVisible,
+  panelHeight,
+  panelLift,
+  PANEL_PX,
+  PANEL_WIDTH,
+} from './wristPanel.js';
 
-/** Panel height in player metres. Rows land at ~2.4° tall from reading distance. */
-const PANEL_HEIGHT = 0.3;
-/** Fixed canvas width, so rows never move between redraws (see `drawInfoCard`). */
-const PANEL_PX = 560;
-/**
- * Where the panel sits relative to the off hand's grip, in grip space: up and
- * a little back, so it reads as something held rather than something growing
- * out of the controller, and the hand itself never covers the bottom rows.
- */
-const WRIST_OFFSET = new Vector3(0, 0.2, 0.04);
 /**
  * Where it sits with no session — off to the left of the globe, which is how
  * `?renderer=xr` in an ordinary window stays a usable (and checkable) build.
  */
 const FLAT_POSITION = new Vector3(-0.46, 1.4, -0.92);
+
+const RAD2DEG = 180 / Math.PI;
+/** The hovered row's tint at full fade. */
+const HIGHLIGHT_OPACITY = 0.22;
 
 const other = (hand: XRHandedness): XRHandedness => (hand === 'left' ? 'right' : 'left');
 
@@ -74,6 +81,8 @@ const _z = new Vector3();
 const _up = new Vector3();
 const _basis = new Matrix4();
 const _inv = new Quaternion();
+const _gaze = new Vector3();
+const _toHand = new Vector3();
 
 function sourceFor(session: XRSession, handedness: XRHandedness): XRInputSource | undefined {
   for (const source of session.inputSources) if (source.handedness === handedness) return source;
@@ -128,8 +137,16 @@ export interface WristMenuProps {
 
 export function WristMenu({ world, memories, onTravel, dominant = 'right' }: WristMenuProps) {
   const root = useRef<Group>(null);
+  const panel = useRef<Mesh>(null);
   const highlight = useRef<Mesh>(null);
   const hovered = useRef(-1);
+  /** Where the off hand's grip was this frame, for the dev handle to report. */
+  const grip = useRef(new Vector3());
+  /** Degrees between the gaze and the hand, and whether that is enough to show it. */
+  const glance = useRef(0);
+  const shown = useRef(true);
+  /** 0–1 fade, so the panel arrives and leaves rather than blinking. */
+  const lit = useRef(1);
   /** Row the trigger went down on, or -1. See the release-edge note in `useFrame`. */
   const armed = useRef(-1);
   const wasPressed = useRef(false);
@@ -235,11 +252,15 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
           ? {
               position: root.current.position.toArray(),
               quaternion: root.current.quaternion.toArray(),
-              width: PANEL_HEIGHT * card.aspect,
-              height: PANEL_HEIGHT,
+              width: PANEL_WIDTH,
+              height: panelHeight(card.aspect),
               rows: card.rows,
             }
           : null,
+      /** The hand it rides, so a check can measure the panel against the wrist. */
+      grip: () => grip.current.toArray(),
+      /** Why the panel is or is not up right now. */
+      glance: () => ({ angleDeg: glance.current, shown: shown.current, opacity: lit.current }),
     };
     return () => {
       delete w.__atlasWristMenu;
@@ -251,7 +272,7 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
   // place when the sky grab reads input in the same frame; at the default
   // priority of 0 it landed a frame late, which is precisely the frame the
   // errant grab began on.
-  useFrame((frameState, _delta, frame) => {
+  useFrame((frameState, delta, frame) => {
     const group = root.current;
     if (!group || !card) return;
 
@@ -259,10 +280,20 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
     const session = xr.getSession?.() ?? undefined;
     const space = xr.getReferenceSpace?.() ?? undefined;
     const off = other(dominant);
+    const height = panelHeight(card.aspect);
 
     // --- where the panel is ------------------------------------------------
-    if (session && frame && space && readPose(session, frame, space, off, 'grip', _p, _q)) {
-      group.position.copy(_p).add(_offset.copy(WRIST_OFFSET).applyQuaternion(_q));
+    const onHand = !!(session && frame && space && readPose(session, frame, space, off, 'grip', _p, _q));
+    if (onHand) {
+      // Straight up from the hand, in world space, by its own half-height and a
+      // finger's width — enough that the bottom edge clears the fingers and no
+      // more. Deliberately *not* up the grip's own axis, which is what the flat
+      // 0.2 m this replaces did: a naturally held controller tilts forward, so
+      // its +Y runs up and back, and the lift swung the panel towards the face
+      // instead of raising it. Measured, from a hand 0.46 m away it left the
+      // panel 0.31 m from the eye. Up is up.
+      group.position.copy(_p).add(_offset.set(0, panelLift(height), 0));
+      grip.current.copy(_p);
       _up.set(0, 1, 0).applyQuaternion(_q); // roll with the wrist
     } else {
       group.position.copy(FLAT_POSITION);
@@ -281,12 +312,44 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
     _y.copy(_z).cross(_x);
     group.quaternion.setFromRotationMatrix(_basis.makeBasis(_x, _y, _z));
 
+    // --- is it being looked at ---------------------------------------------
+    // A wrist UI is up when the wrist is, and out of the way when it is not.
+    // Always up in a flat window: there is no hand to glance at there, and it
+    // is the path an ordinary browser can still check.
+    let target = 1;
+    if (onHand) {
+      frameState.camera.getWorldDirection(_gaze);
+      _toHand.copy(grip.current).sub(world.head);
+      const reach = _toHand.length();
+      glance.current =
+        reach > 1e-6
+          ? Math.acos(Math.min(1, Math.max(-1, _toHand.divideScalar(reach).dot(_gaze)))) * RAD2DEG
+          : 0;
+      // A press that started on a row holds it up until the release. Fading a
+      // panel out from under a held trigger would fire whatever row the ray
+      // happened to be over on a surface the viewer can no longer see.
+      shown.current = armed.current >= 0 || glanceVisible(shown.current, glance.current);
+      target = shown.current ? 1 : 0;
+    } else {
+      shown.current = true;
+      glance.current = 0;
+    }
+    lit.current = fadeTowards(lit.current, target, delta);
+    group.visible = lit.current > 0.01;
+    const face = panel.current?.material as MeshBasicMaterial | undefined;
+    if (face) face.opacity = lit.current;
+    const glow = highlight.current?.material as MeshBasicMaterial | undefined;
+    if (glow) glow.opacity = HIGHLIGHT_OPACITY * lit.current;
+    if (!shown.current) {
+      hovered.current = -1;
+      armed.current = -1;
+    }
+
     // --- what the pointer is on -------------------------------------------
     // With no controller ray, `hovered` is whatever the mouse last set through
     // the panel mesh's pointer events — the flat-window path.
-    const width = PANEL_HEIGHT * card.aspect;
     let row = hovered.current;
-    if (session && frame && space && readPose(session, frame, space, dominant, 'ray', _rayO, _rayQ)) {
+    if (shown.current && session && frame && space && readPose(session, frame, space, dominant, 'ray', _rayO, _rayQ)) {
       _rayD.set(0, 0, -1).applyQuaternion(_rayQ);
       _n.set(0, 0, 1).applyQuaternion(group.quaternion);
       const denom = _rayD.dot(_n);
@@ -302,7 +365,7 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
             .addScaledVector(_rayD, t)
             .sub(group.position)
             .applyQuaternion(_inv.copy(group.quaternion).invert());
-          row = rowAtPoint(card.rows, _hit.x / width + 0.5, 0.5 - _hit.y / PANEL_HEIGHT);
+          row = rowAtPoint(card.rows, _hit.x / PANEL_WIDTH + 0.5, 0.5 - _hit.y / height);
         }
       }
       hovered.current = row;
@@ -343,9 +406,9 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
     if (bar) {
       bar.visible = !!bounds;
       if (bounds) {
-        const h = (bounds.bottom - bounds.top) * PANEL_HEIGHT;
-        bar.scale.set(width * 0.97, h, 1);
-        bar.position.set(0, (0.5 - (bounds.top + bounds.bottom) / 2) * PANEL_HEIGHT, 0.001);
+        const h = (bounds.bottom - bounds.top) * height;
+        bar.scale.set(PANEL_WIDTH * 0.97, h, 1);
+        bar.position.set(0, (0.5 - (bounds.top + bounds.bottom) / 2) * height, 0.001);
       }
     }
   }, -95);
@@ -373,13 +436,14 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
   );
 
   if (!card) return null;
-  const width = PANEL_HEIGHT * card.aspect;
+  const height = panelHeight(card.aspect);
 
   return (
     <group ref={root}>
       {/* Depth testing off, like every other in-scene surface here: the panel is
           UI and must never be buried by the planet it is used to navigate. */}
       <mesh
+        ref={panel}
         renderOrder={30}
         frustumCulled={false}
         onPointerMove={pointAt}
@@ -388,12 +452,19 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
         }}
         onClick={click}
       >
-        <planeGeometry args={[width, PANEL_HEIGHT]} />
+        <planeGeometry args={[PANEL_WIDTH, height]} />
         <meshBasicMaterial map={card.texture} transparent depthTest={false} depthWrite={false} toneMapped={false} />
       </mesh>
       <mesh ref={highlight} renderOrder={31} frustumCulled={false} visible={false}>
         <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial color="#72ddd4" transparent opacity={0.22} depthTest={false} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial
+          color="#72ddd4"
+          transparent
+          opacity={HIGHLIGHT_OPACITY}
+          depthTest={false}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
     </group>
   );

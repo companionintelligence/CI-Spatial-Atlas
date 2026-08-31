@@ -341,6 +341,10 @@ export function GlobeScene({
     () => [
       ...(session
         ? [
+            // The memory list only comes up when it is looked at now
+            // (`wristPanel.ts`), which is the whole point — but it also means
+            // nothing on screen says it exists until you happen to glance down.
+            `Look at your ${DOMINANT_HAND === 'left' ? 'right' : 'left'} hand for every memory`,
             'Squeeze a grip to grab the world and drag it',
             'Grab with both hands, pull apart to zoom',
             'Reach into the sky and pull the trigger to drag the sun',
