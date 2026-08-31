@@ -93,7 +93,7 @@ export function TimeMachine({
    * thumb: on a phone the track is the whole control, and tapping a single
    * point of a seven-year archive to within a month asks for pixel accuracy
    * nobody has. Pointer events cover mouse, pen and touch in one path, and the
-   * capture is what keeps the drag alive once the finger leaves the 76px-tall
+   * capture is what keeps the drag alive once the finger leaves the 40px-tall
    * strip — which, on a phone, is almost immediately.
    */
   const dragging = useRef(false);

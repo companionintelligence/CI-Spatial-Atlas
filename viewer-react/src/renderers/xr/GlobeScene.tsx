@@ -18,7 +18,7 @@ import { ImageryGlobe, type TileSource } from './ImageryGlobe.js';
 import { MemoryPins } from './MemoryPins.js';
 import { Celestials } from './Celestials.js';
 import { InfoPanel, Starfield } from './SceneFurniture.js';
-import { clearAlphaFor, skyboxVisible } from './sessionMode.js';
+import { clearAlphaFor, skyboxVisible, type XRMode } from './sessionMode.js';
 import { NightShell, SkyLight, useSkyGrab } from './SkyGrab.js';
 import { MEMORY_WINDOW_MS, memoriesInWindow } from './skyTime.js';
 import { StreetViewPlate } from './StreetViewPlate.js';
@@ -101,6 +101,25 @@ export interface GlobeSceneProps {
   onAttributions?: (lines: string[]) => void;
 }
 
+/**
+ * Keep the renderer's clear alpha in step with the session mode.
+ *
+ * `clearAlphaFor` has existed since AR mode was added and was never called, so
+ * the canvas was created with `alpha: true` and then cleared opaque anyway —
+ * which is exactly the failure the flag was meant to prevent. In an
+ * `immersive-ar` session the composite needs a transparent clear or the
+ * passthrough never shows through.
+ */
+function AlphaForMode({ mode }: { mode: XRMode }) {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const alpha = clearAlphaFor(mode);
+    gl.setClearAlpha(alpha);
+    return () => gl.setClearAlpha(1);
+  }, [gl, mode]);
+  return null;
+}
+
 export function GlobeScene({
   memories,
   focusedId,
@@ -125,6 +144,7 @@ export function GlobeScene({
       dragged: 0,
       motion: createWorldMotion(),
       comfort: loadComfort(),
+      uiHands: new Set<XRHandedness>(),
     }),
     [],
   );
@@ -359,8 +379,14 @@ export function GlobeScene({
     <>
       {/* Space, not the page behind the canvas. Without an explicit clear
           colour the sky is transparent, and on a flat screen the globe floats
-          on whatever the document's light-mode background happens to be. */}
-      <color attach="background" args={['#020c14']} />
+          on whatever the document's light-mode background happens to be.
+          In AR there must be no background at all: an opaque clear paints over
+          the passthrough feed, so the room the mode exists to show is replaced
+          by a flat dark rectangle. `AlphaForMode` handles the clear alpha the
+          same way — both halves are needed, since a null background still
+          clears to alpha 1 by default. */}
+      {sky && <color attach="background" args={['#020c14']} />}
+      <AlphaForMode mode={mode} />
       {/* Photorealistic tiles arrive with PBR materials and need lighting; the
           raster globe is unlit and ignores these. Once the sky has been grabbed
           the fixed key light gives way to the real sun for that instant. */}
