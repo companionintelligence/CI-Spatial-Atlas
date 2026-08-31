@@ -41,10 +41,11 @@ const PLATE_WIDTH = 0.28;
  * Where it floats relative to the off hand's grip, in grip space.
  *
  * Below the hand, not above it, because `WristMenu` already occupies the space
- * above: its panel is 0.3 m tall and centred 0.2 m up, so it fills grip+0.05 to
- * grip+0.35. Hanging the plate underneath turns the forearm into a stack — the
- * list of everywhere you have been, and beneath it a picture of the place you
- * are looking at right now.
+ * above: its panel now pins its own bottom edge to grip+0.02 and grows upwards
+ * from there (`wristPanel.ts`), so everything from the hand up is spoken for.
+ * Hanging the plate underneath turns the forearm into a stack — the list of
+ * everywhere you have been, and beneath it a picture of the place you are
+ * looking at right now.
  */
 const HAND_OFFSET = new Vector3(0, -0.09, 0.02);
 /**

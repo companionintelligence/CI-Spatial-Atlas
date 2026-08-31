@@ -202,14 +202,29 @@ function formatKm(km: number): string {
   return `${Math.round(km).toLocaleString('en-US')} km`;
 }
 
+/**
+ * A row: what it is, and where it sits in the order you asked for.
+ *
+ * It used to be title · place · date · distance, and measured against a real
+ * 290-memory archive that ran to 58 characters at the median and 71 at the 90th
+ * percentile — against a card that held 58. Something like two rows in five were
+ * already being ellipsised, and the field that got cut was always the last one,
+ * so *the sort key itself* disappeared from the rows it was ordering.
+ *
+ * The panel is now hand-sized (`wristPanel.ts`), which holds 43 characters, so
+ * the row had to give something up rather than truncate harder. It gives up
+ * whichever field you did not sort by: recency shows the date, proximity shows
+ * the distance, and both fit whole. Place is the loss, and it is the right one —
+ * the pin, the peek plate and the inspector all carry it already, and it is the
+ * field a real archive most often has no value for (see the note in
+ * `atlasModel.ts`: 147 of 791 located memories resolved to no place at all).
+ */
 function memoryLabel(m: AtlasMemory, state: MenuState): string {
-  const parts = [m.title?.trim() || 'Untitled memory'];
-  if (m.place && m.place !== m.title) parts.push(m.place);
-  parts.push(m.whenDate);
-  if (state.order === 'nearby' && state.origin && m.lat != null && m.lon != null) {
-    parts.push(formatKm(haversineKm(state.origin, { lat: m.lat, lon: m.lon })));
-  }
-  return parts.join(' · ');
+  const title = m.title?.trim() || 'Untitled memory';
+  const nearby = state.order === 'nearby' && state.origin && m.lat != null && m.lon != null;
+  return nearby
+    ? `${title} · ${formatKm(haversineKm(state.origin!, { lat: m.lat!, lon: m.lon! }))}`
+    : `${title} · ${m.whenDate}`;
 }
 
 function searchRow(state: MenuState): MenuRow {
@@ -220,7 +235,7 @@ function searchRow(state: MenuState): MenuRow {
   // are the path that always exists.
   return state.voiceAvailable
     ? { label: 'Search: pull the trigger and speak', action: { kind: 'voice' } }
-    : { label: 'Search: no voice here — use the filters below', action: { kind: 'none' } };
+    : { label: 'Search: no voice here — use the filters', action: { kind: 'none' } };
 }
 
 /**
