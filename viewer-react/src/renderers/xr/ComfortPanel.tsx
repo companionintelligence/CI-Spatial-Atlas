@@ -173,6 +173,11 @@ export function ComfortPanel({ world, settings, onToggle, position, height = 0.2
     };
   }, [settings]);
 
+  // Priority -95: ahead of the sky grab (-90), behind the frame reset (-100).
+  // The claim this makes on `world.uiHands` is only useful if it is already in
+  // place when the sky grab reads input in the same frame; at the default
+  // priority of 0 it landed a frame late, which is precisely the frame the
+  // errant grab began on.
   useFrame((state, _delta, frame) => {
     const node = group.current;
     if (!node) return;
@@ -205,6 +210,11 @@ export function ComfortPanel({ world, settings, onToggle, position, height = 0.2
         const hit = _ray.intersectObjects(meshes, false)[0];
         const row = hit ? meshes.indexOf(hit.object as Mesh) : -1;
         if (row >= 0) hovered = row;
+        // Claim the hand while it is on a toggle, so the sky grab does not read
+        // the same trigger as a reach for the sky. Its own guard only asks
+        // whether the hand misses the globe's silhouette, which a hand aimed at
+        // this panel always does.
+        if (row >= 0 && source.handedness !== 'none') world.uiHands.add(source.handedness);
 
         // The trigger, on the press edge. The grip is the world grab and has to
         // stay free — reaching for a setting must never also seize the planet.
@@ -222,7 +232,7 @@ export function ComfortPanel({ world, settings, onToggle, position, height = 0.2
       mark.visible = hovered >= 0;
       if (hovered >= 0) mark.position.y = height * (0.5 - rowCentre(hovered) / HEIGHT);
     }
-  });
+  }, -95);
 
   const width = height * ASPECT;
   const rowHeight = (ROW_H / HEIGHT) * height;

@@ -82,6 +82,18 @@ export interface WorldHandle {
    * must take effect on the next frame rather than the next render.
    */
   comfort: ComfortSettings;
+  /**
+   * Hands whose trigger belongs to a UI surface this frame, by handedness.
+   *
+   * The trigger is the only select button, and three things want it: the wrist
+   * menu, the comfort panel, and the sky grab. The sky grab used to take it
+   * whenever the hand happened to sit off the globe's silhouette — which is
+   * exactly where a hand holding a panel is — so pressing a menu row also
+   * started a time scrub. A panel claims its hand before the sky grab reads
+   * input (both run ahead of it by frame priority), and the sky grab skips any
+   * hand in here.
+   */
+  uiHands: Set<XRHandedness>;
 }
 
 /**
@@ -328,6 +340,11 @@ export function useGlobeLocomotion(world: WorldHandle, group: { current: Object3
   const { onHandsChanged } = opts;
 
   useFrame((state, delta, frame) => {
+    // One frame, one claim. Cleared here at priority -100, before the panels
+    // re-assert it and before the sky grab (-90) reads it, so a hand that has
+    // moved off a panel stops being claimed on the very next frame.
+    world.uiHands.clear();
+
     const xr = state.gl.xr;
     const session = xr.getSession?.() ?? undefined;
     const space = xr.getReferenceSpace?.() ?? undefined;
@@ -399,6 +416,22 @@ export function useGlobeLocomotion(world: WorldHandle, group: { current: Object3
           grab.current.grabStart.copy(_grabNow);
           toMatrix(world.transform, grab.current.worldStart);
         }
+        // And hide the turn from the roll cap below, for the same reason.
+        //
+        // The cap measures this frame's delta and strips whatever twists about
+        // the view axis. A yaw about the room's vertical contains a twist of
+        // roughly `step * sin(pitch)` — at a 15 degree glance down at the globe
+        // that is about 7.8 degrees, where the cap allows 0.6 rad/s * dt, about
+        // 0.38 degrees at 90 Hz. So the cap ate most of every snap turn and,
+        // because it removes rather than defers, left the difference behind as
+        // permanent horizon tilt: measured 12.9 degrees after one turn at a 30
+        // degree pitch, 58.5 after six. Both settings are on by default, so
+        // this was the default path.
+        //
+        // A snap turn is a deliberate discrete rotation, not motion the eye
+        // needs protecting from. Advancing the baseline means the cap sees the
+        // frame as still, and the turn arrives whole.
+        previous.current.quaternion.copy(world.transform.quaternion);
       }
     }
 

@@ -267,6 +267,11 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
     };
   }, [view, fire, card]);
 
+  // Priority -95: ahead of the sky grab (-90), behind the frame reset (-100).
+  // The claim this makes on `world.uiHands` is only useful if it is already in
+  // place when the sky grab reads input in the same frame; at the default
+  // priority of 0 it landed a frame late, which is precisely the frame the
+  // errant grab began on.
   useFrame((frameState, delta, frame) => {
     const group = root.current;
     if (!group || !card) return;
@@ -365,6 +370,14 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
       }
       hovered.current = row;
 
+      // Claim this hand's trigger for the panel while the ray is on a row, so
+      // the sky grab does not read the same press as a reach for the sky and
+      // flip the scene into its 30-day time window. Claimed while ARMED too,
+      // not just while hovering: the press fires on release, and sliding off a
+      // row mid-press would otherwise hand the still-held trigger straight to
+      // the sky grab.
+      if (row >= 0 || armed.current >= 0) world.uiHands.add(dominant);
+
       // Fire on the *release*, on the row the press started on.
       //
       // Two reasons, and the second one is not a nicety. It is how a button has
@@ -398,7 +411,7 @@ export function WristMenu({ world, memories, onTravel, dominant = 'right' }: Wri
         bar.position.set(0, (0.5 - (bounds.top + bounds.bottom) / 2) * height, 0.001);
       }
     }
-  });
+  }, -95);
 
   const pointAt = useCallback(
     (event: ThreeEvent<PointerEvent>) => {
