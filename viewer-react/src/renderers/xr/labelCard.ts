@@ -46,6 +46,21 @@ const LINE = 34;
 const MAX_WIDTH = 420;
 const FONT = "'Manrope', system-ui, -apple-system, sans-serif";
 
+/**
+ * What `drawInfoCard` lays a card out on, in px.
+ *
+ * Exported because a caller that has to size the card *in metres* — the wrist
+ * panel, whose whole legibility budget is "how tall is a row from where it is
+ * read" — otherwise has to re-derive these numbers and silently disagrees with
+ * this file the moment the type changes. See `wristPanel.ts`.
+ */
+export const INFO_CARD_METRICS = { pad: PAD, heading: LINE, row: META_SIZE + 7 } as const;
+
+/** How tall a `drawInfoCard` card with this many rows comes out, in px. */
+export function infoCardHeight(rows: number): number {
+  return INFO_CARD_METRICS.pad * 2 + INFO_CARD_METRICS.heading + rows * INFO_CARD_METRICS.row;
+}
+
 const INK = '#e8f2f4';
 const MUTED = '#a3babf';
 const BACKING = 'rgba(4, 22, 32, 0.88)';
@@ -170,7 +185,7 @@ export function drawInfoCard(heading: string, lines: string[], maxWidth = 900, m
   ctx.font = `500 ${META_SIZE}px ${FONT}`;
   for (const line of lines) width = Math.max(width, ctx.measureText(line).width);
   width = Math.max(minWidth, Math.min(width + PAD * 2, maxWidth));
-  const height = PAD * 2 + LINE + lines.length * (META_SIZE + 7);
+  const height = infoCardHeight(lines.length);
 
   canvas.width = Math.ceil(width * SCALE);
   canvas.height = Math.ceil(height * SCALE);
