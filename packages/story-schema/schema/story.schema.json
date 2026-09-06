@@ -795,9 +795,6 @@
               "id": {
                 "type": "string"
               },
-              "name": {
-                "type": "string"
-              },
               "kind": {
                 "type": "string",
                 "enum": [
@@ -810,6 +807,9 @@
                   "pin"
                 ]
               },
+              "name": {
+                "type": "string"
+              },
               "uri": {
                 "type": "string"
               },
@@ -818,13 +818,13 @@
                 "enum": [
                   "xyz",
                   "tms",
-                  "wms",
                   "wmts",
+                  "wms",
                   "geojson",
-                  "mvt",
-                  "3d-tiles",
-                  "gltf",
+                  "kml",
                   "czml",
+                  "3d-tiles",
+                  "gaussian-splat",
                   "quantized-mesh"
                 ]
               },

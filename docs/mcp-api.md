@@ -74,8 +74,9 @@ Resource: `story://{id}` returns the story JSON, subject to the same read rules.
 source credit the layer's licence requires — OpenStreetMap (ODbL), EOX and
 CARTO (CC BY) and OpenSeaMap (CC BY‑SA) all condition use on displaying it, so
 set it whenever you attach third‑party imagery. `format` names the wire format
-of `uri` (`xyz`, `tms`, `wms`, `wmts`, `geojson`, `mvt`, `3d-tiles`, `gltf`,
-`czml`, `quantized-mesh`) for the cases a renderer cannot infer by convention.
+of `uri` (`xyz`, `tms`, `wmts`, `wms`, `geojson`, `kml`, `czml`, `3d-tiles`,
+`gaussian-splat`, `quantized-mesh`) for the cases `kind` cannot stand in for —
+`imagery` spans xyz/tms/wmts/wms, and `geojson` is also where kml and czml land.
 
 ## Recipes
 

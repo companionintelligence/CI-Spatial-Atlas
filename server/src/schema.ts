@@ -50,44 +50,50 @@ export const MediaItem = z.object({
   sourceMemoryId: z.string().optional()
 });
 
-/** Wire format of a layer's `uri` — how a renderer should fetch it, which
- *  `kind` alone does not say (an `imagery` layer may be XYZ, WMS or WMTS). */
+/**
+ * Licence-required credit for a layer's source. Not presentation polish: most
+ * open sources a layer can point at are attribution-conditioned (OSM/ODbL,
+ * EOX and CARTO/CC BY, OpenSeaMap/CC BY-SA), so this has to survive a write
+ * through the API. A `z.object` strips unknown keys, so a credit that is not
+ * declared here is a credit this server silently deletes.
+ */
+export const LayerAttribution = z.object({
+  text: z.string().describe('credit line to display, e.g. "© OpenStreetMap contributors"'),
+  licence: z.string().optional().describe('licence name or id, e.g. ODbL-1.0, CC BY 4.0'),
+  url: z.string().optional().describe("link to the source's page or the licence deed"),
+  onScreen: z
+    .boolean()
+    .optional()
+    .describe('licence requires the notice on the map itself, not behind a control')
+});
+
+/** Wire format of a layer's `uri`. `kind` cannot stand in for it: 'imagery'
+ *  spans xyz/tms/wmts/wms, and 'geojson' is also where kml and czml land. */
 export const LayerFormat = z.enum([
   'xyz',
   'tms',
-  'wms',
   'wmts',
+  'wms',
   'geojson',
-  'mvt',
-  '3d-tiles',
-  'gltf',
+  'kml',
   'czml',
+  '3d-tiles',
+  'gaussian-splat',
   'quantized-mesh'
 ]);
 
-/** Source credit a layer's licence requires. OpenStreetMap (ODbL), EOX and
- *  CARTO (CC BY) and OpenSeaMap (CC BY-SA) all condition use on displaying it,
- *  so it is stored with the layer rather than re-derived per renderer.
- *  `onScreen` marks credit that must stay visible while the layer draws. */
-export const LayerAttribution = z.object({
-  text: z.string().describe('Credit line to display, e.g. "© OpenStreetMap contributors"'),
-  licence: z.string().optional().describe('Licence identifier or name, e.g. "ODbL-1.0", "CC BY 4.0"'),
-  url: z.string().optional().describe('Link to the source or its licence terms'),
-  onScreen: z.boolean().optional().describe('Credit must remain visible on screen while the layer renders')
-});
-
 export const Layer = z.object({
   id: z.string(),
-  name: z.string().optional().describe('Human-readable label for layer pickers'),
   kind: z.enum(['imagery', 'terrain', '3d-tiles', 'gaussian-splat', 'geojson', 'model', 'pin']),
+  name: z.string().optional().describe('human label for a layer list'),
   uri: z.string().optional(),
   format: LayerFormat.optional(),
   attribution: LayerAttribution.optional(),
   style: z.record(z.unknown()).optional(),
   availability: TimeInterval.optional(),
   opacity: z.number().min(0).max(1).optional(),
-  visible: z.boolean().optional().describe('Initial on/off state in the viewer (omitted = shown)'),
-  order: z.number().optional().describe('Draw order; lower renders beneath')
+  visible: z.boolean().optional().describe('drawn state; absent means visible'),
+  order: z.number().optional().describe('draw order, low to high; absent means array position')
 });
 
 export const CameraPose = z.object({
@@ -147,8 +153,8 @@ export type Story = z.infer<typeof Story>;
 export type Scene = z.infer<typeof Scene>;
 export type MediaItem = z.infer<typeof MediaItem>;
 export type Layer = z.infer<typeof Layer>;
-export type LayerFormat = z.infer<typeof LayerFormat>;
 export type LayerAttribution = z.infer<typeof LayerAttribution>;
+export type LayerFormat = z.infer<typeof LayerFormat>;
 export type Derived3d = z.infer<typeof Derived3d>;
 
 export const STORY_SCHEMA_ID = 'companion.atlas/story@1' as const;

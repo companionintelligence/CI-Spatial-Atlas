@@ -81,59 +81,56 @@ export type LayerKind =
   | 'model'
   | 'pin';
 
-/** Wire format of a layer's `uri` — how a renderer should *fetch* it, which
- *  `kind` alone does not say: an `imagery` layer may be XYZ tiles, WMS or
- *  WMTS, and a renderer that guesses wrong renders nothing. Optional, because
- *  most URIs are recognisable by convention; set it when they are not. */
+/** Wire format of a layer's `uri`. `kind` cannot stand in for it: 'imagery'
+ *  spans xyz/tms/wmts/wms, and 'geojson' is also where kml and czml land. */
 export type LayerFormat =
-  // raster tile services
   | 'xyz'
   | 'tms'
-  | 'wms'
   | 'wmts'
-  // vector
+  | 'wms'
   | 'geojson'
-  | 'mvt'
-  // 3D / scene
-  | '3d-tiles'
-  | 'gltf'
+  | 'kml'
   | 'czml'
-  // terrain
+  | '3d-tiles'
+  | 'gaussian-splat'
   | 'quantized-mesh';
 
-/** Source credit a layer's licence requires.
+/**
+ * Required credit for a layer's source.
  *
- *  Nearly every open source an Atlas story draws on conditions use on
- *  displaying attribution — OpenStreetMap (ODbL), EOX and CARTO (CC BY),
- *  OpenSeaMap (CC BY-SA) — so the credit travels *with* the layer instead of
- *  being re-derived per renderer from the URI. */
+ * Nearly every open source a layer can point at is attribution-conditioned
+ * (OSM/ODbL, EOX and CARTO/CC BY, OpenSeaMap/CC BY-SA), so the credit travels
+ * with the layer rather than being re-derived per renderer.
+ */
 export interface LayerAttribution {
   /** The credit line to display, e.g. "© OpenStreetMap contributors". */
   text: string;
-  /** Licence identifier or name, e.g. "ODbL-1.0", "CC BY 4.0". */
+  /** Licence name or identifier, e.g. "ODbL-1.0", "CC BY 4.0", "CC BY-SA 2.0". */
   licence?: string;
-  /** Link to the source or its licence terms. */
+  /** Link for the credit — the source's page or the licence deed. */
   url?: string;
-  /** Credit must remain visible on screen while the layer renders, as opposed
-   *  to living in an "about this map" panel. */
+  /** Licence requires the notice on the map itself, not behind a control. */
   onScreen?: boolean;
 }
 
 export interface Layer {
   id: string;
-  /** Human-readable label for layer pickers, e.g. "OpenSeaMap seamarks". */
-  name?: string;
   kind: LayerKind;
+  /** Human label for a layer list; `id` is a key, not something to show. */
+  name?: string;
   uri?: string;
+  /** Wire format of `uri`. See `LayerFormat` — `kind` cannot stand in for it. */
   format?: LayerFormat;
+  /** Required credit for the layer's source. See `LayerAttribution`. */
   attribution?: LayerAttribution;
   style?: Record<string, unknown>;
   /** Clock window during which this layer is shown (omitted = always). */
   availability?: TimeInterval;
   opacity?: number;
-  /** Initial on/off state in the viewer (omitted = shown). */
+  /** Drawn state. Absent means visible — a layer in the document is shown. */
   visible?: boolean;
-  /** Draw order; lower renders beneath. Ties fall back to array order. */
+  /** Draw order, low to high. Array position is not durable across a server
+   *  round-trip, so stacking needs an explicit field. */
   order?: number;
 }
 
