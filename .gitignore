@@ -31,3 +31,7 @@ capture/
 /*/deno.lock
 /*/*/deno.lock
 .claude/
+
+# macOS Finder per-directory view state (icon positions, sort order).
+# Per-user, per-machine UI metadata - never belongs in the repo.
+.DS_Store
