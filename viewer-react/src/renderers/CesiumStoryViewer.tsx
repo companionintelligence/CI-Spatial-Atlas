@@ -3,7 +3,10 @@ import * as Cesium from 'cesium';
 import { Viewer, CzmlDataSource, Cesium3DTileset, type CesiumComponentRef } from 'resium';
 import { storyToCzml, type Story, type Place } from '@companion-atlas/story';
 import type { AtlasMemory } from '../model/atlasModel.js';
-import { BASEMAPS, DEFAULT_BASEMAP, offlineImagery } from './basemaps.js';
+import { BASEMAPS, DEFAULT_BASEMAP, offlineImagery, resolveBasemap } from './basemaps.js';
+import { createLayerScene, isAtlasManagedImagery, type LayerScene } from '../layers/cesium.js';
+import type { AtlasLayer } from '../layers/model.js';
+import { keepForGlobe, type CzmlLike } from './globeCzml.js';
 
 const PLACEHOLDER_TOKEN = 'your_cesium_ion_token_here';
 type Located = AtlasMemory & { lat: number; lon: number };
@@ -85,10 +88,13 @@ function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number
  * from the memory pins above. It's off by default (pass `places={[]}`, the
  * default) so it never competes with the memory layer for attention.
  */
+const EMPTY_IDS: readonly string[] = [];
+
 export function CesiumStoryViewer({
   story, memories, places = [], focusedId, basemap = DEFAULT_BASEMAP, sunLighting = false,
   buildings = false,
   onViewer, onPick, onPickPlace, onHover, onInteract,
+  layers = [], timeMs = null, extraItemIds = EMPTY_IDS,
 }: {
   story: Story;
   memories: AtlasMemory[];
@@ -105,6 +111,17 @@ export function CesiumStoryViewer({
   onPickPlace?: (p: Place) => void;
   onHover?: (id: string | null) => void;
   onInteract?: () => void;
+  /** User-added data sources (see src/layers/). Drawn above the basemap and
+   *  below nothing — the story's own entities live in a CZML data source, which
+   *  Cesium renders separately from the imagery stack. */
+  layers?: readonly AtlasLayer[];
+  /** Clock position, so time-windowed layers hide themselves outside their
+   *  availability and `{Time}`-dimensioned sources (GIBS) follow the scrub. */
+  timeMs?: number | null;
+  /** Ids of story items that have no scene, and therefore no memory pin
+   *  standing in for them — imported KML/GeoJSON features, and anything drawn
+   *  by hand. Their CZML packets are rendered rather than filtered away. */
+  extraItemIds?: readonly string[];
 }) {
   // Read inside the mount effect without making it a dependency (remounting
   // the viewer to change basemap would tear down the whole scene).
@@ -112,14 +129,13 @@ export function CesiumStoryViewer({
   basemapRef.current = basemap;
 
   const { czml, tilesets } = useMemo(() => storyToCzml(story), [story]);
-  // The interactive memory-pin layer is the canonical 2D representation of
-  // memories, so keep only the document (clock), authored tracks (`path`), and
-  // 3D models from the CZML — dropping the point/billboard packets the pins
-  // replace avoids drawing every located memory twice.
+  // See globeCzml.ts for why this filter is narrower than it looks.
+  const passthroughIds = useMemo(() => new Set(extraItemIds), [extraItemIds]);
   const globeCzml = useMemo(
-    () => czml.filter((p) => p.id === 'document' || p.path !== undefined || p.model !== undefined),
-    [czml],
+    () => czml.filter((p) => keepForGlobe(p as CzmlLike, passthroughIds)),
+    [czml, passthroughIds],
   );
+
   const ref = useRef<CesiumComponentRef<Cesium.Viewer>>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const [viewer, setViewerReady] = useState<Cesium.Viewer | null>(null);
@@ -392,6 +408,24 @@ export function CesiumStoryViewer({
 
   // ---- basemap switching ----
   // Swap the imagery layer in place rather than remounting the viewer, so the
+  // User layers. `createLayerScene` owns everything it adds and diffs on a
+  // source fingerprint, so this effect can run on every clock tick without
+  // rebuilding providers.
+  const layerSceneRef = useRef<LayerScene | null>(null);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const scene = createLayerScene(viewer);
+    layerSceneRef.current = scene;
+    return () => {
+      scene.destroy();
+      layerSceneRef.current = null;
+    };
+  }, [viewer]);
+
+  useEffect(() => {
+    layerSceneRef.current?.sync(layers, timeMs);
+  }, [viewer, layers, timeMs, basemap]);
+
   // camera, clock and entity layers all survive a basemap change.
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -400,13 +434,18 @@ export function CesiumStoryViewer({
     let cancelled = false;
     // Always keep the mounted base at index 0 and swap only what sits above it,
     // so the globe still has ground while a new basemap's tiles arrive.
+    // Only sweep away *our* basemap overlay. The user's layers sit in the same
+    // imagery collection, and the previous "remove everything above index 0"
+    // deleted all of them on the first basemap swap. The layer adapter tags
+    // what it owns for exactly this reason.
     const clearOverlay = () => {
-      while (viewer.imageryLayers.length > 1) {
-        viewer.imageryLayers.remove(viewer.imageryLayers.get(viewer.imageryLayers.length - 1), true);
+      for (let i = viewer.imageryLayers.length - 1; i >= 1; i--) {
+        const layer = viewer.imageryLayers.get(i);
+        if (!isAtlasManagedImagery(layer)) viewer.imageryLayers.remove(layer, true);
       }
     };
 
-    const entry = BASEMAPS.find((b) => b.id === basemap);
+    const entry = resolveBasemap(basemap);
     // Two ways the answer is "no overlay at all": an entry with no `create` is
     // the mounted base layer itself, and under ion the default choice already
     // *is* what is mounted — ion World Imagery is satellite imagery, so laying
@@ -414,7 +453,7 @@ export function CesiumStoryViewer({
     // ground. Every other choice applies whether or not ion is configured;
     // this effect used to bail outright when it was, which quietly turned the
     // whole picker into a no-op the moment the ion token was wired up.
-    if (!entry?.create || (hasIon && entry.id === DEFAULT_BASEMAP)) { clearOverlay(); return; }
+    if (!entry.create || (hasIon && entry.id === DEFAULT_BASEMAP)) { clearOverlay(); return; }
 
     try {
       const provider = entry.create();

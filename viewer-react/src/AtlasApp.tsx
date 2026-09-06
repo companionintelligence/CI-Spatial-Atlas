@@ -23,6 +23,15 @@ import { TimeMachine } from './ui/TimeMachine.js';
 import { CommandPalette } from './ui/CommandPalette.js';
 import { Lightbox } from './ui/Lightbox.js';
 import { useScrapbook } from './scrapbook/useScrapbook.js';
+import { useLayers } from './layers/index.js';
+import { Presenter } from './ui/Presenter.js';
+import type { DeckSlide } from './ui/sceneDeck.js';
+import { InteropPanel, DropOverlay } from './interop/InteropPanel.js';
+import { useImported, withImported } from './interop/useImported.js';
+import { useFileDrop } from './interop/useFileDrop.js';
+import { useAuthoring } from './authoring/useAuthoring.js';
+import { AuthoringToolbar, mergeAuthoredItems } from './authoring/index.js';
+import { importFiles } from './interop/importFile.js';
 import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
 import { PeoplePanel, groupByPerson, type PersonGroup } from './ui/PeoplePanel.js';
 import { saveStoryToMemory } from './memory/client.js';
@@ -81,7 +90,15 @@ export function AtlasApp() {
   // A curated scrapbook journey temporarily takes over the globe; the loaded
   // story stays the base the scrapbook collects against.
   const [journey, setJourney] = useState<Story | null>(null);
-  const story = journey ?? loadedStory;
+  // Files dropped on the globe live here until they are saved somewhere real.
+  // They are merged into the rendered story rather than kept as a side-channel,
+  // so an imported placemark is exportable, collectable, and visible in a
+  // headset — the reason import lands in the model at all (see interop/).
+  const imported = useImported();
+  const story = useMemo(
+    () => withImported(journey ?? loadedStory, imported.items),
+    [journey, loadedStory, imported.items],
+  );
   const model = useMemo(() => (story ? deriveModel(story) : null), [story]);
   const baseModel = useMemo(() => (loadedStory ? deriveModel(loadedStory) : null), [loadedStory]);
 
@@ -140,6 +157,9 @@ export function AtlasApp() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [sbOpen, setSbOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [interopOpen, setInteropOpen] = useState(false);
+  const [presenting, setPresenting] = useState(false);
+  const [drawing, setDrawing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
   const lastSync = useRef(0);
   const flownToRef = useRef<string | null>(null);
@@ -482,6 +502,93 @@ export function AtlasApp() {
   const closePalette = useCallback(() => setPaletteOpen(false), []);
   const closeScrapbook = useCallback(() => setSbOpen(false), []);
   const closePeople = useCallback(() => setPeopleOpen(false), []);
+  const closeInterop = useCallback(() => setInteropOpen(false), []);
+  const exitPresent = useCallback(() => setPresenting(false), []);
+
+  // Layers the user has added, scoped per connected memory so two accounts on
+  // one browser don't inherit each other's stack. `timeMs` drives the
+  // availability window — a layer that only applies to part of the timeline
+  // hides itself as the clock leaves its range.
+  const layerControl = useLayers(memory?.url ?? null, { timeMs: currentMs || null });
+
+  // Dropping files anywhere on the globe imports them. Reported per file so one
+  // bad file in a multi-file drop doesn't lose the rest, and the panel opens so
+  // the outcome — including failures — is visible rather than silent.
+  const takeFiles = useCallback(
+    async (files: File[]) => {
+      const result = await importFiles(files);
+      imported.add(result.files);
+      setInteropOpen(true);
+      if (result.items.length) frameAll();
+    },
+    [imported, frameAll],
+  );
+  const { dragging } = useFileDrop((files) => void takeFiles(files));
+  // Imported items have no scene, so no memory pin represents them — the
+  // renderer needs to know not to filter their CZML away.
+  const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
+
+  // Drawing. The controller owns rendering for what it draws (its own
+  // CustomDataSource), which is why `draw.items` are merged into the story for
+  // *export* only — feeding them through the story's CZML as well would draw
+  // every shape twice, z-fighting two coincident surfaces and giving each two
+  // pick targets.
+  const draw = useAuthoring(viewer, {
+    story: loadedStory,
+    enabled: drawing,
+    onSelect: (sel) => {
+      if (sel?.kind === 'memory') setFocusedId(sel.id);
+      else if (sel?.kind === 'place') setFocusedPlace(places.find((p) => p.id === sel.id) ?? null);
+    },
+  });
+
+  /** What leaves the app: everything on the globe, drawn shapes included. */
+  const exportStory = useMemo(
+    // `story` is still nullable here — the loading/error guards sit below.
+    () => (story && draw.items.length ? mergeAuthoredItems(story, draw.items) : story),
+    [story, draw.items],
+  );
+
+  // Stepping through authored scenes. The presenter owns the deck and the
+  // keyboard; the camera and the clock stay here, because they belong to the
+  // renderer this component owns.
+  const presentScene = useCallback(
+    (slide: DeckSlide) => {
+      pause(); // a presentation is stepped, not played
+      if (slide.timeMs != null) scrub(slide.timeMs);
+      setFocusedId(slide.id);
+      // Claim the fly so the playback fly-through doesn't re-fly this scene
+      // from under the presenter a frame later.
+      flownToRef.current = slide.id;
+      if (!viewer || viewer.isDestroyed() || !slide.camera) return;
+      const { lon, lat, height, heading, pitch, roll, range } = slide.camera;
+      const duration = slide.transition.durationMs / 1000; // already 0 for a cut
+      if (range != null) {
+        void viewer.camera.flyToBoundingSphere(
+          new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat, height ?? 0), 1),
+          {
+            duration,
+            offset: new Cesium.HeadingPitchRange(
+              Cesium.Math.toRadians(heading ?? 0),
+              Cesium.Math.toRadians(pitch ?? -35),
+              range,
+            ),
+          },
+        );
+        return;
+      }
+      void viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(lon, lat, height ?? 1_800_000),
+        orientation: {
+          heading: Cesium.Math.toRadians(heading ?? 0),
+          pitch: Cesium.Math.toRadians(pitch ?? -90),
+          roll: Cesium.Math.toRadians(roll ?? 0),
+        },
+        duration,
+      });
+    },
+    [viewer, pause, scrub],
+  );
 
   if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
   if (error || !model || !story) {
@@ -518,6 +625,12 @@ export function AtlasApp() {
         // Count what the drawer can actually show, so the badge can never claim
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
+        onPresent={() => setPresenting(true)}
+        onDraw={() => setDrawing((d) => !d)}
+        drawing={drawing}
+        onInterop={() => setInteropOpen((o) => !o)}
+        canPresent={(story.scenes?.length ?? 0) > 0}
+        importedCount={imported.items.length}
       />
       <TopBar
         onSearch={() => setPaletteOpen(true)}
@@ -538,6 +651,7 @@ export function AtlasApp() {
             onToggleBuildings={() => setBuildings((v) => !v)}
             onToggle={() => setLayersOpen((o) => !o)}
             onClose={() => setLayersOpen(false)}
+            layers={layerControl}
           />
         )}
       />
@@ -551,10 +665,13 @@ export function AtlasApp() {
           sunLighting={sunLighting}
           buildings={buildings}
           onViewer={setViewer}
-          onPick={inspect}
+          onPick={draw.mode === 'idle' ? inspect : undefined}
           onPickPlace={setFocusedPlace}
           onHover={setHoveredId}
           onInteract={pause}
+          layers={layerControl.layers}
+          timeMs={currentMs || model.timeline.startMs}
+          extraItemIds={importedIds}
         />
         {(
           <div className="atlas-overlay">
@@ -625,6 +742,26 @@ export function AtlasApp() {
         onSelect={(m) => { inspect(m); closePalette(); }}
       />
       <Lightbox memory={lightbox} onClose={closeLightbox} />
+      <AuthoringToolbar {...draw.toolbarProps} />
+      <InteropPanel
+        open={interopOpen}
+        onClose={closeInterop}
+        story={exportStory}
+        files={imported.files}
+        onImported={imported.add}
+        onRemoveFile={imported.removeFile}
+        onClearImported={imported.clear}
+        onFrameImported={frameAll}
+      />
+      <Presenter
+        story={story}
+        open={presenting}
+        onExit={exitPresent}
+        onSceneEnter={presentScene}
+        initialSceneId={focused?.id ?? null}
+        reduceMotion={reduceMotion}
+      />
+      <DropOverlay visible={dragging} />
     </div>
   );
 }
