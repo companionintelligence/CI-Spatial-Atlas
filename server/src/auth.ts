@@ -18,6 +18,26 @@
  *
  * Leaving COMPANION_OIDC_ISSUER empty disables auth for local dev (single dev
  * subject with `*` scope). This is the real verifier — not a decode-only stub.
+ *
+ * ── Authorisation ─────────────────────────────────────────────────────────
+ * Verification answers *who is calling*; these three predicates answer *what
+ * they may do*. Ownership is the primitive: a story's owner is
+ * `access.oidcSubject`, set from the verified subject at create time.
+ *
+ *   isAuthenticated(ctx)      ctx is a verified subject, not the ANONYMOUS
+ *                             fallback. Every mutating route and MCP tool
+ *                             gates on this first → 401 / "unauthenticated".
+ *   canRead(vis, owner, ctx)  public/unlisted are world-readable (the viewer
+ *                             fetches them unauthenticated); private needs the
+ *                             owner or `*`.
+ *   canWrite(owner, ctx)      mutate/delete: the owner, or `*`. An *ownerless*
+ *                             story (no `access.oidcSubject`) is writable only
+ *                             by `*` — fail closed, since we cannot attribute it.
+ *
+ * `*` is the only scope honoured today. Portal's own scope vocabulary is not
+ * yet defined anywhere Atlas can see, so mapping Portal scopes onto Atlas
+ * operations is a deliberate follow-up rather than invented here; ownership
+ * carries the model in the meantime. See docs/architecture.md §13.
  */
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey, type KeyLike } from 'jose';
 
@@ -81,13 +101,30 @@ export async function verifyToken(
     issuer: cfg.issuer,
     audience: cfg.audience,
   });
+  // A token without a usable `sub` cannot be authorised: `String(undefined)`
+  // would mint the literal subject "undefined", which could then own stories.
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    throw new Error('token has no subject (sub) claim');
+  }
+  if (payload.sub === ANONYMOUS.subject) {
+    throw new Error(`token subject may not be the reserved "${ANONYMOUS.subject}" name`);
+  }
   const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : [];
   return {
-    subject: String(payload.sub),
+    subject: payload.sub,
     scopes,
     token,
     email: typeof payload.email === 'string' ? payload.email : undefined,
   };
+}
+
+/**
+ * The single, fully-scoped local subject used where the *process* is the trust
+ * boundary rather than a bearer token: the dev bypass (no issuer configured)
+ * and the stdio MCP transport, which has no HTTP request to carry a token.
+ */
+export function devSubjectContext(token = '', env: NodeJS.ProcessEnv = process.env): AuthContext {
+  return { subject: env.ATLAS_DEV_SUBJECT ?? 'dev-operator', scopes: ['*'], token };
 }
 
 /** Verify an `Authorization: Bearer …` header and return its auth context. */
@@ -97,7 +134,7 @@ export async function verifyBearer(authorization?: string): Promise<AuthContext>
 
   if (!cfg) {
     // Auth disabled for local/dev — everything runs as a single dev subject.
-    return { subject: process.env.ATLAS_DEV_SUBJECT ?? 'dev-operator', scopes: ['*'], token };
+    return devSubjectContext(token);
   }
   if (!token) return ANONYMOUS;
 
@@ -109,8 +146,34 @@ export async function verifyBearer(authorization?: string): Promise<AuthContext>
   }
 }
 
+/**
+ * True when the context carries a verified subject rather than the ANONYMOUS
+ * fallback `verifyBearer` returns for a missing or unverifiable token.
+ *
+ * Reads may run anonymously (see `canRead`); writes must not. Gate every
+ * mutating route and MCP tool on this so an unauthenticated write fails loudly
+ * instead of silently succeeding as a story owned by `anonymous`.
+ */
+export function isAuthenticated(ctx: AuthContext): boolean {
+  return ctx.subject.length > 0 && ctx.subject !== ANONYMOUS.subject;
+}
+
 /** True when the story is readable by the given auth context. */
 export function canRead(visibility: string | undefined, owner: string | undefined, ctx: AuthContext): boolean {
   if (visibility === 'public' || visibility === 'unlisted') return true;
+  if (!isAuthenticated(ctx)) return false;
   return owner === ctx.subject || ctx.scopes.includes('*');
+}
+
+/**
+ * True when the context may mutate or delete a story owned by `owner`.
+ *
+ * Fails closed on an *ownerless* story (`access.oidcSubject` unset, as stories
+ * created before ownership was recorded are): with nobody to compare against,
+ * only a `*`-scoped subject may write it.
+ */
+export function canWrite(owner: string | undefined, ctx: AuthContext): boolean {
+  if (!isAuthenticated(ctx)) return false;
+  if (ctx.scopes.includes('*')) return true;
+  return owner !== undefined && owner === ctx.subject;
 }
