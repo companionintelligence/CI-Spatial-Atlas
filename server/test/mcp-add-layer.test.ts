@@ -8,14 +8,25 @@
  * tool over a real MCP client/transport pair, so they cover the JSON-Schema
  * round-trip of the tool inputs as well as the handler.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
+import type { AuthContext } from '../src/auth.js';
 import { createAtlasMcpServer } from '../src/mcp.js';
 import { createConnectors } from '../src/connectors.js';
 import { InMemoryStore } from '../src/store.js';
 import { Layer } from '../src/schema.js';
+
+/** Tool authorisation is `mcp-authz.test.ts`'s subject; here we just need a
+ *  caller who owns the story, so the field pass-through is what is under test. */
+const AUTHOR: AuthContext = { subject: 'user_author', scopes: [], token: 'tok-author' };
+
+const open: Array<() => Promise<void>> = [];
+
+afterEach(async () => {
+  for (const close of open.splice(0)) await close();
+});
 
 async function connect() {
   const store = new InMemoryStore();
@@ -24,10 +35,15 @@ async function connect() {
     connectors: createConnectors(),
     viewerBaseUrl: 'https://atlas.test',
     apiBaseUrl: 'https://atlas.test/api',
+    auth: AUTHOR,
   });
   const client = new Client({ name: 'test', version: '0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  open.push(async () => {
+    await client.close();
+    await server.close();
+  });
   return { client, store };
 }
 

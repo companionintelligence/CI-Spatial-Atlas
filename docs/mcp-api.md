@@ -31,6 +31,27 @@ for a sequence diagram of the automatic recipe below end to end.
   } }
   ```
 
+## Authorisation
+
+Tools are scoped to the caller's verified OIDC subject (see
+[`server/src/auth.ts`](../server/src/auth.ts)). Over Streamable HTTP the bearer
+token on the `POST /mcp` request supplies that subject; over stdio the local
+process is the trust boundary and tools run as the `*`-scoped dev subject.
+
+- **Writes** (`atlas_create_story`, `atlas_ingest_media`, `atlas_add_scene`,
+  `atlas_set_timeline`, `atlas_add_layer`, `atlas_auto_compose`,
+  `atlas_publish_story`) need a verified subject, and the story must be one the
+  caller owns — otherwise the tool returns an error result
+  (`Unauthenticated: …` / `Forbidden: …`) rather than acting.
+- `atlas_create_story` records the caller as the owner. The `author` input is a
+  display name only; it does not confer ownership.
+- **Reads** (`atlas_get_story`, `atlas_list_stories`, the `story://{id}`
+  resource) follow story visibility: `public`/`unlisted` are readable by
+  anyone, `private` only by its owner. `atlas_list_stories` filters to what the
+  caller may read.
+- `atlas_query_memory` and `atlas_get_job` need a verified subject; a job is
+  readable by whoever may read its story.
+
 ## Tools
 
 | Tool | Purpose | Key inputs |
@@ -47,7 +68,7 @@ for a sequence diagram of the automatic recipe below end to end.
 | `atlas_list_stories` | List stories | — |
 | `atlas_publish_story` | Publish; returns a shareable viewer URL; writes back to memory / notifies Hermes | `storyId`, `visibility?`, `notify?` |
 
-Resource: `story://{id}` returns the story JSON.
+Resource: `story://{id}` returns the story JSON, subject to the same read rules.
 
 `atlas_add_layer`'s `attribution` (`{ text, licence?, url?, onScreen? }`) is the
 source credit the layer's licence requires — OpenStreetMap (ODbL), EOX and

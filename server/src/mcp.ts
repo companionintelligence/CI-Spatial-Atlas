@@ -10,6 +10,14 @@
  *   - stdio              — for local agents and `claude mcp add`.
  *   - Streamable HTTP    — for suite services, authenticated with Companion OIDC.
  *
+ * Authorisation: `AtlasDeps.auth` carries the caller's verified `AuthContext`,
+ * and every tool below is scoped by it — the same ownership model the REST API
+ * enforces (see auth.ts). Over HTTP, index.ts builds a fresh server per request
+ * with that request's `req.auth`; over stdio the local process is the trust
+ * boundary, so mcp-stdio.ts passes the fully-scoped dev subject. Tools that
+ * write require a verified subject; reads honour `canRead`, which keeps
+ * public/unlisted stories fetchable.
+ *
  * Tools:
  *   atlas_create_story      create an empty story
  *   atlas_query_memory      pull geotagged memories from CI-Server to seed one
@@ -24,14 +32,15 @@
  *   atlas_publish_story     publish and return a shareable viewer URL
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import { canRead, canWrite, isAuthenticated, type AuthContext } from './auth.js';
 import { sceneInstantFromTime } from './compose.js';
 import type { SuiteConnectors } from './connectors.js';
 import { ingest, reconstruct } from './pipeline.js';
 import { LayerAttribution, LayerFormat } from './schema.js';
-import type { Layer, MediaItem, Scene } from './schema.js';
+import type { Layer, MediaItem, Scene, Story } from './schema.js';
 import type { JobStore, StoryStore } from './store.js';
 
 export interface AtlasDeps {
@@ -41,6 +50,13 @@ export interface AtlasDeps {
   viewerBaseUrl: string;
   /** Base URL where story JSON is served, e.g. https://atlas.ci.computer/api. */
   apiBaseUrl: string;
+  /**
+   * The caller this server instance acts for. Over Streamable HTTP this is the
+   * request's verified `req.auth`, so a server is built per request; over stdio
+   * it is the local dev subject. Tools are scoped by it — without this every
+   * tool ran unscoped, whoever called.
+   */
+  auth: AuthContext;
 }
 
 function ok(data: unknown) {
@@ -51,9 +67,26 @@ function err(message: string) {
   return { isError: true, content: [{ type: 'text' as const, text: message }] };
 }
 
+const UNAUTHENTICATED =
+  'Unauthenticated: this tool needs a verified Companion OIDC subject. Send a valid bearer token.';
+
+const forbidden = (storyId: string) => err(`Forbidden: story ${storyId} does not belong to you.`);
+
 export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
-  const { store, connectors, viewerBaseUrl, apiBaseUrl } = deps;
+  const { store, connectors, viewerBaseUrl, apiBaseUrl, auth } = deps;
   const server = new McpServer({ name: 'companion-atlas', version: '0.1.0' });
+
+  /**
+   * Load a story this caller may modify, or the refusal to return in its place.
+   * Mirrors the REST API's not_found-then-forbidden ordering.
+   */
+  async function writable(storyId: string): Promise<{ story: Story } | { refusal: ReturnType<typeof err> }> {
+    if (!isAuthenticated(auth)) return { refusal: err(UNAUTHENTICATED) };
+    const story = await store.getStory(storyId);
+    if (!story) return { refusal: err(`No such story: ${storyId}`) };
+    if (!canWrite(story.access?.oidcSubject, auth)) return { refusal: forbidden(storyId) };
+    return { story };
+  }
 
   server.registerTool(
     'atlas_create_story',
@@ -67,7 +100,15 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async ({ title, description, author }) => {
-      const story = await store.createStory({ title, description, author });
+      if (!isAuthenticated(auth)) return err(UNAUTHENTICATED);
+      const story = await store.createStory({
+        title,
+        description,
+        author: author ?? auth.subject,
+        // Ownership comes from the verified subject, never the `author` string
+        // a caller supplies — that is a display name, not an identity.
+        access: { visibility: 'private', oidcSubject: auth.subject }
+      });
       return ok({ storyId: story.id, story });
     }
   );
@@ -86,7 +127,9 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async (q) => {
-      const refs = await connectors.memory.query(q);
+      if (!isAuthenticated(auth)) return err(UNAUTHENTICATED);
+      // Query CI-Server as the caller, not as the service account.
+      const refs = await connectors.memory.query(q, auth.token);
       return ok({ count: refs.length, memories: refs, configured: connectors.memory.configured });
     }
   );
@@ -105,8 +148,8 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async ({ storyId, sources, reconstruct: backend, defaultLocation }) => {
-      const story = await store.getStory(storyId);
-      if (!story) return err(`No such story: ${storyId}`);
+      const gate = await writable(storyId);
+      if ('refusal' in gate) return gate.refusal;
 
       const { media } = await ingest({ sources, hints: { defaultLocation } });
       for (const m of media) await store.addMedia(storyId, m);
@@ -128,8 +171,16 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       inputSchema: { jobId: z.string() }
     },
     async ({ jobId }) => {
+      if (!isAuthenticated(auth)) return err(UNAUTHENTICATED);
       const job = await store.get(jobId);
-      return job ? ok(job) : err(`No such job: ${jobId}`);
+      if (!job) return err(`No such job: ${jobId}`);
+      if (job.storyId) {
+        const story = await store.getStory(job.storyId);
+        if (story && !canRead(story.access?.visibility, story.access?.oidcSubject, auth)) {
+          return forbidden(job.storyId);
+        }
+      }
+      return ok(job);
     }
   );
 
@@ -157,6 +208,8 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async ({ storyId, title, narrative, time, camera, mediaIds }) => {
+      const gate = await writable(storyId);
+      if ('refusal' in gate) return gate.refusal;
       const scene: Scene = {
         id: `scene_${Date.now()}`,
         title,
@@ -187,8 +240,9 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async ({ storyId, start, stop, multiplier, loop }) => {
-      const existing = await store.getStory(storyId);
-      if (!existing) return err(`No such story: ${storyId}`);
+      const gate = await writable(storyId);
+      if ('refusal' in gate) return gate.refusal;
+      const existing = gate.story;
       // Merge, don't replace. `multiplier`/`loop` are optional, so retiming a
       // story without restating them used to write `undefined` over whatever an
       // earlier tool call authored — an agent that set loop, then adjusted the
@@ -226,8 +280,9 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async ({ storyId, kind, name, uri, format, attribution, availability, opacity, visible, order }) => {
-      const story = await store.getStory(storyId);
-      if (!story) return err(`No such story: ${storyId}`);
+      const gate = await writable(storyId);
+      if ('refusal' in gate) return gate.refusal;
+      const story = gate.story;
       const layer: Layer = {
         id: `layer_${Date.now()}`,
         kind,
@@ -254,8 +309,9 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       inputSchema: { storyId: z.string() }
     },
     async ({ storyId }) => {
-      const story = await store.getStory(storyId);
-      if (!story) return err(`No such story: ${storyId}`);
+      const gate = await writable(storyId);
+      if ('refusal' in gate) return gate.refusal;
+      const story = gate.story;
 
       const located = story.media.filter((m): m is MediaItem & { location: NonNullable<MediaItem['location']> } => !!m.location);
       if (located.length === 0) return err('No geolocated media to compose. Ingest media with GPS first.');
@@ -292,7 +348,9 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
     },
     async ({ storyId }) => {
       const story = await store.getStory(storyId);
-      return story ? ok(story) : err(`No such story: ${storyId}`);
+      if (!story) return err(`No such story: ${storyId}`);
+      if (!canRead(story.access?.visibility, story.access?.oidcSubject, auth)) return forbidden(storyId);
+      return ok(story);
     }
   );
 
@@ -301,7 +359,11 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
     { title: 'List stories', description: 'List all stories (id + title + scene count).', inputSchema: {} },
     async () => {
       const stories = await store.listStories();
-      return ok(stories.map((s) => ({ id: s.id, title: s.title, scenes: s.scenes.length, updatedAt: s.updatedAt })));
+      return ok(
+        stories
+          .filter((s) => canRead(s.access?.visibility, s.access?.oidcSubject, auth))
+          .map((s) => ({ id: s.id, title: s.title, scenes: s.scenes.length, updatedAt: s.updatedAt }))
+      );
     }
   );
 
@@ -318,13 +380,22 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
       }
     },
     async ({ storyId, visibility, notify }) => {
-      const story = await store.updateStory(storyId, { access: { visibility: visibility ?? 'unlisted' } });
+      const gate = await writable(storyId);
+      if ('refusal' in gate) return gate.refusal;
+
+      // Publishing changes visibility, not ownership.
+      const story = await store.updateStory(storyId, {
+        access: {
+          visibility: visibility ?? 'unlisted',
+          oidcSubject: gate.story.access?.oidcSubject ?? auth.subject
+        }
+      });
       if (!story) return err(`No such story: ${storyId}`);
 
       const storyJsonUrl = `${apiBaseUrl}/public/stories/${storyId}`;
       const viewerUrl = `${viewerBaseUrl}/?story=${encodeURIComponent(storyJsonUrl)}`;
 
-      await connectors.memory.saveStory(storyId, viewerUrl);
+      await connectors.memory.saveStory(storyId, viewerUrl, auth.token);
       await connectors.openclaw.notifyStoryReady(storyId, viewerUrl);
       if (notify) await connectors.hermes.deliver(viewerUrl, notify);
 
@@ -332,15 +403,20 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
     }
   );
 
-  // Read a story as an MCP resource: story://<id>
+  // Read a story as an MCP resource: story://<id>. This must be a
+  // `ResourceTemplate` — passing the string 'story://{id}' registers a *fixed*
+  // resource at that literal URI, so no real `story://<id>` ever matched it.
   server.registerResource(
     'story',
-    'story://{id}',
+    new ResourceTemplate('story://{id}', { list: undefined }),
     { title: 'Atlas story', description: 'A companion.atlas/story@1 document.' },
-    async (uri: URL) => {
-      const id = uri.pathname.replace(/^\/+/, '') || uri.hostname;
+    async (uri: URL, variables) => {
+      const id = String(variables.id ?? '');
       const story = await store.getStory(id);
       if (!story) throw new Error(`No such story: ${id}`);
+      if (!canRead(story.access?.visibility, story.access?.oidcSubject, auth)) {
+        throw new Error(`Forbidden: story ${id} does not belong to you.`);
+      }
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(story, null, 2) }] };
     }
   );

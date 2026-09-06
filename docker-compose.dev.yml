@@ -21,6 +21,11 @@ services:
     env_file: [.env.dev]
     environment:
       PORT: '8787'
+      # This image is built from server/Dockerfile, whose runtime stage sets
+      # NODE_ENV=production — so in MOCK mode (no COMPANION_OIDC_ISSUER) the
+      # startup guard in server/src/auth.ts would refuse to boot. Opt in
+      # explicitly: this is a developer machine, not a deployment.
+      ATLAS_ALLOW_DEV_AUTH: '1'
       DATABASE_URL: postgres://atlas:atlas@postgres:5432/atlas
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
