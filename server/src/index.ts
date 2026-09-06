@@ -9,15 +9,15 @@
 
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
-import { buildApi } from './api.js';
+import { buildApi, type ApiDeps } from './api.js';
 import { createConnectors } from './connectors.js';
-import { createAtlasMcpServer, type AtlasDeps } from './mcp.js';
+import { createAtlasMcpServer } from './mcp.js';
 import { InMemoryStore } from './store.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '0.0.0.0';
 
-const deps: AtlasDeps = {
+const deps: ApiDeps = {
   store: new InMemoryStore(),
   connectors: createConnectors(),
   viewerBaseUrl: process.env.ATLAS_VIEWER_BASE_URL ?? 'http://localhost:4173',
@@ -26,9 +26,11 @@ const deps: AtlasDeps = {
 
 const app = buildApi(deps);
 
-// Mount the MCP API over Streamable HTTP (stateless).
+// Mount the MCP API over Streamable HTTP (stateless). The global auth
+// preHandler in buildApi() has already populated `req.auth`, so each
+// per-request MCP server is built scoped to the caller rather than unscoped.
 app.post('/mcp', async (req, reply) => {
-  const server = createAtlasMcpServer(deps);
+  const server = createAtlasMcpServer({ ...deps, auth: req.auth });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   reply.hijack();
   reply.raw.on('close', () => {

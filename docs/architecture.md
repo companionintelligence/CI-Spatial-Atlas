@@ -450,25 +450,30 @@ only orchestrates — the heavy native tools are not npm dependencies.
 
 ### 10.3 REST endpoints (`server/src/api.ts`)
 
-All routes except `GET /healthz` and `GET /api/public/stories/:id` require a
-Companion OIDC bearer token once `COMPANION_OIDC_ISSUER` is set (see
-[`server/src/auth.ts`](../server/src/auth.ts)); with no issuer configured,
-every request runs as a single dev subject.
+`GET /healthz` and `GET /api/public/stories/:id` are unauthenticated — the
+latter is what lets the viewer load a shared story from a `?story=` URL. The
+two list/fetch routes below are reachable without a token but return only what
+`canRead` allows. **Every mutating route requires a verified subject** (401
+otherwise) **and is scoped to the story's owner** (403 otherwise); see
+[`server/src/auth.ts`](../server/src/auth.ts). With `COMPANION_OIDC_ISSUER`
+unset, every request instead runs as a single `*`-scoped dev subject — local
+development only, and currently unguarded (see
+[§13](#13-known-gaps--deliberately-out-of-scope-today)).
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/healthz` | Liveness check |
 | `GET` | `/api/public/stories/:id` | **Public** — the story JSON the viewer's `?story=` loader fetches |
-| `GET` | `/api/stories` | List stories visible to the caller |
-| `POST` | `/api/stories` | Create a story |
-| `GET` | `/api/stories/:id` | Fetch a story (visibility-checked) |
-| `DELETE` | `/api/stories/:id` | Delete a story |
-| `POST` | `/api/stories/:id/media` | Ingest media (+ optional `reconstruct` job) |
-| `POST` | `/api/stories/:id/scenes` | Append a scene |
-| `POST` | `/api/stories/:id/compose` | Auto-sequence located media into scenes |
-| `POST` | `/api/stories/:id/publish` | Set visibility, write back to memory, notify OpenClaw/Hermes |
-| `GET` | `/api/jobs/:id` | Poll an ingest/reconstruct/tile job |
-| `POST` | `/mcp` | MCP over Streamable HTTP (stateless — one server+transport per request) |
+| `GET` | `/api/stories` | List stories visible to the caller (`canRead`-filtered) |
+| `POST` | `/api/stories` | Create a story — **auth required**; the verified subject becomes the owner |
+| `GET` | `/api/stories/:id` | Fetch a story (`canRead`) |
+| `DELETE` | `/api/stories/:id` | Delete a story — **auth + owner** |
+| `POST` | `/api/stories/:id/media` | Ingest media (+ optional `reconstruct` job) — **auth + owner** |
+| `POST` | `/api/stories/:id/scenes` | Append a scene — **auth + owner** |
+| `POST` | `/api/stories/:id/compose` | Auto-sequence located media into scenes — **auth + owner** |
+| `POST` | `/api/stories/:id/publish` | Set visibility, write back to memory, notify OpenClaw/Hermes — **auth + owner**; does not transfer ownership |
+| `GET` | `/api/jobs/:id` | Poll an ingest/reconstruct/tile job — **auth**, scoped to its story's readers |
+| `POST` | `/mcp` | MCP over Streamable HTTP (stateless — one server+transport per request, built with that request's `AuthContext`, so tools are scoped to the caller) |
 
 ### 10.4 Suite connectors (`server/src/connectors.ts`)
 
@@ -616,17 +621,24 @@ docker compose --profile gpu up worker                     # + reconstruction
 
 ## 13. Known gaps / deliberately out of scope today
 
-- **Auth does not verify signatures — at all, not just when unconfigured.**
-  With `COMPANION_OIDC_ISSUER` unset, the server treats every request as one
-  dev subject (`ATLAS_DEV_SUBJECT`), which is intentional for local
-  development. But even *with* an issuer configured, `verifyBearer()` in
-  `server/src/auth.ts` only base64url-decodes the JWT payload and trusts
-  whatever `sub` claim is present — it never checks the signature, issuer, or
-  expiry. Any client can forge a token with an arbitrary `sub` and read that
-  subject's private stories. The source comments already flag this ("DO NOT
-  ship it as-is"; `jose`/`openid-client` are declared as dependencies but
-  never imported), but it's worth stating plainly here too: this is not
-  production-ready auth in either configuration state.
+- **Auth: verification and authorisation are both real now; two gaps remain.**
+  `verifyBearer()` in [`server/src/auth.ts`](../server/src/auth.ts) does a real
+  `jose.jwtVerify` against the issuer's JWKS, enforcing signature, issuer,
+  audience, expiry and a usable `sub`. Authorisation is enforced on top of it:
+  every mutating REST route and every MCP tool requires a verified subject
+  (401 / "Unauthenticated" otherwise) and is scoped to the story's owner
+  (`access.oidcSubject`) via `canWrite`, while reads stay open to
+  public/unlisted stories via `canRead`. What is still outstanding:
+  - **Portal scopes are parsed but not mapped.** `*` is the only scope
+    honoured; ownership carries the model. Mapping CI-Portal's scope
+    vocabulary onto Atlas operations is a deliberate follow-up — that
+    vocabulary isn't defined anywhere Atlas can see yet, so a mapping written
+    today would be invented rather than agreed.
+  - **The dev bypass has no deployment guard.** With `COMPANION_OIDC_ISSUER`
+    unset, every request runs as a single `ATLAS_DEV_SUBJECT` holding `*`
+    scope — intentional locally, but nothing stops a deployment from booting
+    that way and handing every caller full scope. A startup check that refuses
+    the bypass outside development is not yet implemented.
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all
   data on restart — see [`REIMAGINE.md` Phase 1](../REIMAGINE.md#8-migration-roadmap)
   for the Postgres/Redis/MinIO migration.
