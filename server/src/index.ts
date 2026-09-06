@@ -5,14 +5,30 @@
  * (stateless: a fresh server + transport per request). Suite services
  * (OpenClaw, Hermes) and OIDC-authenticated clients connect here; local agents
  * use the stdio entry in mcp-stdio.ts instead.
+ *
+ * Because this entry point is the one reachable over the network, it is also
+ * where the dev auth bypass is fenced off: `assertAuthSafeToBoot()` runs before
+ * anything binds a port.
  */
 
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 import { buildApi, type ApiDeps } from './api.js';
+import { assertAuthSafeToBoot } from './auth.js';
 import { createConnectors } from './connectors.js';
 import { createAtlasMcpServer } from './mcp.js';
 import { InMemoryStore } from './store.js';
+
+// Fail fast, before the port is bound: an issuer-less deployment would serve
+// every caller as the fully-scoped dev subject. Exiting non-zero (rather than
+// throwing) keeps the remedy readable in container logs instead of burying it
+// under an unhandled-rejection stack trace.
+try {
+  assertAuthSafeToBoot();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+}
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '0.0.0.0';

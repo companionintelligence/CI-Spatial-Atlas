@@ -27,6 +27,13 @@ cd viewer-react && npm install && npm run dev    # :4174
 The API runs every request as `ATLAS_DEV_SUBJECT` with `*` scope (auth disabled);
 memory queries return nothing. Good for UI/renderer work.
 
+Because that bypass would give any caller full ownership of every story, the
+server refuses to boot into it unless the environment says it is not a
+deployment. The `dev` tasks set `NODE_ENV=development` and
+`docker-compose.dev.yml` sets `ATLAS_ALLOW_DEV_AUTH=1`, so the command above
+just works; if you start the API some other way and it exits with "Refusing to
+start", set `ATLAS_ALLOW_DEV_AUTH=1` (see `.env.dev.example`).
+
 **Mode B — CONNECTED (real Portal + CI-Server)** 🟡
 Set in `.env.dev`:
 ```sh
