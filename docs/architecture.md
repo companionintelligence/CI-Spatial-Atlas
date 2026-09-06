@@ -267,25 +267,30 @@ only orchestrates — the heavy native tools are not npm dependencies.
 
 ### 6.3 REST endpoints (`server/src/api.ts`)
 
-All routes except `GET /healthz` and `GET /api/public/stories/:id` require a
-Companion OIDC bearer token once `COMPANION_OIDC_ISSUER` is set (see
-[`server/src/auth.ts`](../server/src/auth.ts)); with no issuer configured,
-every request runs as a single dev subject.
+`GET /healthz` and `GET /api/public/stories/:id` are unauthenticated — the
+latter is what lets the viewer load a shared story from a `?story=` URL. The
+two list/fetch routes below are reachable without a token but return only what
+`canRead` allows. **Every mutating route requires a verified subject** (401
+otherwise) **and is scoped to the story's owner** (403 otherwise); see
+[`server/src/auth.ts`](../server/src/auth.ts). With `COMPANION_OIDC_ISSUER`
+unset, every request instead runs as a single `*`-scoped dev subject — local
+development only, and currently unguarded (see
+[§13](#13-known-gaps--deliberately-out-of-scope-today)).
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/healthz` | Liveness check |
 | `GET` | `/api/public/stories/:id` | **Public** — the story JSON the viewer's `?story=` loader fetches |
-| `GET` | `/api/stories` | List stories visible to the caller |
-| `POST` | `/api/stories` | Create a story |
-| `GET` | `/api/stories/:id` | Fetch a story (visibility-checked) |
-| `DELETE` | `/api/stories/:id` | Delete a story |
-| `POST` | `/api/stories/:id/media` | Ingest media (+ optional `reconstruct` job) |
-| `POST` | `/api/stories/:id/scenes` | Append a scene |
-| `POST` | `/api/stories/:id/compose` | Auto-sequence located media into scenes |
-| `POST` | `/api/stories/:id/publish` | Set visibility, write back to memory, notify OpenClaw/Hermes |
-| `GET` | `/api/jobs/:id` | Poll an ingest/reconstruct/tile job |
-| `POST` | `/mcp` | MCP over Streamable HTTP (stateless — one server+transport per request) |
+| `GET` | `/api/stories` | List stories visible to the caller (`canRead`-filtered) |
+| `POST` | `/api/stories` | Create a story — **auth required**; the verified subject becomes the owner |
+| `GET` | `/api/stories/:id` | Fetch a story (`canRead`) |
+| `DELETE` | `/api/stories/:id` | Delete a story — **auth + owner** |
+| `POST` | `/api/stories/:id/media` | Ingest media (+ optional `reconstruct` job) — **auth + owner** |
+| `POST` | `/api/stories/:id/scenes` | Append a scene — **auth + owner** |
+| `POST` | `/api/stories/:id/compose` | Auto-sequence located media into scenes — **auth + owner** |
+| `POST` | `/api/stories/:id/publish` | Set visibility, write back to memory, notify OpenClaw/Hermes — **auth + owner**; does not transfer ownership |
+| `GET` | `/api/jobs/:id` | Poll an ingest/reconstruct/tile job — **auth**, scoped to its story's readers |
+| `POST` | `/mcp` | MCP over Streamable HTTP (stateless — one server+transport per request, built with that request's `AuthContext`, so tools are scoped to the caller) |
 
 ### 6.4 Suite connectors (`server/src/connectors.ts`)
 
@@ -382,24 +387,30 @@ stores and API in containers, the viewer on the host for HMR.
   clock, masked dynamic regions, tolerant `maxDiffPixelRatio`) is open work
   from [`docs/CONSOLIDATION.md`](CONSOLIDATION.md). `viewer-react/tests/` holds
   Playwright *capture* scripts (video for docs/review), not assertions.
-- **Bearer tokens are verified; authorisation is the hole.** `verifyBearer()` in
-  `server/src/auth.ts` does real `jose.jwtVerify` against the issuer's JWKS and
-  enforces issuer, audience, expiry, an algorithm allowlist and required claims;
-  with no `COMPANION_OIDC_ISSUER` it runs every request as `ATLAS_DEV_SUBJECT`,
-  and the server now refuses to start in that mode in a deployed environment.
-  What is *not* done is using the result:
-  - `DELETE /api/stories/:id` performs **no authorisation check at all** — it
-    does not load the story, check ownership, or require a subject. Any caller
-    can delete any story by id.
-  - The mutating routes in `server/src/api.ts` never require an *authenticated*
-    subject. An invalid or absent token degrades to anonymous rather than 401,
-    so an unauthenticated caller can `POST /api/stories` and own the result as
-    `anonymous`.
-  - `POST /mcp` populates `req.auth` like every other route, but
-    `server/src/mcp.ts` never reads it — every MCP tool runs unscoped
-    regardless of who called. This is the largest of the three.
-  - Scope claims are parsed but only `*` is honoured; Portal scopes are not
-    mapped onto Atlas operations.
+- **Auth: verification and authorisation are both real now; one gap remains.**
+  `verifyBearer()` in [`server/src/auth.ts`](../server/src/auth.ts) does a real
+  `jose.jwtVerify` against the issuer's JWKS, enforcing signature, issuer,
+  audience, expiry and a usable `sub`. Authorisation is enforced on top of it:
+  every mutating REST route and every MCP tool requires a verified subject
+  (401 / "Unauthenticated" otherwise) and is scoped to the story's owner
+  (`access.oidcSubject`) via `canWrite`, while reads stay open to
+  public/unlisted stories via `canRead`. The dev bypass is now fenced off from
+  deployments: `assertAuthSafeToBoot()` runs in
+  [`server/src/index.ts`](../server/src/index.ts) before the port is bound and
+  exits non-zero if `COMPANION_OIDC_ISSUER` is unset *and* the environment has
+  not identified itself as non-deployed — `NODE_ENV=development`/`test`, or an
+  explicit `ATLAS_ALLOW_DEV_AUTH=1`. The allowlist is deliberate: gating on
+  `NODE_ENV === 'production'` alone would fail open on an unset `NODE_ENV`,
+  which is the likeliest shape of the misconfiguration, so absence of proof is
+  treated as deployed. The stdio MCP entry
+  ([`server/src/mcp-stdio.ts`](../server/src/mcp-stdio.ts)) is exempt by design —
+  there the local process is the trust boundary and the store is per-process.
+  What is still outstanding:
+  - **Portal scopes are parsed but not mapped.** `*` is the only scope
+    honoured; ownership carries the model. Mapping CI-Portal's scope
+    vocabulary onto Atlas operations is a deliberate follow-up — that
+    vocabulary isn't defined anywhere Atlas can see yet, so a mapping written
+    today would be invented rather than agreed.
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all
   data on restart — see [`REIMAGINE.md` Phase 1](../REIMAGINE.md#8-migration-roadmap)
   for the Postgres/Redis/MinIO migration.

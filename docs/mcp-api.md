@@ -31,6 +31,27 @@ for a sequence diagram of the automatic recipe below end to end.
   } }
   ```
 
+## Authorisation
+
+Tools are scoped to the caller's verified OIDC subject (see
+[`server/src/auth.ts`](../server/src/auth.ts)). Over Streamable HTTP the bearer
+token on the `POST /mcp` request supplies that subject; over stdio the local
+process is the trust boundary and tools run as the `*`-scoped dev subject.
+
+- **Writes** (`atlas_create_story`, `atlas_ingest_media`, `atlas_add_scene`,
+  `atlas_set_timeline`, `atlas_add_layer`, `atlas_auto_compose`,
+  `atlas_publish_story`) need a verified subject, and the story must be one the
+  caller owns — otherwise the tool returns an error result
+  (`Unauthenticated: …` / `Forbidden: …`) rather than acting.
+- `atlas_create_story` records the caller as the owner. The `author` input is a
+  display name only; it does not confer ownership.
+- **Reads** (`atlas_get_story`, `atlas_list_stories`, the `story://{id}`
+  resource) follow story visibility: `public`/`unlisted` are readable by
+  anyone, `private` only by its owner. `atlas_list_stories` filters to what the
+  caller may read.
+- `atlas_query_memory` and `atlas_get_job` need a verified subject; a job is
+  readable by whoever may read its story.
+
 ## Tools
 
 | Tool | Purpose | Key inputs |
@@ -41,13 +62,21 @@ for a sequence diagram of the automatic recipe below end to end.
 | `atlas_get_job` | Poll an ingest/reconstruct/tile job | `jobId` |
 | `atlas_add_scene` | Append a narrative scene (scrapbook page / keyframe) | `storyId`, `title`, `narrative?`, `time?`, `camera?`, `mediaIds?` |
 | `atlas_set_timeline` | Set the playback clock | `storyId`, `start`, `stop`, `multiplier?`, `loop?` |
-| `atlas_add_layer` | Attach a 3D‑tiles / splat / terrain / imagery / geojson layer | `storyId`, `kind`, `uri?`, `availability?`, `opacity?` |
+| `atlas_add_layer` | Attach a 3D‑tiles / splat / terrain / imagery / geojson layer | `storyId`, `kind`, `name?`, `uri?`, `format?`, `attribution?`, `availability?`, `opacity?`, `visible?`, `order?` |
 | `atlas_auto_compose` | Auto‑sequence located media into scenes + camera flights + timeline | `storyId` |
 | `atlas_get_story` | Return the full story document | `storyId` |
 | `atlas_list_stories` | List stories | — |
 | `atlas_publish_story` | Publish; returns a shareable viewer URL; writes back to memory / notifies Hermes | `storyId`, `visibility?`, `notify?` |
 
-Resource: `story://{id}` returns the story JSON.
+Resource: `story://{id}` returns the story JSON, subject to the same read rules.
+
+`atlas_add_layer`'s `attribution` (`{ text, licence?, url?, onScreen? }`) is the
+source credit the layer's licence requires — OpenStreetMap (ODbL), EOX and
+CARTO (CC BY) and OpenSeaMap (CC BY‑SA) all condition use on displaying it, so
+set it whenever you attach third‑party imagery. `format` names the wire format
+of `uri` (`xyz`, `tms`, `wmts`, `wms`, `geojson`, `kml`, `czml`, `3d-tiles`,
+`gaussian-splat`, `quantized-mesh`) for the cases `kind` cannot stand in for —
+`imagery` spans xyz/tms/wmts/wms, and `geojson` is also where kml and czml land.
 
 ## Recipes
 

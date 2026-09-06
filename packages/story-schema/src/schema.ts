@@ -251,13 +251,79 @@ export const MediaItem = z.object({
   sourceMemoryId: z.string().optional(),
 });
 
+/**
+ * The credit a layer's source requires, carried with the layer.
+ *
+ * This is a licence **condition**, not presentation polish. Nearly every open
+ * source a layer can point at is attribution-conditioned — OpenStreetMap
+ * (ODbL), EOX and CARTO (CC BY), OpenSeaMap (CC BY-SA) — so a story that
+ * carries the layer but drops the credit is a story that cannot lawfully be
+ * published. Publishing stories is what this document format exists for, which
+ * is why this lives on `Layer` itself rather than in the free-form `style` bag
+ * where a server round-trip or a renderer that ignores unknown style keys can
+ * silently lose it.
+ */
+export const LayerAttribution = z.object({
+  /** The credit line to display, e.g. "© OpenStreetMap contributors". */
+  text: z.string(),
+  /** Licence name or identifier, e.g. "ODbL-1.0", "CC BY 4.0", "CC BY-SA 2.0". */
+  licence: z.string().optional(),
+  /** Link for the credit — the source's page or the licence deed. */
+  url: z.string().optional(),
+  /**
+   * True when the licence requires the notice on the map itself rather than
+   * behind an attribution control (Mapbox's terms ask for this; Esri's do not).
+   */
+  onScreen: z.boolean().optional(),
+});
+
+/**
+ * How to actually fetch and decode a layer's `uri`.
+ *
+ * `kind` says what the layer *is* for the scene graph; it does not say how to
+ * load it, and it is lossy in both directions that matter. `kind: 'imagery'`
+ * spans four mutually incompatible tile protocols (XYZ, TMS, WMTS, WMS) that
+ * cannot be told apart from a URL at fetch time, and `kind: 'geojson'` is also
+ * where KML and CZML land. Guessing wrong produces no error — the requests are
+ * well-formed and simply address tiles that do not exist, so the globe stays
+ * blank with nothing logged to explain it (the same failure mode
+ * `viewer-react/src/renderers/basemaps.ts` documents for a mismatched tiling
+ * scheme). `format` is the non-lossy statement of what the endpoint speaks.
+ */
+export const LayerFormat = z.enum([
+  'xyz',
+  'tms',
+  'wmts',
+  'wms',
+  'geojson',
+  'kml',
+  'czml',
+  '3d-tiles',
+  'gaussian-splat',
+  'quantized-mesh',
+]);
+
 export const Layer = z.object({
   id: z.string(),
   kind: z.enum(['imagery', 'terrain', '3d-tiles', 'gaussian-splat', 'geojson', 'model', 'pin']),
+  /** Human label for a layer list; `id` is a key, not something to show. */
+  name: z.string().optional(),
   uri: z.string().optional(),
+  /** Wire format of `uri`. See `LayerFormat` — `kind` cannot stand in for it. */
+  format: LayerFormat.optional(),
+  /** Required credit for the layer's source. See `LayerAttribution`. */
+  attribution: LayerAttribution.optional(),
   style: z.record(z.unknown()).optional(),
   availability: z.object({ start: Iso8601, stop: Iso8601.optional(), end: Iso8601.optional() }).optional(),
   opacity: z.number().optional(),
+  /** Drawn state. Absent means visible — a layer in the document is shown. */
+  visible: z.boolean().optional(),
+  /**
+   * Draw order, low to high. Array position is not durable across a server
+   * round-trip (stores and JSON transports are free to reorder), and there was
+   * no z-order field at all, so overlay stacking could not be expressed.
+   */
+  order: z.number().optional(),
 });
 
 export const Basemap = z.object({
@@ -338,6 +404,8 @@ export type GeoPath = z.infer<typeof GeoPath>;
 export type Item = z.infer<typeof Item>;
 export type ItemType = Item['type'];
 export type MediaItem = z.infer<typeof MediaItem>;
+export type LayerAttribution = z.infer<typeof LayerAttribution>;
+export type LayerFormat = z.infer<typeof LayerFormat>;
 export type Layer = z.infer<typeof Layer>;
 export type Basemap = z.infer<typeof Basemap>;
 export type Scene = z.infer<typeof Scene>;

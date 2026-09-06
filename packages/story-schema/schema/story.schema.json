@@ -947,8 +947,47 @@
                   "pin"
                 ]
               },
+              "name": {
+                "type": "string"
+              },
               "uri": {
                 "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "xyz",
+                  "tms",
+                  "wmts",
+                  "wms",
+                  "geojson",
+                  "kml",
+                  "czml",
+                  "3d-tiles",
+                  "gaussian-splat",
+                  "quantized-mesh"
+                ]
+              },
+              "attribution": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "licence": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "onScreen": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
               },
               "style": {
                 "type": "object",
@@ -973,6 +1012,12 @@
                 "additionalProperties": false
               },
               "opacity": {
+                "type": "number"
+              },
+              "visible": {
+                "type": "boolean"
+              },
+              "order": {
                 "type": "number"
               }
             },

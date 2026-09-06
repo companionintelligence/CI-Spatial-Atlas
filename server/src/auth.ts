@@ -3,9 +3,10 @@
  *
  * Atlas verifies bearer tokens issued by CI-Portal (better-auth `oidcProvider`).
  * Portal signs access-token JWTs with **EdDSA** and publishes a JWKS at
- * `<portal-origin>/api/auth/jwks`; we verify with `jose.jwtVerify` against
- * `createRemoteJWKSet`, enforcing **signature**, **issuer**, **audience**,
- * **exp** and **nbf**. The verified `sub` scopes every story to its owner.
+ * `<portal-origin>/api/auth/jwks`; a relying party verifies with
+ * `jose.jwtVerify` against `createRemoteJWKSet`, enforcing **issuer** and
+ * **audience** (Portal issues per-client tokens, so `aud === client_id`, our
+ * `companion-atlas`). The verified `sub` subject scopes every story to its owner.
  *
  * Configure via env (.env.default):
  *   COMPANION_OIDC_ISSUER     Portal issuer, e.g. https://hub.ci.localhost/api/auth
@@ -14,41 +15,35 @@
  *   COMPANION_OIDC_JWKS_URI   optional; derived from the issuer otherwise
  *   COMPANION_OIDC_AUDIENCE   comma-separated allowed client ids (= our client id)
  *   ATLAS_DEV_SUBJECT         dev subject used when the issuer is unset
- *   ATLAS_ALLOW_INSECURE_AUTH escape hatch: run the dev bypass even in a
- *                             deployed environment. Never set this.
+ *   ATLAS_ALLOW_DEV_AUTH      `1` to permit the issuer-less dev bypass in an
+ *                             environment that is not marked development/test
  *
- * ## The dev bypass, and why it cannot fire by accident
+ * Leaving COMPANION_OIDC_ISSUER empty disables auth for local dev (single dev
+ * subject with `*` scope). This is the real verifier — not a decode-only stub.
+ * `assertAuthSafeToBoot()` stops that bypass reaching a deployment: the HTTP
+ * entry point refuses to start unless the environment says it is development
+ * or test, or opts in explicitly.
  *
- * Leaving `COMPANION_OIDC_ISSUER` empty disables auth entirely: every request
- * runs as one dev subject with `*` scope. That is deliberate — Mode A in
- * docs/INTEGRATION.md, so UI/renderer work needs no Portal — but it is also a
- * total authentication bypass, and a container that silently landed in it would
- * serve everyone's private stories to anyone. So `assertAuthStartup()` (called
- * from index.ts before `listen()`) makes the state impossible to reach
- * unnoticed: it **refuses to boot** with no issuer in a deployed environment
- * (`NODE_ENV=production`, which server/Dockerfile sets, or `ATLAS_ENV`/
- * `COMPANION_ENV` = prod/production/staging), and prints a loud banner every
- * time the bypass is genuinely active. `verifyBearer()` additionally warns once
- * per process, so an embedder that never calls `assertAuthStartup()` still gets
- * told.
+ * ── Authorisation ─────────────────────────────────────────────────────────
+ * Verification answers *who is calling*; these three predicates answer *what
+ * they may do*. Ownership is the primitive: a story's owner is
+ * `access.oidcSubject`, set from the verified subject at create time.
  *
- * ## What this does NOT cover (residual gaps, stated honestly)
+ *   isAuthenticated(ctx)      ctx is a verified subject, not the ANONYMOUS
+ *                             fallback. Every mutating route and MCP tool
+ *                             gates on this first → 401 / "unauthenticated".
+ *   canRead(vis, owner, ctx)  public/unlisted are world-readable (the viewer
+ *                             fetches them unauthenticated); private needs the
+ *                             owner or `*`.
+ *   canWrite(owner, ctx)      mutate/delete: the owner, or `*`. An *ownerless*
+ *                             story (no `access.oidcSubject`) is writable only
+ *                             by `*` — fail closed, since we cannot attribute it.
  *
- * - **An invalid token degrades to anonymous, it is not a 401.** A caller with a
- *   forged/expired token gets `ANONYMOUS`, so reads of private stories are
- *   correctly refused (403 via `canRead`) — but the *write* routes in api.ts do
- *   not require an authenticated subject, so such a caller can still create
- *   stories owned by `anonymous`. Making the mutating routes reject `ANONYMOUS`
- *   is a separate api.ts change.
- * - **MCP-over-HTTP (`POST /mcp` in index.ts) is not authenticated at all.** The
- *   preHandler hook populates `req.auth`, but mcp.ts never consults it — every
- *   MCP tool runs unscoped. Fixing that means threading an `AuthContext` through
- *   `AtlasDeps`/tool handlers.
- * - Scope claims are parsed but only `*` is honoured (see `canRead`); Portal's
- *   own scopes are not yet mapped onto Atlas operations.
+ * `*` is the only scope honoured today. Portal's own scope vocabulary is not
+ * yet defined anywhere Atlas can see, so mapping Portal scopes onto Atlas
+ * operations is a deliberate follow-up rather than invented here; ownership
+ * carries the model in the meantime. See docs/architecture.md §13.
  */
-import { createHash } from 'node:crypto';
-
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey, type KeyLike } from 'jose';
 
 export interface AuthContext {
@@ -59,16 +54,6 @@ export interface AuthContext {
 }
 
 export const ANONYMOUS: AuthContext = { subject: 'anonymous', scopes: [], token: '' };
-
-/**
- * Minimal logger shape. Structurally satisfied by both Fastify's `req.log`
- * (pino) and bare `console`, so callers pass whichever they have without this
- * module taking a dependency on either.
- */
-export interface AuthLogger {
-  warn(details: Record<string, unknown>, message: string): void;
-  error(details: Record<string, unknown>, message: string): void;
-}
 
 export interface OidcConfig {
   /** Canonical issuer (`iss`), e.g. `https://hub.ci.localhost/api/auth`. */
@@ -96,19 +81,7 @@ export function oidcConfigFromEnv(env: NodeJS.ProcessEnv = process.env): OidcCon
   return { issuer: base, jwksUri, audience };
 }
 
-/**
- * Signature algorithms we accept. Allowlisted rather than left open because a
- * JWKS is attacker-influenced input in the worst case: if it ever served a
- * symmetric (`oct`) key, an unrestricted verifier would happily accept an HS256
- * token forged with a *public* value as the HMAC secret (classic alg confusion).
- * Portal signs EdDSA; the rest are here so a Portal key rotation to ECDSA/RSA
- * doesn't require an Atlas release.
- */
-const ALLOWED_ALGS = ['EdDSA', 'ES256', 'ES384', 'RS256', 'PS256'];
-
-// One remote JWKS per endpoint (jose caches keys + honours cache headers, and
-// refetches on an unknown `kid` behind its own cooldown — that is what makes
-// Portal key rotation transparent to us, so never construct these per request).
+// One remote JWKS per endpoint (jose caches keys + honours cache headers).
 const jwksCache = new Map<string, JWTVerifyGetKey>();
 function remoteJwks(uri: string): JWTVerifyGetKey {
   let jwks = jwksCache.get(uri);
@@ -132,18 +105,15 @@ export async function verifyToken(
   const { payload } = await jwtVerify(token, keys as JWTVerifyGetKey, {
     issuer: cfg.issuer,
     audience: cfg.audience,
-    algorithms: ALLOWED_ALGS,
-    // `exp`/`nbf` are enforced by jose whenever present; `requiredClaims` is what
-    // stops a *non-expiring* token (no `exp` at all) from being accepted forever,
-    // and stops a subject-less token from being read as the literal string
-    // "undefined" further down. Clock tolerance is left at jose's default of 0:
-    // Portal and Atlas run in the same NTP-synced cluster, and any slack here is
-    // just extra minutes of life for a revoked token.
-    requiredClaims: ['sub', 'exp'],
   });
-  // Defensive: `requiredClaims` guarantees presence, this guarantees the type —
-  // a numeric or object `sub` must never be coerced into someone's owner string.
-  if (typeof payload.sub !== 'string' || !payload.sub) throw new Error('token has no usable sub claim');
+  // A token without a usable `sub` cannot be authorised: `String(undefined)`
+  // would mint the literal subject "undefined", which could then own stories.
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    throw new Error('token has no subject (sub) claim');
+  }
+  if (payload.sub === ANONYMOUS.subject) {
+    throw new Error(`token subject may not be the reserved "${ANONYMOUS.subject}" name`);
+  }
   const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : [];
   return {
     subject: payload.sub,
@@ -154,176 +124,128 @@ export async function verifyToken(
 }
 
 /**
- * Why a token was rejected. Distinguishable **in the server log only** — every
- * one of these produces the exact same `ANONYMOUS` result for the caller, so a
- * probing client cannot tell "wrong signature" from "expired" from "wrong
- * audience" and use Atlas as an oracle for what a stolen token is missing.
+ * The single, fully-scoped local subject used where the *process* is the trust
+ * boundary rather than a bearer token: the dev bypass (no issuer configured)
+ * and the stdio MCP transport, which has no HTTP request to carry a token.
  */
-export type AuthFailureReason =
-  | 'signature_invalid'
-  | 'expired'
-  | 'not_yet_valid'
-  | 'audience_mismatch'
-  | 'issuer_mismatch'
-  | 'claim_invalid'
-  | 'malformed_token'
-  | 'jwks_unavailable'
-  | 'unknown';
-
-/**
- * Map a jose error onto a stable reason code. Matched on the `code` string
- * rather than `instanceof`, because jose ships dual CJS/ESM builds and a
- * duplicated copy in the graph would break `instanceof` silently — turning
- * every classification into 'unknown' exactly when the log matters most.
- */
-export function classifyAuthFailure(err: unknown): AuthFailureReason {
-  const e = err as { code?: unknown; claim?: unknown } | null;
-  const code = typeof e?.code === 'string' ? e.code : '';
-  const claim = typeof e?.claim === 'string' ? e.claim : '';
-  switch (code) {
-    case 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED':
-      return 'signature_invalid';
-    case 'ERR_JWT_EXPIRED':
-      return 'expired';
-    case 'ERR_JWT_CLAIM_VALIDATION_FAILED':
-      if (claim === 'aud') return 'audience_mismatch';
-      if (claim === 'iss') return 'issuer_mismatch';
-      if (claim === 'nbf') return 'not_yet_valid';
-      return 'claim_invalid';
-    case 'ERR_JWS_INVALID':
-    case 'ERR_JWT_INVALID':
-    case 'ERR_JOSE_ALG_NOT_ALLOWED':
-      return 'malformed_token';
-    case 'ERR_JWKS_NO_MATCHING_KEY':
-    case 'ERR_JWKS_MULTIPLE_MATCHING_KEYS':
-    case 'ERR_JWKS_TIMEOUT':
-    case 'ERR_JOSE_GENERIC':
-      return 'jwks_unavailable';
-    default:
-      return 'unknown';
-  }
+export function devSubjectContext(token = '', env: NodeJS.ProcessEnv = process.env): AuthContext {
+  return { subject: env.ATLAS_DEV_SUBJECT ?? 'dev-operator', scopes: ['*'], token };
 }
 
 /**
- * A short, non-reversible fingerprint of the rejected token. Lets an operator
- * correlate a burst of failures (one broken client vs. a spray of forgeries)
- * without the log line itself becoming a usable credential if the token later
- * turns out to have been valid-but-misrouted.
- */
-function tokenFingerprint(token: string): string {
-  return createHash('sha256').update(token).digest('hex').slice(0, 12);
-}
-
-// The dev bypass is loud, but only once per process — a per-request warning on a
-// busy dev server buries everything else in the log, and people stop reading it.
-let devBypassWarned = false;
-
-function isDeployedEnv(env: NodeJS.ProcessEnv): boolean {
-  const markers = [env.NODE_ENV, env.ATLAS_ENV, env.COMPANION_ENV].map((v) => v?.trim().toLowerCase());
-  return markers.some((m) => m === 'production' || m === 'prod' || m === 'staging');
-}
-
-function insecureAuthAllowed(env: NodeJS.ProcessEnv): boolean {
-  const v = env.ATLAS_ALLOW_INSECURE_AUTH?.trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
-}
-
-export interface AuthStartupReport {
-  mode: 'oidc' | 'insecure-dev';
-  issuer?: string;
-  jwksUri?: string;
-  audience?: string[];
-  subject?: string;
-}
-
-/**
- * Startup gate: decide the auth mode, say so loudly, and refuse to run the
- * bypass where it would be a breach rather than a convenience.
+ * True when this environment has *positively identified itself* as a developer
+ * machine or a test runner, and may therefore run without real auth.
  *
- * Called from index.ts before `listen()`. **Throws** when there is no issuer in
- * a deployed environment — a deployment that forgot to inject
- * `COMPANION_OIDC_ISSUER` must fail closed and crash-loop visibly, not come up
- * happily serving every private story to unauthenticated callers. The
- * `ATLAS_ALLOW_INSECURE_AUTH` escape hatch exists only so an operator who
- * genuinely wants that (a throwaway demo box) has to say it out loud in env.
+ * Deliberately an allowlist rather than `NODE_ENV === 'production'`. The bug
+ * this guards is a deployment booting unconfigured, and the likeliest shape of
+ * that mistake is `NODE_ENV` never being set at all — so a check that fires
+ * only on an explicit production marker would miss the very case it exists to
+ * catch, failing open exactly like the bypass it is guarding. Absence of proof
+ * is treated as deployed.
+ *
+ * `ATLAS_ALLOW_DEV_AUTH=1` is the escape hatch for environments that are not
+ * production but cannot say so through `NODE_ENV` — staging, demos, and this
+ * repo's own `docker-compose.dev.yml`, whose `atlas-api` builds from
+ * `server/Dockerfile` and therefore inherits `ENV NODE_ENV=production` even in
+ * MOCK mode (docs/INTEGRATION.md "Mode A").
  */
-export function assertAuthStartup(
-  env: NodeJS.ProcessEnv = process.env,
-  log: AuthLogger = console,
-): AuthStartupReport {
-  const cfg = oidcConfigFromEnv(env);
-  if (cfg) {
-    // Not a warning — but routed through `warn` so it survives a production log
-    // level that drops `info`. Knowing which issuer a box trusts is worth a line.
-    log.warn(
-      { mode: 'oidc', issuer: cfg.issuer, jwksUri: cfg.jwksUri, audience: cfg.audience },
-      'auth: verifying Companion OIDC bearer tokens (signature + iss + aud + exp/nbf)',
-    );
-    return { mode: 'oidc', issuer: cfg.issuer, jwksUri: cfg.jwksUri, audience: cfg.audience };
-  }
+export function devAuthBypassAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  const optIn = env.ATLAS_ALLOW_DEV_AUTH?.trim().toLowerCase();
+  if (optIn === '1' || optIn === 'true') return true;
+  const nodeEnv = env.NODE_ENV?.trim().toLowerCase();
+  return nodeEnv === 'development' || nodeEnv === 'test';
+}
 
-  const subject = env.ATLAS_DEV_SUBJECT ?? 'dev-operator';
-  if (isDeployedEnv(env) && !insecureAuthAllowed(env)) {
-    const message =
-      'auth: refusing to start — COMPANION_OIDC_ISSUER is unset in a deployed environment ' +
-      `(NODE_ENV=${env.NODE_ENV ?? '<unset>'}). Without it every request would run as ` +
-      `"${subject}" with * scope, exposing every private story. Set COMPANION_OIDC_ISSUER ` +
-      '(e.g. https://hub.ci.computer/api/auth), or set ATLAS_ALLOW_INSECURE_AUTH=1 if you ' +
-      'really intend an unauthenticated box.';
-    log.error({ mode: 'insecure-dev', subject }, message);
-    throw new Error(message);
-  }
+/**
+ * Refuse to boot into the dev auth bypass in a deployed environment.
+ *
+ * With no `COMPANION_OIDC_ISSUER`, `verifyBearer()` returns `devSubjectContext()`
+ * — `*` scope — for *every* request, token or not. `*` satisfies both `canRead`
+ * and `canWrite`, so that configuration hands every anonymous caller full
+ * ownership rights over every story and silently voids the per-story
+ * authorisation `api.ts` and `mcp.ts` enforce. Intentional locally; a serious
+ * incident anywhere else.
+ *
+ * Called once at startup from `server/src/index.ts`, the HTTP entry point. It is
+ * deliberately *not* called by `mcp-stdio.ts`: over stdio the local process is
+ * the trust boundary (whoever can spawn it can already read the store) and the
+ * store is per-process, so `devSubjectContext()` is correct there by design.
+ *
+ * @throws Error with an operator-actionable message when the bypass would be
+ *         active outside a development or test environment.
+ */
+export function assertAuthSafeToBoot(env: NodeJS.ProcessEnv = process.env): void {
+  // Real auth configured — nothing to guard, whatever NODE_ENV says.
+  if (oidcConfigFromEnv(env)) return;
+  if (devAuthBypassAllowed(env)) return;
 
-  devBypassWarned = true; // the banner below is the once-per-process warning
-  log.warn(
-    { mode: 'insecure-dev', subject, overridden: insecureAuthAllowed(env) },
-    '*** AUTH DISABLED *** COMPANION_OIDC_ISSUER is unset: every request runs as ' +
-      `"${subject}" with * scope and NO token is checked. Intended for local development ` +
-      'only (docs/INTEGRATION.md Mode A). Never expose this process to a network you do ' +
-      'not control.',
+  const subject = devSubjectContext('', env).subject;
+  throw new Error(
+    [
+      'Refusing to start: authentication is disabled but this does not look like a development environment.',
+      '',
+      `COMPANION_OIDC_ISSUER is unset, so every request — with or without a token — would run as`,
+      `"${subject}" holding the "*" scope, giving any anonymous caller read and write access to`,
+      'every story. Per-story authorisation would be inert.',
+      '',
+      `(NODE_ENV=${env.NODE_ENV === undefined ? '<unset>' : JSON.stringify(env.NODE_ENV)})`,
+      '',
+      'Resolve by one of:',
+      '  • Set COMPANION_OIDC_ISSUER (and COMPANION_OIDC_AUDIENCE) to your CI-Portal issuer',
+      '    — e.g. COMPANION_OIDC_ISSUER=https://hub.ci.localhost/api/auth',
+      '  • Set NODE_ENV=development (or test) for genuine local development',
+      '  • Set ATLAS_ALLOW_DEV_AUTH=1 to keep the bypass deliberately — never in production',
+    ].join('\n'),
   );
-  return { mode: 'insecure-dev', subject };
 }
 
 /** Verify an `Authorization: Bearer …` header and return its auth context. */
-export async function verifyBearer(authorization?: string, log: AuthLogger = console): Promise<AuthContext> {
+export async function verifyBearer(authorization?: string): Promise<AuthContext> {
   const cfg = oidcConfigFromEnv();
   const token = authorization?.replace(/^Bearer\s+/i, '') ?? '';
 
   if (!cfg) {
     // Auth disabled for local/dev — everything runs as a single dev subject.
-    // `assertAuthStartup()` has normally already banner-warned and, in a deployed
-    // environment, refused to boot at all. This second warning is for embedders
-    // (tests, scripts, anything calling `buildApi` directly) that skip that gate.
-    if (!devBypassWarned && process.env.NODE_ENV !== 'test') {
-      devBypassWarned = true;
-      log.warn(
-        { mode: 'insecure-dev' },
-        '*** AUTH DISABLED *** COMPANION_OIDC_ISSUER is unset; serving every request as the dev subject',
-      );
-    }
-    return { subject: process.env.ATLAS_DEV_SUBJECT ?? 'dev-operator', scopes: ['*'], token };
+    return devSubjectContext(token);
   }
   if (!token) return ANONYMOUS;
 
   try {
     return await verifyToken(token, cfg, remoteJwks(cfg.jwksUri));
-  } catch (err) {
-    // Log *why* server-side; hand the caller an undifferentiated anonymous
-    // context so it learns nothing about which check failed. Deliberately not
-    // logging any claim from the token: the payload is unverified attacker input
-    // at this point, and putting it in the log is how log-injection starts.
-    const reason = classifyAuthFailure(err);
-    log.warn(
-      { reason, issuer: cfg.issuer, token: tokenFingerprint(token) },
-      `auth: bearer token rejected (${reason})`,
-    );
+  } catch {
+    // Invalid signature, issuer, audience, or expiry → unauthenticated.
     return ANONYMOUS;
   }
+}
+
+/**
+ * True when the context carries a verified subject rather than the ANONYMOUS
+ * fallback `verifyBearer` returns for a missing or unverifiable token.
+ *
+ * Reads may run anonymously (see `canRead`); writes must not. Gate every
+ * mutating route and MCP tool on this so an unauthenticated write fails loudly
+ * instead of silently succeeding as a story owned by `anonymous`.
+ */
+export function isAuthenticated(ctx: AuthContext): boolean {
+  return ctx.subject.length > 0 && ctx.subject !== ANONYMOUS.subject;
 }
 
 /** True when the story is readable by the given auth context. */
 export function canRead(visibility: string | undefined, owner: string | undefined, ctx: AuthContext): boolean {
   if (visibility === 'public' || visibility === 'unlisted') return true;
+  if (!isAuthenticated(ctx)) return false;
   return owner === ctx.subject || ctx.scopes.includes('*');
+}
+
+/**
+ * True when the context may mutate or delete a story owned by `owner`.
+ *
+ * Fails closed on an *ownerless* story (`access.oidcSubject` unset, as stories
+ * created before ownership was recorded are): with nobody to compare against,
+ * only a `*`-scoped subject may write it.
+ */
+export function canWrite(owner: string | undefined, ctx: AuthContext): boolean {
+  if (!isAuthenticated(ctx)) return false;
+  if (ctx.scopes.includes('*')) return true;
+  return owner !== undefined && owner === ctx.subject;
 }
