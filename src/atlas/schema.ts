@@ -81,14 +81,60 @@ export type LayerKind =
   | 'model'
   | 'pin';
 
+/** Wire format of a layer's `uri` — how a renderer should *fetch* it, which
+ *  `kind` alone does not say: an `imagery` layer may be XYZ tiles, WMS or
+ *  WMTS, and a renderer that guesses wrong renders nothing. Optional, because
+ *  most URIs are recognisable by convention; set it when they are not. */
+export type LayerFormat =
+  // raster tile services
+  | 'xyz'
+  | 'tms'
+  | 'wms'
+  | 'wmts'
+  // vector
+  | 'geojson'
+  | 'mvt'
+  // 3D / scene
+  | '3d-tiles'
+  | 'gltf'
+  | 'czml'
+  // terrain
+  | 'quantized-mesh';
+
+/** Source credit a layer's licence requires.
+ *
+ *  Nearly every open source an Atlas story draws on conditions use on
+ *  displaying attribution — OpenStreetMap (ODbL), EOX and CARTO (CC BY),
+ *  OpenSeaMap (CC BY-SA) — so the credit travels *with* the layer instead of
+ *  being re-derived per renderer from the URI. */
+export interface LayerAttribution {
+  /** The credit line to display, e.g. "© OpenStreetMap contributors". */
+  text: string;
+  /** Licence identifier or name, e.g. "ODbL-1.0", "CC BY 4.0". */
+  licence?: string;
+  /** Link to the source or its licence terms. */
+  url?: string;
+  /** Credit must remain visible on screen while the layer renders, as opposed
+   *  to living in an "about this map" panel. */
+  onScreen?: boolean;
+}
+
 export interface Layer {
   id: string;
+  /** Human-readable label for layer pickers, e.g. "OpenSeaMap seamarks". */
+  name?: string;
   kind: LayerKind;
   uri?: string;
+  format?: LayerFormat;
+  attribution?: LayerAttribution;
   style?: Record<string, unknown>;
   /** Clock window during which this layer is shown (omitted = always). */
   availability?: TimeInterval;
   opacity?: number;
+  /** Initial on/off state in the viewer (omitted = shown). */
+  visible?: boolean;
+  /** Draw order; lower renders beneath. Ties fall back to array order. */
+  order?: number;
 }
 
 /** Camera framing for a scene (target-relative orbit, viewer-agnostic). */

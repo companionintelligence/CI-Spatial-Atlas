@@ -188,13 +188,61 @@ export const MediaItem = z.object({
   sourceMemoryId: z.string().optional(),
 });
 
+/** Wire format of a layer's `uri` — how a renderer should *fetch* it, which
+ *  `kind` alone does not say: an `imagery` layer may be XYZ tiles, WMS or
+ *  WMTS, and a renderer that guesses wrong renders nothing. Optional, because
+ *  most URIs are recognisable by convention; set it when they are not. */
+export const LayerFormat = z.enum([
+  // raster tile services
+  'xyz',
+  'tms',
+  'wms',
+  'wmts',
+  // vector
+  'geojson',
+  'mvt',
+  // 3D / scene
+  '3d-tiles',
+  'gltf',
+  'czml',
+  // terrain
+  'quantized-mesh',
+]);
+
+/** Source credit a layer's licence requires.
+ *
+ *  Nearly every open source an Atlas story draws on conditions use on
+ *  displaying attribution — OpenStreetMap (ODbL), EOX and CARTO (CC BY),
+ *  OpenSeaMap (CC BY-SA) — so the credit travels *with* the layer instead of
+ *  being re-derived per renderer from the URI. `onScreen` marks credit that
+ *  must stay visible while the layer is drawn, as opposed to credit that may
+ *  live in an "about this map" panel. */
+export const LayerAttribution = z.object({
+  /** The credit line to display, e.g. "© OpenStreetMap contributors". */
+  text: z.string(),
+  /** Licence identifier or name, e.g. "ODbL-1.0", "CC BY 4.0". */
+  licence: z.string().optional(),
+  /** Link to the source or its licence terms. */
+  url: z.string().optional(),
+  /** Credit must remain visible on screen while the layer renders. */
+  onScreen: z.boolean().optional(),
+});
+
 export const Layer = z.object({
   id: z.string(),
+  /** Human-readable label for layer pickers, e.g. "OpenSeaMap seamarks". */
+  name: z.string().optional(),
   kind: z.enum(['imagery', 'terrain', '3d-tiles', 'gaussian-splat', 'geojson', 'model', 'pin']),
   uri: z.string().optional(),
+  format: LayerFormat.optional(),
+  attribution: LayerAttribution.optional(),
   style: z.record(z.unknown()).optional(),
   availability: z.object({ start: Iso8601, stop: Iso8601.optional(), end: Iso8601.optional() }).optional(),
   opacity: z.number().optional(),
+  /** Initial on/off state in the viewer (omitted = shown). */
+  visible: z.boolean().optional(),
+  /** Draw order; lower renders beneath. Ties fall back to array order. */
+  order: z.number().optional(),
 });
 
 export const Basemap = z.object({
@@ -274,6 +322,8 @@ export type TrackSample = z.infer<typeof TrackSample>;
 export type Item = z.infer<typeof Item>;
 export type ItemType = Item['type'];
 export type MediaItem = z.infer<typeof MediaItem>;
+export type LayerFormat = z.infer<typeof LayerFormat>;
+export type LayerAttribution = z.infer<typeof LayerAttribution>;
 export type Layer = z.infer<typeof Layer>;
 export type Basemap = z.infer<typeof Basemap>;
 export type Scene = z.infer<typeof Scene>;

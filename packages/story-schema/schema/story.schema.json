@@ -190,6 +190,18 @@
               "caption": {
                 "type": "string"
               },
+              "description": {
+                "type": "string"
+              },
+              "locationName": {
+                "type": "string"
+              },
+              "people": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "capturedAt": {
                 "$ref": "#/definitions/CompanionAtlasStory/properties/createdAt"
               },
@@ -313,6 +325,18 @@
                     },
                     "additionalProperties": true
                   },
+                  "placeId": {
+                    "type": "string"
+                  },
+                  "placeName": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "durationMinutes": {
+                    "type": "number"
+                  },
                   "type": {
                     "type": "string",
                     "const": "photo"
@@ -386,6 +410,18 @@
                   "source": {
                     "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
                   },
+                  "placeId": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeId"
+                  },
+                  "placeName": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeName"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/category"
+                  },
+                  "durationMinutes": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/durationMinutes"
+                  },
                   "type": {
                     "type": "string",
                     "const": "video"
@@ -429,6 +465,18 @@
                   "source": {
                     "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
                   },
+                  "placeId": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeId"
+                  },
+                  "placeName": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeName"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/category"
+                  },
+                  "durationMinutes": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/durationMinutes"
+                  },
                   "type": {
                     "type": "string",
                     "const": "marker"
@@ -471,6 +519,18 @@
                   "source": {
                     "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
                   },
+                  "placeId": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeId"
+                  },
+                  "placeName": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeName"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/category"
+                  },
+                  "durationMinutes": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/durationMinutes"
+                  },
                   "type": {
                     "type": "string",
                     "const": "note"
@@ -510,6 +570,18 @@
                   },
                   "source": {
                     "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
+                  },
+                  "placeId": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeId"
+                  },
+                  "placeName": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeName"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/category"
+                  },
+                  "durationMinutes": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/durationMinutes"
                   },
                   "type": {
                     "type": "string",
@@ -574,6 +646,18 @@
                   "source": {
                     "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
                   },
+                  "placeId": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeId"
+                  },
+                  "placeName": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeName"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/category"
+                  },
+                  "durationMinutes": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/durationMinutes"
+                  },
                   "type": {
                     "type": "string",
                     "const": "model"
@@ -617,6 +701,18 @@
                   "source": {
                     "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
                   },
+                  "placeId": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeId"
+                  },
+                  "placeName": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeName"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/category"
+                  },
+                  "durationMinutes": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/durationMinutes"
+                  },
                   "type": {
                     "type": "string",
                     "const": "splat"
@@ -658,6 +754,18 @@
                   "source": {
                     "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/source"
                   },
+                  "placeId": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeId"
+                  },
+                  "placeName": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/placeName"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/category"
+                  },
+                  "durationMinutes": {
+                    "$ref": "#/definitions/CompanionAtlasStory/properties/items/items/anyOf/0/properties/durationMinutes"
+                  },
                   "type": {
                     "type": "string",
                     "const": "tileset"
@@ -687,6 +795,9 @@
               "id": {
                 "type": "string"
               },
+              "name": {
+                "type": "string"
+              },
               "kind": {
                 "type": "string",
                 "enum": [
@@ -701,6 +812,42 @@
               },
               "uri": {
                 "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "xyz",
+                  "tms",
+                  "wms",
+                  "wmts",
+                  "geojson",
+                  "mvt",
+                  "3d-tiles",
+                  "gltf",
+                  "czml",
+                  "quantized-mesh"
+                ]
+              },
+              "attribution": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "licence": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "onScreen": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
               },
               "style": {
                 "type": "object",
@@ -725,6 +872,12 @@
                 "additionalProperties": false
               },
               "opacity": {
+                "type": "number"
+              },
+              "visible": {
+                "type": "boolean"
+              },
+              "order": {
                 "type": "number"
               }
             },

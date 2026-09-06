@@ -41,13 +41,20 @@ for a sequence diagram of the automatic recipe below end to end.
 | `atlas_get_job` | Poll an ingest/reconstruct/tile job | `jobId` |
 | `atlas_add_scene` | Append a narrative scene (scrapbook page / keyframe) | `storyId`, `title`, `narrative?`, `time?`, `camera?`, `mediaIds?` |
 | `atlas_set_timeline` | Set the playback clock | `storyId`, `start`, `stop`, `multiplier?`, `loop?` |
-| `atlas_add_layer` | Attach a 3D‑tiles / splat / terrain / imagery / geojson layer | `storyId`, `kind`, `uri?`, `availability?`, `opacity?` |
+| `atlas_add_layer` | Attach a 3D‑tiles / splat / terrain / imagery / geojson layer | `storyId`, `kind`, `name?`, `uri?`, `format?`, `attribution?`, `availability?`, `opacity?`, `visible?`, `order?` |
 | `atlas_auto_compose` | Auto‑sequence located media into scenes + camera flights + timeline | `storyId` |
 | `atlas_get_story` | Return the full story document | `storyId` |
 | `atlas_list_stories` | List stories | — |
 | `atlas_publish_story` | Publish; returns a shareable viewer URL; writes back to memory / notifies Hermes | `storyId`, `visibility?`, `notify?` |
 
 Resource: `story://{id}` returns the story JSON.
+
+`atlas_add_layer`'s `attribution` (`{ text, licence?, url?, onScreen? }`) is the
+source credit the layer's licence requires — OpenStreetMap (ODbL), EOX and
+CARTO (CC BY) and OpenSeaMap (CC BY‑SA) all condition use on displaying it, so
+set it whenever you attach third‑party imagery. `format` names the wire format
+of `uri` (`xyz`, `tms`, `wms`, `wmts`, `geojson`, `mvt`, `3d-tiles`, `gltf`,
+`czml`, `quantized-mesh`) for the cases a renderer cannot infer by convention.
 
 ## Recipes
 

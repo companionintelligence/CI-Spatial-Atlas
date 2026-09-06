@@ -50,13 +50,44 @@ export const MediaItem = z.object({
   sourceMemoryId: z.string().optional()
 });
 
+/** Wire format of a layer's `uri` — how a renderer should fetch it, which
+ *  `kind` alone does not say (an `imagery` layer may be XYZ, WMS or WMTS). */
+export const LayerFormat = z.enum([
+  'xyz',
+  'tms',
+  'wms',
+  'wmts',
+  'geojson',
+  'mvt',
+  '3d-tiles',
+  'gltf',
+  'czml',
+  'quantized-mesh'
+]);
+
+/** Source credit a layer's licence requires. OpenStreetMap (ODbL), EOX and
+ *  CARTO (CC BY) and OpenSeaMap (CC BY-SA) all condition use on displaying it,
+ *  so it is stored with the layer rather than re-derived per renderer.
+ *  `onScreen` marks credit that must stay visible while the layer draws. */
+export const LayerAttribution = z.object({
+  text: z.string().describe('Credit line to display, e.g. "© OpenStreetMap contributors"'),
+  licence: z.string().optional().describe('Licence identifier or name, e.g. "ODbL-1.0", "CC BY 4.0"'),
+  url: z.string().optional().describe('Link to the source or its licence terms'),
+  onScreen: z.boolean().optional().describe('Credit must remain visible on screen while the layer renders')
+});
+
 export const Layer = z.object({
   id: z.string(),
+  name: z.string().optional().describe('Human-readable label for layer pickers'),
   kind: z.enum(['imagery', 'terrain', '3d-tiles', 'gaussian-splat', 'geojson', 'model', 'pin']),
   uri: z.string().optional(),
+  format: LayerFormat.optional(),
+  attribution: LayerAttribution.optional(),
   style: z.record(z.unknown()).optional(),
   availability: TimeInterval.optional(),
-  opacity: z.number().min(0).max(1).optional()
+  opacity: z.number().min(0).max(1).optional(),
+  visible: z.boolean().optional().describe('Initial on/off state in the viewer (omitted = shown)'),
+  order: z.number().optional().describe('Draw order; lower renders beneath')
 });
 
 export const CameraPose = z.object({
@@ -116,6 +147,8 @@ export type Story = z.infer<typeof Story>;
 export type Scene = z.infer<typeof Scene>;
 export type MediaItem = z.infer<typeof MediaItem>;
 export type Layer = z.infer<typeof Layer>;
+export type LayerFormat = z.infer<typeof LayerFormat>;
+export type LayerAttribution = z.infer<typeof LayerAttribution>;
 export type Derived3d = z.infer<typeof Derived3d>;
 
 export const STORY_SCHEMA_ID = 'companion.atlas/story@1' as const;
