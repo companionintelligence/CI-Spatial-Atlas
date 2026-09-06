@@ -1,0 +1,423 @@
+/* ————————————————————————————————————————————————————————————————
+   Companion Atlas — Present mode.
+
+   The five `Scene.layout` values, the scene stepper, its contents list and
+   the narration control. Imported by `ui/Presenter.tsx` rather than by
+   `main.tsx`, so the feature ships as one unit and mounting it is a single
+   line of JSX in `AtlasApp`.
+
+   Every colour here is a `var()` on a token already defined in `atlas.css`
+   (which in turn aliases the canonical @companionintelligence/tokens ramp).
+   Where a translucent value is needed and no token carries one, it is mixed
+   from a token with `color-mix` rather than pasted as a fresh literal — a
+   hard-coded rgba() is how a palette drifts.
+   ———————————————————————————————————————————————————————————————— */
+
+:root {
+  /* Slots into the shell's one stacking scale (see the "Stacking order" block
+     in atlas.css). Above --z-chrome (50), because a fullscreen slide with the
+     top bar painted over it is broken; below --z-modal (60) and --z-lightbox
+     (70), because ⌘K and a full-bleed photo must still win while presenting. */
+  --z-presenter: 55;
+}
+
+/* ---- Present mode takes the stage ----------------------------------------
+ * The shell's own panels are hidden for the duration rather than conditionally
+ * unmounted by the caller: the inspector docks exactly where a `card-right`
+ * scene goes, the time machine sits exactly where the control bar goes, and
+ * both describe "the current memory" — a second, competing answer to the
+ * question the slide is already answering.
+ *
+ * Done with `:has()` so mounting <Presenter/> is the only change AtlasApp
+ * needs. If you would rather render them conditionally, delete this block;
+ * nothing else depends on it.
+ * ------------------------------------------------------------------------- */
+.atlas-app:has(.atlas-presenter) .atlas-timemachine,
+.atlas-app:has(.atlas-presenter) .atlas-inspector,
+.atlas-app:has(.atlas-presenter) .atlas-stats,
+.atlas-app:has(.atlas-presenter) .atlas-legend,
+.atlas-app:has(.atlas-presenter) .atlas-journey-chip {
+  display: none;
+}
+
+.atlas-presenter {
+  /* Declared on the presenter, not on :root, and this matters: a custom
+     property's own var() references resolve against the element that declares
+     it. With --pr-bar-clear declared at :root it would have been frozen at the
+     desktop gutter, and the narrow-screen rule below that shrinks --pr-gutter
+     would have changed nothing — every layout would still reserve 80px of
+     bottom margin on a phone whose bar is 68px tall. */
+  --pr-gutter: 14px;
+  --pr-bar-h: 52px;
+  /* The vertical room the control bar and its gutters claim at the foot of the
+     stage. Every layout that reaches the bottom edge subtracts this, so the
+     bar can never sit on top of a sentence. */
+  --pr-bar-clear: calc(var(--pr-bar-h) + var(--pr-gutter) * 2);
+
+  position: absolute;
+  grid-area: stage; /* mounted as a sibling of <main class="atlas-stage"> */
+  inset: 0;
+  z-index: var(--z-presenter);
+  /* The root is a pass-through: for the three card layouts the globe behind it
+     stays draggable, and only the card and the chrome take pointers. */
+  pointer-events: none;
+  color: var(--atlas-fg);
+  font-family: 'Manrope', 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+.atlas-presenter:focus { outline: none; }
+.atlas-presenter *, .atlas-presenter *::before, .atlas-presenter *::after { box-sizing: border-box; }
+
+/* Screen-reader-only text (the position sentence, read before each slide). */
+.pr-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* ---- Slide tints ---------------------------------------------------------
+ * The flat colour a slide falls back to when the story has no loadable image.
+ * Cycled by scene index (`DeckSlide.tintClass`), the same device the scrapbook
+ * uses for a memory with no photo — so a story that mixes the two reads as one
+ * app rather than two.
+ * ------------------------------------------------------------------------- */
+.pr-tint-0 { --pr-tint: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua)); }
+.pr-tint-1 { --pr-tint: linear-gradient(150deg, var(--atlas-bg-2), var(--atlas-coral)); }
+.pr-tint-2 { --pr-tint: linear-gradient(135deg, var(--atlas-bg), var(--atlas-teal-mid), var(--atlas-aqua-light)); }
+.pr-tint-3 { --pr-tint: linear-gradient(135deg, var(--atlas-bg-2), var(--atlas-dusk)); }
+.pr-tint-4 { --pr-tint: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-violet)); }
+
+.pr-slide { position: absolute; inset: 0; display: block; }
+
+/* ---- The card ------------------------------------------------------------ */
+
+.pr-card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--atlas-glass);
+  border: 1px solid var(--atlas-line-2);
+  border-radius: 16px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--atlas-shadow);
+}
+.pr-card-img { display: block; width: 100%; height: 170px; object-fit: cover; flex: none; }
+/* The scrolling half. `overscroll-behavior` keeps a long narrative from
+   handing its overscroll to the globe, which would spin the world when the
+   reader hit the end of a paragraph. */
+.pr-card-text {
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 16px 18px 18px;
+}
+.pr-card-text::-webkit-scrollbar { width: 8px; }
+.pr-card-text::-webkit-scrollbar-thumb { background: var(--atlas-line-2); border-radius: 8px; }
+
+.pr-card-head { display: flex; flex-direction: column; gap: 6px; }
+.pr-eyebrow {
+  margin: 0; display: flex; align-items: center; gap: 7px;
+  font: 500 11px/1 var(--atlas-mono); color: var(--atlas-dusk);
+  font-variant-numeric: tabular-nums;
+}
+.pr-eyebrow .pr-dot { color: var(--atlas-line-2); }
+.pr-title {
+  margin: 0; font-size: 21px; font-weight: 700; line-height: 1.15;
+  letter-spacing: -.3px; color: var(--atlas-fg-hi); text-wrap: balance;
+}
+.pr-card-body { min-width: 0; }
+
+/* ---- Markdown typography -------------------------------------------------
+ * `Scene.narrative` is Markdown per the schema; this is the first surface that
+ * renders it as such, so the type scale is set here once for every layout.
+ * ------------------------------------------------------------------------- */
+.pr-md { font-size: 13.5px; line-height: 1.6; color: var(--atlas-fg); }
+.pr-md > :first-child { margin-top: 0; }
+.pr-md > :last-child { margin-bottom: 0; }
+.pr-md p { margin: 0 0 10px; max-width: 68ch; }
+.pr-md h3, .pr-md h4, .pr-md h5, .pr-md h6 {
+  margin: 16px 0 6px; color: var(--atlas-fg-hi); line-height: 1.25; letter-spacing: -.1px;
+}
+.pr-md h3 { font-size: 15.5px; }
+.pr-md h4 { font-size: 14px; }
+.pr-md h5, .pr-md h6 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--atlas-fg-dim); }
+.pr-md strong { color: var(--atlas-fg-hi); font-weight: 700; }
+.pr-md em { font-style: italic; }
+.pr-md a { color: var(--atlas-teal); text-underline-offset: 2px; }
+.pr-md a:hover { color: var(--atlas-aqua-light); }
+.pr-md ul, .pr-md ol { margin: 0 0 10px; padding-left: 20px; }
+.pr-md li { margin: 3px 0; }
+.pr-md li::marker { color: var(--atlas-teal); }
+.pr-md blockquote {
+  margin: 10px 0; padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--atlas-line-2); color: var(--atlas-fg-dim); font-style: italic;
+}
+.pr-md hr { margin: 14px 0; border: 0; border-top: 1px solid var(--atlas-line); }
+.pr-code {
+  font: 500 12px/1.4 var(--atlas-mono); color: var(--atlas-teal);
+  background: color-mix(in srgb, var(--atlas-bg) 60%, transparent);
+  border: 1px solid var(--atlas-line); border-radius: 5px; padding: 1px 5px;
+}
+.pr-pre {
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; overflow-x: auto;
+  background: color-mix(in srgb, var(--atlas-bg) 70%, transparent);
+  border: 1px solid var(--atlas-line);
+}
+.pr-pre code { font: 500 12px/1.5 var(--atlas-mono); color: var(--atlas-fg); }
+.pr-inline-img {
+  display: block; max-width: 100%; height: auto; margin: 10px 0;
+  border-radius: 10px; border: 1px solid var(--atlas-line);
+}
+
+/* ---- Layout: card-left / card-right --------------------------------------
+ * A floating card docked to one side, the globe live and unobstructed beside
+ * it. The default for any scene that does not ask for something else.
+ * ------------------------------------------------------------------------- */
+.pr-layout-card-left .pr-card,
+.pr-layout-card-right .pr-card {
+  position: absolute;
+  top: var(--pr-gutter);
+  bottom: var(--pr-bar-clear);
+  width: min(380px, 34vw);
+  max-height: none;
+}
+.pr-layout-card-left .pr-card { left: var(--pr-gutter); }
+/* Clear of the exit control, which lives in the same corner. */
+.pr-layout-card-right .pr-card { right: var(--pr-gutter); top: calc(var(--pr-gutter) + 46px); }
+
+/* ---- Layout: card-bottom -------------------------------------------------
+ * The same card as a band across the foot of the stage, for a scene whose
+ * point is the view: a horizon wants the width, not the height. Image beside
+ * the prose rather than above it, or the band is all picture.
+ * ------------------------------------------------------------------------- */
+.pr-layout-card-bottom .pr-card {
+  position: absolute;
+  left: var(--pr-gutter); right: var(--pr-gutter);
+  bottom: var(--pr-bar-clear);
+  flex-direction: row;
+  max-height: 38vh;
+}
+.pr-layout-card-bottom .pr-card-img { width: 260px; height: auto; align-self: stretch; }
+.pr-layout-card-bottom .pr-card-text { flex: 1; }
+.pr-layout-card-bottom .pr-md p { max-width: 86ch; }
+
+/* ---- Layout: fullscreen --------------------------------------------------
+ * A slide. Title and description over a background image, or over the scene's
+ * tint when the story has no loadable one. Opaque on purpose — it is what an
+ * author reaches for when the globe is not the point (an opening title, a
+ * chapter break, a closing note).
+ * ------------------------------------------------------------------------- */
+.pr-layout-fullscreen { pointer-events: auto; display: grid; place-items: center; }
+.pr-bg { position: absolute; inset: 0; background: var(--pr-tint); overflow: hidden; }
+.pr-bg-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* Legibility, not decoration: white-on-photo fails contrast over a bright sky,
+   and a story's cover image is whatever the author had. */
+.pr-scrim {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--atlas-bg) 55%, transparent),
+      color-mix(in srgb, var(--atlas-bg) 82%, transparent));
+}
+.pr-layout-fullscreen .pr-card {
+  position: relative;
+  width: min(720px, 82vw);
+  max-height: calc(100% - var(--pr-bar-clear) - var(--pr-gutter) * 2);
+  margin-bottom: var(--pr-bar-clear);
+  /* The scrim is already doing the work; a second glass panel on top of it
+     just adds edges. */
+  background: transparent; border: 0; box-shadow: none; backdrop-filter: none;
+}
+.pr-layout-fullscreen .pr-card-text { padding: 0; gap: 16px; }
+.pr-layout-fullscreen .pr-title { font-size: clamp(26px, 4.2vw, 44px); letter-spacing: -1px; }
+.pr-layout-fullscreen .pr-eyebrow { font-size: 12px; }
+.pr-layout-fullscreen .pr-md { font-size: 16px; line-height: 1.65; color: var(--atlas-fg-hi); }
+.pr-layout-fullscreen .pr-md p { max-width: 62ch; }
+
+/* ---- Layout: split -------------------------------------------------------
+ * Half document, half world: a solid, full-height narrative column with the
+ * globe live beside it. Distinct from card-left in that it is opaque and
+ * reaches both edges, so a long piece of prose has somewhere to go.
+ * ------------------------------------------------------------------------- */
+.pr-layout-split .pr-card {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: min(460px, 42vw);
+  border-radius: 0; border: 0; border-right: 1px solid var(--atlas-line-2);
+  background: linear-gradient(180deg, var(--atlas-bg-2), var(--atlas-bg));
+  backdrop-filter: none;
+}
+.pr-layout-split .pr-card-img { height: 210px; }
+/* The control bar floats over the stage; keep the last paragraph clear of it. */
+.pr-layout-split .pr-card-text { padding: 20px 22px var(--pr-bar-clear); }
+
+/* ---- Narration ----------------------------------------------------------- */
+.pr-audio { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 2px; }
+.pr-audio-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px; cursor: pointer;
+  font: 600 12px/1 'Manrope', system-ui, sans-serif;
+  color: var(--atlas-fg); background: color-mix(in srgb, var(--atlas-bg) 55%, transparent);
+  border: 1px solid var(--atlas-line-2);
+}
+.pr-audio-btn svg { width: 14px; height: 14px; }
+.pr-audio-btn:hover { color: var(--atlas-teal); border-color: var(--atlas-teal); }
+.pr-audio-btn.playing { color: var(--atlas-mint); border-color: var(--atlas-mint); }
+.pr-audio-hint, .pr-audio-err { margin: 0; font-size: 11px; color: var(--atlas-fg-dim); }
+.pr-audio-err { font-style: italic; }
+
+/* ---- Chrome: exit, stepper, contents ------------------------------------- */
+
+.pr-exit {
+  pointer-events: auto;
+  position: absolute; top: var(--pr-gutter); right: var(--pr-gutter);
+  width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+  display: grid; place-items: center; font-size: 15px; line-height: 1;
+  color: var(--atlas-fg-hi); background: var(--atlas-glass);
+  border: 1px solid var(--atlas-line-2); backdrop-filter: blur(10px);
+}
+.pr-exit:hover { color: var(--atlas-coral); border-color: var(--atlas-coral); }
+
+.pr-bar {
+  pointer-events: auto;
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: var(--pr-gutter); height: var(--pr-bar-h);
+  display: flex; align-items: center; gap: 6px; padding: 0 8px;
+  background: var(--atlas-glass); border: 1px solid var(--atlas-line-2);
+  border-radius: 999px; backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow);
+}
+.pr-contents-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 36px; padding: 0 13px; border-radius: 999px; cursor: pointer;
+  font: 600 12.5px/1 'Manrope', system-ui, sans-serif;
+  color: var(--atlas-fg-dim); background: transparent; border: 1px solid transparent;
+}
+.pr-contents-btn svg { width: 15px; height: 15px; }
+.pr-contents-btn:hover { color: var(--atlas-teal); background: color-mix(in srgb, var(--atlas-teal-600) 12%, transparent); }
+.pr-contents-btn.active {
+  color: var(--atlas-teal); background: color-mix(in srgb, var(--atlas-teal-600) 18%, transparent);
+  border-color: var(--atlas-line-2);
+}
+.pr-step {
+  width: 36px; height: 36px; border-radius: 10px; cursor: pointer;
+  display: grid; place-items: center;
+  color: var(--atlas-fg); background: transparent; border: 1px solid transparent;
+}
+.pr-step svg { width: 17px; height: 17px; }
+.pr-step:hover:not(:disabled) { color: var(--atlas-teal); background: color-mix(in srgb, var(--atlas-teal-600) 12%, transparent); }
+/* Disabled rather than wrapping: the stepper stops at both ends (see
+   `stepIndex`), and a control that looks live but does nothing is worse than
+   one that says it is spent. */
+.pr-step:disabled { opacity: .35; cursor: not-allowed; }
+.pr-position {
+  margin: 0; min-width: 54px; text-align: center;
+  font: 500 12.5px/1 var(--atlas-mono); color: var(--atlas-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.pr-position b { color: var(--atlas-fg-hi); font-weight: 700; font-size: 14px; }
+
+.pr-progress {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: color-mix(in srgb, var(--atlas-line) 70%, transparent);
+}
+.pr-progress i {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--atlas-teal-600), var(--atlas-mint));
+  transition: width .35s ease;
+}
+
+.pr-contents {
+  pointer-events: auto;
+  position: absolute; left: var(--pr-gutter); bottom: var(--pr-bar-clear);
+  width: min(340px, 42vw); max-height: 46vh; overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px; border-radius: 14px;
+  background: var(--atlas-card); border: 1px solid var(--atlas-line-2);
+  backdrop-filter: blur(18px); box-shadow: var(--atlas-shadow);
+}
+.pr-contents ol { list-style: none; margin: 0; padding: 0; counter-reset: none; }
+.pr-contents li + li { margin-top: 2px; }
+.pr-contents button {
+  display: flex; gap: 10px; width: 100%; padding: 9px 10px; cursor: pointer;
+  border: 1px solid transparent; border-radius: 9px; background: none;
+  color: var(--atlas-fg); font: inherit; text-align: left;
+}
+.pr-contents button:hover { background: color-mix(in srgb, var(--atlas-teal-600) 12%, transparent); }
+.pr-contents button.active {
+  background: color-mix(in srgb, var(--atlas-teal-600) 18%, transparent);
+  border-color: var(--atlas-line-2);
+}
+.pr-contents-n {
+  flex: none; width: 20px; text-align: right;
+  font: 600 11px/1.5 var(--atlas-mono); color: var(--atlas-teal);
+}
+.pr-contents button.active .pr-contents-n { color: var(--atlas-mint); }
+.pr-contents-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pr-contents-text b { font-size: 13px; font-weight: 600; color: var(--atlas-fg-hi); }
+.pr-contents-text small {
+  font-size: 11px; line-height: 1.35; color: var(--atlas-fg-dim);
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ---- Focus ---------------------------------------------------------------
+ * Same ring the rest of the shell uses (see the :focus-visible list in
+ * atlas.css) — one focus affordance for the whole app, not a per-feature one.
+ * ------------------------------------------------------------------------- */
+.pr-exit:focus-visible,
+.pr-step:focus-visible,
+.pr-contents-btn:focus-visible,
+.pr-contents button:focus-visible,
+.pr-audio-btn:focus-visible,
+.pr-md a:focus-visible {
+  outline: 2px solid var(--atlas-aqua-light);
+  outline-offset: 2px;
+}
+
+/* ---- Motion --------------------------------------------------------------
+ * A slide that fades up reads as a step; one that appears reads as a glitch.
+ * The keyframe is short and translation-light on purpose, and it is off
+ * entirely under `prefers-reduced-motion` — which for this feature also means
+ * every camera transition becomes a cut (see `sceneTransition`), so the reader
+ * who asked for stillness gets it from the globe as well as from the card.
+ * ------------------------------------------------------------------------- */
+@keyframes pr-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.pr-card { animation: pr-rise .28s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .atlas-presenter *, .atlas-presenter *::before, .atlas-presenter *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Small screens -------------------------------------------------------
+ * Every side-docked layout collapses to the same bottom sheet. A 380px card
+ * beside a 390px phone is a card *instead of* the globe, and `split` at 42vw
+ * is a 164px column — a two-word line length. One shape, full width, with the
+ * globe still visible above it.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 720px) {
+  .atlas-presenter { --pr-gutter: 8px; }
+  .pr-layout-card-left .pr-card,
+  .pr-layout-card-right .pr-card,
+  .pr-layout-card-bottom .pr-card,
+  .pr-layout-split .pr-card {
+    position: absolute; inset: auto 8px var(--pr-bar-clear) 8px;
+    width: auto; top: auto; max-height: 46vh;
+    flex-direction: column; border-radius: 16px;
+    border: 1px solid var(--atlas-line-2);
+  }
+  .pr-layout-card-bottom .pr-card-img,
+  .pr-layout-split .pr-card-img { width: 100%; height: 130px; }
+  .pr-layout-split .pr-card-text { padding: 14px 16px 16px; }
+  .pr-layout-fullscreen .pr-card { width: calc(100% - 32px); }
+  .pr-contents { left: 8px; right: 8px; width: auto; }
+  .pr-bar { left: 8px; right: 8px; transform: none; justify-content: center; }
+  .pr-contents-btn span { display: none; }
+}
+
+/* Coarse pointers need real tap targets whatever the viewport, matching the
+   `(pointer: coarse)` block in atlas.css. */
+@media (pointer: coarse) {
+  .pr-step, .pr-exit, .pr-contents-btn, .pr-audio-btn { min-width: 40px; min-height: 40px; }
+}
