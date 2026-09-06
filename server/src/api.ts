@@ -33,9 +33,11 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   const { store, connectors, viewerBaseUrl, apiBaseUrl } = deps;
   const app = Fastify({ logger: true });
 
-  // Attach auth to every request (public routes simply ignore it).
+  // Attach auth to every request (public routes simply ignore it). `req.log` is
+  // passed so a rejected token is logged with the request id that carried it —
+  // the *reason* for the rejection only ever appears here, never in the response.
   app.addHook('preHandler', async (req) => {
-    req.auth = await verifyBearer(req.headers.authorization);
+    req.auth = await verifyBearer(req.headers.authorization, req.log);
   });
 
   app.get('/healthz', async () => ({ ok: true, service: 'companion-atlas', version: '0.1.0' }));
