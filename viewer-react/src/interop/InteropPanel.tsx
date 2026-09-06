@@ -4,6 +4,12 @@
  * Import lands in the canonical `Story` model (see `importFile.ts`), so a
  * dropped KML is immediately exportable, collectable and visible on the WebXR
  * globe, not a Cesium-only overlay.
+ *
+ * Companion Memory is the *other* thing that goes in and out of here, and it is
+ * a peer of files rather than a special case: the same panel, the same two
+ * directions. Its sections live in `MemorySections.tsx` because they carry a
+ * network's worth of state (progress, warnings, a lossiness report) that has
+ * nothing to do with reading a dropped file.
  */
 import { useCallback, useRef, useState } from 'react';
 import type { Story } from '@companion-atlas/story';
@@ -11,6 +17,10 @@ import { INTEROP_ACCEPT } from './detectFormat.js';
 import { importFiles, type ImportedFile } from './importFile.js';
 import { downloadKml, downloadStoryJson } from './exportFile.js';
 import { summarise } from './useImported.js';
+import type { MemorySource } from '../memory/client.js';
+import type { MemoryImport } from '../memory/import.js';
+import { MemoryExportSection, MemoryImportSection } from './MemorySections.js';
+import { useMemoryTransfer } from './useMemoryTransfer.js';
 import './interop.css';
 
 export interface InteropPanelProps {
@@ -24,13 +34,37 @@ export interface InteropPanelProps {
   onClearImported: () => void;
   /** Fly the globe to everything that just arrived. */
   onFrameImported?: () => void;
+  /** The connected CI-Server, or null. Null disables the two Memory sections
+   *  rather than hiding the import one — "you could do this if you connected"
+   *  is information; a missing section is not. */
+  memory: MemorySource | null;
+  /**
+   * A completed Companion Memory import. **Required**, because the whole point
+   * of this panel is that it does something: a panel that runs a multi-minute
+   * import and drops the result on the floor is the bug being fixed here.
+   *
+   * The result is a *replacement*, not a merge — do not route it through
+   * `onImported`/`withImported`. Those add to `story.items`, and `deriveModel`
+   * builds its memory list from `story.scenes` whenever there are any, so items
+   * merged into a story that has scenes never become memories at all. The
+   * imported story has no scenes by design (`memoryToStory`), which is exactly
+   * what makes `deriveModel`'s entity fallback project every row.
+   */
+  onMemoryImported: (result: MemoryImport) => void;
+  /** Link to store on an exported story event. Already scrubbed of `?memory=`
+   *  and `?token=` — a share URL is a public artifact. */
+  shareUrl?: () => string | undefined;
 }
 
 export function InteropPanel({
   open, onClose, story, files, onImported, onRemoveFile, onClearImported, onFrameImported,
+  memory, onMemoryImported, shareUrl,
 }: InteropPanelProps) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  // Above the `!open` early return: a closed panel must still be allowed to
+  // hold a running import, or closing the drawer would cancel one mid-page.
+  const transfer = useMemoryTransfer(memory, { onImported: onMemoryImported, shareUrl });
 
   const take = useCallback(
     async (list: FileList | File[] | null) => {
@@ -83,6 +117,8 @@ export function InteropPanel({
         </button>
       </section>
 
+      <MemoryImportSection transfer={transfer} />
+
       {files.length > 0 && (
         <section className="io-section">
           <div className="io-section-head">
@@ -132,6 +168,8 @@ export function InteropPanel({
           the round trip. Export story JSON to keep them.
         </p>
       </section>
+
+      <MemoryExportSection transfer={transfer} story={story} />
     </aside>
   );
 }

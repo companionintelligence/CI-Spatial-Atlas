@@ -22,6 +22,7 @@
  *   icons.ts        the marker icon gallery
  *   camera.ts       camera pose ↔ canonical `Camera` (units live here)
  *   ids.ts          entity-id conventions shared with the memory/place layers
+ *   persist.ts      the drawn set in localStorage, scoped per account
  *   ------------------------------------------------------------------------
  *   pick.ts         pixel → terrain position                        (Cesium)
  *   entities.ts     `Item` → Cesium entities                        (Cesium)
@@ -46,4 +47,5 @@ export * from './style.js';
 export * from './icons.js';
 export * from './camera.js';
 export * from './ids.js';
+export * from './persist.js';
 export { AuthoringToolbar, formatArea, formatLength, type AuthoringToolbarProps } from './Toolbar.js';

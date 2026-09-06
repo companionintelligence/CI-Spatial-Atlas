@@ -103,7 +103,7 @@ flowchart TD
 | `src/renderers/xr/` | The WebXR globe: locomotion, sky shell, memory pins, wrist menu, Street View plates |
 | `src/ui/` | Shell, rail, inspector, place card, time machine, command palette, lightbox |
 | `src/scrapbook/useScrapbook.ts` | The local scrapbook draft (`localStorage`, account-scoped) |
-| `src/theme/` | `@companionintelligence/tokens` + the Atlas surface CSS |
+| `src/theme/` | `theme.css` (imports the canonical `tokens.css`) + the Atlas surface CSS. CSS only — the WebGL layers carry their own hex literals mirroring `atlas.css` |
 
 ## 3. Renderer selection
 
@@ -338,7 +338,7 @@ first.
 | Group | Variables |
 |---|---|
 | Viewer (build-time, Vite-inlined) | `VITE_CESIUM_ION_TOKEN`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_MAPBOX_TOKEN`, `VITE_MEMORY_URL`, `VITE_MEMORY_TOKEN` |
-| Viewer SPA login (`.env.dev.example`) | `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_REDIRECT_URI`, `VITE_ATLAS_API` |
+| Viewer SPA login — **declared but not wired**, see [§8](#8-known-gaps--deliberately-out-of-scope-today) | `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_REDIRECT_URI`, `VITE_ATLAS_API` |
 | Atlas server URLs | `ATLAS_VIEWER_BASE_URL`, `ATLAS_API_BASE_URL` |
 | Infrastructure | `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `S3_BUCKET` |
 | Suite connectors | `CI_MEMORY_URL`, `OPENCLAW_URL`, `HERMES_URL` |
@@ -348,6 +348,12 @@ Every `VITE_*` value is inlined into the bundle at build time and is therefore
 **public**. `VITE_MEMORY_TOKEN` in particular is a build-time default for
 single-tenant deployments only; multi-user installs pass `?token=` per session
 instead.
+
+The four SPA-login variables are the exception to "these configure the viewer":
+setting them changes nothing today. `viewer-react/src/auth/portal.ts` reads
+`VITE_OIDC_*` through `portalConfigFromEnv()`, but nothing calls it, and
+`VITE_ATLAS_API` has no reader in `viewer-react/` at all. They are kept so the
+contract with CI-Portal stays written down, not because they are live.
 
 ### 7.4 Docker Compose services (`docker-compose.yml`)
 
@@ -370,17 +376,45 @@ stores and API in containers, the viewer on the host for HMR.
 
 ## 8. Known gaps / deliberately out of scope today
 
-- **The viewer cannot be built in CI or in Docker.**
-  `viewer-react/src/theme/index.ts` imports `@companionintelligence/tokens`,
-  which `package-lock.json` resolves to `link:../ci-common/packages/tokens` — a
-  sibling checkout of CI-Common, outside this repository. Vitest suites don't
-  touch that import so they run fine, but `npm run build`,
-  `viewer-react/Dockerfile`, and any GHCR publish all need that package
-  resolvable. `viewer-react/.npmrc` already points `@companionintelligence` at
-  GitHub Packages; publishing the package there (and giving CI a
-  `NODE_AUTH_TOKEN`) is what closes this. Until then
-  [`hub/docker-compose.json`](../hub/docker-compose.json) names an image that
-  nothing in this repo produces.
+- **The viewer cannot be *built* in CI or in Docker — but it can now be
+  *typechecked*.** `@companionintelligence/tokens` is the one dependency
+  `package-lock.json` resolves to `link:../ci-common/packages/tokens`, a sibling
+  checkout of CI-Common outside this repository; it is the only such `link`
+  entry in the lockfile.
+
+  Earlier editions of this list blamed `viewer-react/src/theme/index.ts`, which
+  imported the package for `primaryHex()`/`fontStack()`. That file has been
+  deleted: it had no importers at all, because the WebGL layers that were meant
+  to use it (`layers/cesium.ts`, `authoring/style.ts`, `authoring/entities.ts`)
+  each ended up carrying hex literals mirroring `theme/atlas.css` instead. With
+  it gone there is **no JavaScript or TypeScript import of the package left**,
+  so `tsc -p viewer-react/tsconfig.json --noEmit` succeeds in a single-repo
+  checkout and a typecheck step can be added to the `viewer` CI job today.
+
+  `vite build` is a separate resolution path and still fails.
+  `viewer-react/src/theme/theme.css` line 12 does
+  `@import '@companionintelligence/tokens/tokens.css'`, and vite resolves bare
+  CSS specifiers through node resolution just as it does JS ones — an
+  unresolvable one is a hard build error (`[vite:css] [postcss] ENOENT`), not a
+  passthrough. `theme.css` is loaded unconditionally by `src/main.tsx`, and the
+  tokens it pulls in are what `body { background: var(--background) }` and the
+  `--atlas-*` aliases in `atlas.css` are defined against, so it cannot simply be
+  dropped.
+
+  Two ways to close it, and they are not equivalent:
+  - *Publish* `@companionintelligence/tokens` to GitHub Packages and give CI a
+    `NODE_AUTH_TOKEN`. `viewer-react/.npmrc` already points the scope there.
+    This keeps one canonical source of truth and is the right fix.
+  - *Vendor* `tokens.css` into `viewer-react/src/theme/`. Mechanically trivial —
+    the file is 208 lines with no nested `@import` and no `url()` references, so
+    a copy plus a one-line change to `theme.css` would do it, and the dependency
+    could then leave `viewer-react/package.json` entirely. But it forks the
+    canonical palette into a copy nothing keeps in sync, which is precisely what
+    `npm run lint:canon` exists to prevent. Treat it as a fallback if publishing
+    stays blocked, not as the preferred route.
+
+  Until one of them lands, [`hub/docker-compose.json`](../hub/docker-compose.json)
+  names an image that nothing in this repo produces.
 - **No pixel-diff visual regression.** The old suite covered the removed
   vanilla-TS viewer's deterministic `?static=1` path. Cesium/Resium has none —
   making it deterministic (offline imagery, ion disabled, locked camera and
@@ -411,6 +445,25 @@ stores and API in containers, the viewer on the host for HMR.
     vocabulary onto Atlas operations is a deliberate follow-up — that
     vocabulary isn't defined anywhere Atlas can see yet, so a mapping written
     today would be invented rather than agreed.
+- **The viewer has no sign-in. It authenticates by ambient cookie or
+  `?token=`.** `memory/client.ts` sends `credentials: 'include'`, so a CI-Server
+  session cookie already set on the host is used if one exists; otherwise the
+  bearer comes from `?token=<jwt>` on the URL, or from `VITE_MEMORY_TOKEN` baked
+  in at build time. That is the whole of it. There is no OIDC login in the SPA:
+  `viewer-react/src/auth/portal.ts` implements a complete Authorization Code +
+  PKCE (S256) flow — `beginLogin()`, `completeLogin()`,
+  `portalConfigFromEnv()` — and **nothing calls any of it**. There is no
+  `/auth/callback` handling at boot and no sign-in control in the shell.
+
+  It is kept rather than deleted because the flow is correct and its blockers
+  are external: `companion-atlas` is not registered in CI-Portal
+  `PUBLIC_CLIENTS` (a PR against another repo), `.env.default` ships
+  `VITE_OIDC_ISSUER`/`VITE_OIDC_REDIRECT_URI` empty so `portalConfigFromEnv()`
+  returns null in every checked-in configuration, and `VITE_ATLAS_API` has no
+  reader in `viewer-react/`, so a completed login would not change what the
+  viewer can fetch. Wiring sign-in is worth doing as one piece of work together
+  with an Atlas-API client that actually sends the bearer — not before.
+
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all
   data on restart — see [`REIMAGINE.md` Phase 1](../REIMAGINE.md#8-migration-roadmap)
   for the Postgres/Redis/MinIO migration.
@@ -418,8 +471,17 @@ stores and API in containers, the viewer on the host for HMR.
   `reconstruct()` in `server/src/pipeline.ts` return well-typed placeholder
   results; they do not yet shell out to COLMAP/ODM/Nerfstudio. The Dockerfile
   for the worker installs the real toolchain in anticipation of this.
-- **Suite connectors are unconditional stubs**, not just no-ops when
-  unconfigured — every method on `CiMemoryConnector`, `OpenClawConnector`, and
-  `HermesConnector` (`server/src/connectors.ts`) returns immediately with a
-  `// TODO` comment regardless of whether its URL is set. Same category of gap
-  as the reconstruction pipeline above.
+- **Suite connectors: memory is real, OpenClaw and Hermes are not.** This entry
+  used to say all three were unconditional stubs that returned immediately
+  regardless of whether their URL was set. That is no longer true of any of
+  them. Every connector in `server/src/connectors.ts` now has a `configured`
+  getter and guards on it, so an unconfigured connector is a no-op *by design*
+  rather than a stub that ignores its configuration — and
+  `CiMemoryConnector.query()` and `.saveStoryMemory()` do real GraphQL work,
+  delegating to `queryLocatedMedia()` / `saveStoryMemory()` in
+  `server/src/ci-memory-client.ts`. What remains outstanding is narrower:
+  - `CiMemoryConnector.resolveMedia()` returns null — a dedicated single-media
+    lookup is a follow-up; the search query already returns absolutized
+    media/thumbnail URLs for the seeded set.
+  - `OpenClawConnector.notifyStoryReady()` and `HermesConnector.deliver()` have
+    no transport yet. Same category of gap as the reconstruction pipeline above.

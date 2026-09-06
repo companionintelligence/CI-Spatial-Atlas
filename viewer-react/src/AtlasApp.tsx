@@ -28,6 +28,8 @@ import { Presenter } from './ui/Presenter.js';
 import type { DeckSlide } from './ui/sceneDeck.js';
 import { InteropPanel, DropOverlay } from './interop/InteropPanel.js';
 import { useImported, withImported } from './interop/useImported.js';
+import { applyMemoryPlaces, type MemoryImport } from './memory/import.js';
+import type { GeoPlace } from './memory/geocode.js';
 import { useFileDrop } from './interop/useFileDrop.js';
 import { useAuthoring } from './authoring/useAuthoring.js';
 import { AuthoringToolbar, mergeAuthoredItems } from './authoring/index.js';
@@ -85,7 +87,16 @@ const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
  */
 export function AtlasApp() {
   const { story: loadedStory, error, loading, source, isSample, memory } = useStory();
-  const { places } = usePlaces(memory);
+  // A Companion Memory import REPLACES the loaded story rather than merging
+  // into it. `deriveModel` reads its memory list from `story.scenes` whenever
+  // there are any, so an archive merged into a scened story renders as nothing;
+  // the imported document has no scenes by design (`memoryToStory`), which is
+  // exactly what makes the entity fallback project every row.
+  const [memImport, setMemImport] = useState<MemoryImport | null>(null);
+
+  // The importer's roster beats a second places() query — it also covers
+  // places the events reference but that query never returned.
+  const { places } = usePlaces(memory, memImport?.places ?? null);
 
   // A curated scrapbook journey temporarily takes over the globe; the loaded
   // story stays the base the scrapbook collects against.
@@ -96,11 +107,17 @@ export function AtlasApp() {
   // headset — the reason import lands in the model at all (see interop/).
   const imported = useImported();
   const story = useMemo(
-    () => withImported(journey ?? loadedStory, imported.items),
-    [journey, loadedStory, imported.items],
+    () => withImported(journey ?? memImport?.story ?? loadedStory, imported.items),
+    [journey, memImport, loadedStory, imported.items],
   );
   const model = useMemo(() => (story ? deriveModel(story) : null), [story]);
-  const baseModel = useMemo(() => (loadedStory ? deriveModel(loadedStory) : null), [loadedStory]);
+  // The scrapbook collects against the *base* story. If that stayed
+  // `loadedStory` after an import, every collected id would resolve against a
+  // story no longer on screen and the draft would silently empty.
+  const baseModel = useMemo(() => {
+    const base = memImport?.story ?? loadedStory;
+    return base ? deriveModel(base) : null;
+  }, [memImport, loadedStory]);
 
   // Reduced-motion gates the app's dominant motion (time autoplay + camera
   // flights), not just the starfield.
@@ -121,9 +138,20 @@ export function AtlasApp() {
   // Name the memories the server could not place, from the Places already
   // loaded for the places layer — no extra request. Without this a delivery
   // renders as "Unnamed location" even when a known venue sits metres away.
+  // Two passes, in this order and not the other. `applyMemoryPlaces` is the
+  // *exact* join — CI-Server told us which place each memory belongs to — and
+  // `MediaItem` has no `placeId` field to carry it, so without this a photo's
+  // real place is structurally lost and it falls into "no place" even though
+  // the server knew. `nameUnplacedMemories` is the 150m proximity guess, and a
+  // guess must only ever fill what the exact join left empty.
   const memoriesNamed = useMemo(
-    () => (model ? nameUnplacedMemories(model.memories, places) : []),
-    [model, places],
+    () => (model
+      ? nameUnplacedMemories(
+          applyMemoryPlaces(model.memories, memImport?.placeOfMemory ?? new Map()),
+          places,
+        )
+      : []),
+    [model, places, memImport],
   );
 
   const placeIndex = useMemo(() => {
@@ -274,6 +302,25 @@ export function AtlasApp() {
     });
   }, [viewer, reduceMotion]);
 
+  // The palette can now find a place that is in no story at all — the first
+  // time the camera can be asked somewhere nothing is pinned. A place with an
+  // extent gets framed by its box; a point (an address, a POI) gets the same
+  // fixed altitude a memory does, because flying to the 20m "box" around a
+  // house puts the camera inside the roof. A degenerate box, or one crossing
+  // the antimeridian (east < west), falls back to the point rather than handing
+  // Cesium a rectangle it will read the long way round.
+  const flyToGeoPlace = useCallback((gp: GeoPlace) => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const b = gp.bounds;
+    const framed = b && b.east > b.west && b.north > b.south;
+    void viewer.camera.flyTo({
+      destination: framed
+        ? Cesium.Rectangle.fromDegrees(b.west, b.south, b.east, b.north)
+        : Cesium.Cartesian3.fromDegrees(gp.lon, gp.lat, 1_800_000),
+      duration: reduceMotion ? 0 : 1.6,
+    });
+  }, [viewer, reduceMotion]);
+
   const flyToPlace = useCallback((p: Place) => {
     if (!viewer || p.latitude == null || p.longitude == null) return;
     void viewer.camera.flyTo({
@@ -419,14 +466,35 @@ export function AtlasApp() {
     play();
   }, [play]);
 
+  // Layers the user has added, scoped per connected memory so two accounts on
+  // one browser don't inherit each other's stack. `timeMs` drives the
+  // availability window — a layer that only applies to part of the timeline
+  // hides itself as the clock leaves its range.
+  const layerControl = useLayers(memory?.url ?? null, { timeMs: currentMs || null });
+
+  // A story that arrives carrying layers must put them in the stack, or it
+  // renders none of them and says nothing — a layer nobody draws logs nothing.
+  // `mergeStoryLayers` appends and deduplicates on (format, url), so the user's
+  // own stack survives and re-opening a story raises its layers rather than
+  // stacking a second identical copy.
+  useEffect(() => {
+    layerControl.mergeStoryLayers(loadedStory?.layers);
+  }, [loadedStory, layerControl.mergeStoryLayers]);
+
   const draftStory = useCallback(
     (curated: boolean): Story | null => {
       if (sbEntries.length === 0) return null;
       const entries = sbEntries.map(toEntry);
       const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
-      return curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
+      // Fold the layer stack into everything that leaves the app. Without it a
+      // user who added four layers saves and downloads a story with none of
+      // them — and every layer's attribution goes too, which is a licence
+      // condition rather than a nicety.
+      return layerControl.toStory(
+        curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts),
+      );
     },
-    [sbEntries, sb.draft.visibility, sb.draft.title],
+    [sbEntries, sb.draft.visibility, sb.draft.title, layerControl.toStory],
   );
 
   const curate = useCallback(() => {
@@ -503,13 +571,17 @@ export function AtlasApp() {
   const closeScrapbook = useCallback(() => setSbOpen(false), []);
   const closePeople = useCallback(() => setPeopleOpen(false), []);
   const closeInterop = useCallback(() => setInteropOpen(false), []);
+
+  const onMemoryImported = useCallback((r: MemoryImport) => {
+    setMemImport(r);
+    // The intro flight ("frame the first memory, set the clock to its moment")
+    // is one-shot per session. A freshly imported archive is a new set of
+    // memories and deserves it again, or the camera stays parked over the old
+    // story's coordinates with nothing under it.
+    introDone.current = false;
+  }, []);
   const exitPresent = useCallback(() => setPresenting(false), []);
 
-  // Layers the user has added, scoped per connected memory so two accounts on
-  // one browser don't inherit each other's stack. `timeMs` drives the
-  // availability window — a layer that only applies to part of the timeline
-  // hides itself as the clock leaves its range.
-  const layerControl = useLayers(memory?.url ?? null, { timeMs: currentMs || null });
 
   // Dropping files anywhere on the globe imports them. Reported per file so one
   // bad file in a multi-file drop doesn't lose the rest, and the panel opens so
@@ -536,17 +608,24 @@ export function AtlasApp() {
   const draw = useAuthoring(viewer, {
     story: loadedStory,
     enabled: drawing,
+    // Drawn shapes now survive a reload. Same bucket rule as the layer stack —
+    // per connected memory, so two accounts on one browser never inherit each
+    // other's annotations.
+    scope: memory?.url ?? null,
     onSelect: (sel) => {
       if (sel?.kind === 'memory') setFocusedId(sel.id);
       else if (sel?.kind === 'place') setFocusedPlace(places.find((p) => p.id === sel.id) ?? null);
     },
   });
 
-  /** What leaves the app: everything on the globe, drawn shapes included. */
+  /** What leaves the app: everything on the globe — drawn shapes and layers. */
   const exportStory = useMemo(
     // `story` is still nullable here — the loading/error guards sit below.
-    () => (story && draw.items.length ? mergeAuthoredItems(story, draw.items) : story),
-    [story, draw.items],
+    // `toStory` returns its argument unchanged when the stack is empty, so a
+    // user with no layers keeps today's object identity and the viewer does not
+    // rebuild its CZML data source for nothing.
+    () => layerControl.toStory(story && draw.items.length ? mergeAuthoredItems(story, draw.items) : story),
+    [story, draw.items, layerControl.toStory],
   );
 
   // Stepping through authored scenes. The presenter owns the deck and the
@@ -629,7 +708,11 @@ export function AtlasApp() {
         onDraw={() => setDrawing((d) => !d)}
         drawing={drawing}
         onInterop={() => setInteropOpen((o) => !o)}
-        canPresent={(story.scenes?.length ?? 0) > 0}
+        // `memoryToStory` returns `scenes: []`, so gating on scenes hid Present
+        // from every real story and left it reachable only from the bundled
+        // demo. `buildDeck` now projects memories when a story has no authored
+        // scenes, so the honest question is whether there is anything to show.
+        canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
         importedCount={imported.items.length}
       />
       <TopBar
@@ -740,6 +823,15 @@ export function AtlasApp() {
         memories={model.memories}
         onClose={closePalette}
         onSelect={(m) => { inspect(m); closePalette(); }}
+        // pause() first, for the same reason `inspect` does: the playback
+        // fly-through would otherwise yank the camera straight back off the
+        // place the user just picked.
+        onSelectPlace={(gp) => { pause(); flyToGeoPlace(gp); closePalette(); }}
+        // Bias short queries toward what is on screen — "springfield" meaning
+        // the one nearby rather than the one in Illinois.
+        near={focused?.lat != null && focused?.lon != null
+          ? { lat: focused.lat, lon: focused.lon }
+          : undefined}
       />
       <Lightbox memory={lightbox} onClose={closeLightbox} />
       <AuthoringToolbar {...draw.toolbarProps} />
@@ -752,12 +844,18 @@ export function AtlasApp() {
         onRemoveFile={imported.removeFile}
         onClearImported={imported.clear}
         onFrameImported={frameAll}
+        memory={memory}
+        onMemoryImported={onMemoryImported}
+        shareUrl={safeShareUrl}
       />
       <Presenter
         story={story}
         open={presenting}
         onExit={exitPresent}
         onSceneEnter={presentScene}
+        // Without these the presenter opens empty on any Memory story: the deck
+        // is built from scenes, and a Memory archive has none.
+        memories={model.memories}
         initialSceneId={focused?.id ?? null}
         reduceMotion={reduceMotion}
       />

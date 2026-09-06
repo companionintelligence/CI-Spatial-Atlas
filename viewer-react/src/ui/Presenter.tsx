@@ -23,6 +23,7 @@ import { PauseIcon, PlayIcon, PrevIcon, NextIcon } from './icons.js';
 import { SceneLayout } from './SceneLayout.js';
 import {
   buildDeck,
+  type DeckMemory,
   canStep,
   clampIndex,
   indexOfScene,
@@ -36,6 +37,10 @@ import { createSceneAudio, type AudioElementLike, type AudioStatus, type SceneAu
 import '../theme/presenter.css';
 
 export interface PresenterProps {
+  /** Derived memories, used to build a deck when the story has no authored
+   *  scenes — which is every Companion Memory story. Without this the
+   *  presenter is reachable only from a story someone wrote by hand. */
+  memories?: readonly DeckMemory[];
   story: Story;
   /** Present mode on/off. Rendering nothing when closed keeps the caller's JSX
    *  free of a conditional and keeps this component's state alive across a
@@ -123,8 +128,12 @@ export function Presenter({
   initialSceneId,
   reduceMotion = false,
   createAudio,
+  memories,
 }: PresenterProps) {
-  const deck = useMemo(() => buildDeck(story, { reduceMotion }), [story, reduceMotion]);
+  const deck = useMemo(
+    () => buildDeck(story, { reduceMotion, memories }),
+    [story, reduceMotion, memories],
+  );
   const count = deck.length;
 
   const [index, setIndex] = useState(0);

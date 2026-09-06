@@ -17,8 +17,8 @@ import {
 import { layerFromCatalog, type CatalogEntry } from './catalog.js';
 import { readLayers, writeLayers, type LayerStorage } from './store.js';
 import { draftLayer, probeLayerFormat, sniffLayerFormat, type LayerDraftResult } from './sniff.js';
-import { fromStoryLayers } from './story.js';
-import type { Layer } from '@companion-atlas/story';
+import { fromStoryLayers, toStoryLayers, withStoryLayers } from './story.js';
+import type { Layer, Story } from '@companion-atlas/story';
 
 /**
  * The layer stack as a React value: state, persistence and the operations the
@@ -53,6 +53,22 @@ export interface LayerControl {
   addFromCatalog: (entry: CatalogEntry) => AtlasLayer;
   /** Add layers a Story brought with it, without dropping the user's own. */
   mergeStoryLayers: (layers: readonly Layer[] | undefined) => void;
+  /**
+   * The stack in canonical schema shape — the outbound half of the story
+   * bridge. Hand this to anything that writes a `Story.layers` itself; prefer
+   * `toStory` when you have the whole story, because that one also keeps the
+   * layer kinds this manager does not own.
+   */
+  storyLayers: Layer[];
+  /**
+   * Fold the stack into a story at save/export time.
+   *
+   * Must be called on every path that leaves the app — saving to memory,
+   * downloading, sharing — or the export is silently layer-less: a user adds
+   * four layers, exports, and gets a document with none of them, no error
+   * anywhere, because an absent `layers` array is a valid story.
+   */
+  toStory: (story: Story | null) => Story | null;
   remove: (id: string) => void;
   toggle: (id: string) => void;
   setVisible: (id: string, visible: boolean) => void;
@@ -152,6 +168,11 @@ export function useLayers(scope: string | null, opts: UseLayersOptions = {}): La
   const clear = useCallback(() => setLayers([]), []);
 
   const stack = useMemo(() => stackTopFirst(layers), [layers]);
+  // Memoised on `layers` alone, so `toStory` only produces a new story object
+  // when the stack actually changed — the Cesium viewer rebuilds its CZML data
+  // source on a new story reference, and doing that per render would be visible.
+  const storyLayers = useMemo(() => toStoryLayers(layers), [layers]);
+  const toStory = useCallback((s: Story | null) => withStoryLayers(s, layers), [layers]);
   const outsideWindow = useMemo(
     () => layersOutsideWindow(layers.filter((l) => l.visible), timeMs),
     [layers, timeMs],
@@ -159,7 +180,7 @@ export function useLayers(scope: string | null, opts: UseLayersOptions = {}): La
 
   return {
     layers, stack, count: layers.length, outsideWindow, timeMs,
-    addByUrl, addFromCatalog, mergeStoryLayers,
+    addByUrl, addFromCatalog, mergeStoryLayers, storyLayers, toStory,
     remove, toggle, setVisible, setOpacity, rename, raise, lower, moveTo, clear,
     busy,
   };

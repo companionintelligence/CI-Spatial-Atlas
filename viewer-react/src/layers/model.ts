@@ -12,24 +12,21 @@ import type { Layer } from '@companion-atlas/story';
  *
  * ## Relationship to `@companion-atlas/story`
  *
- * The canonical schema already has a `Layer` (`kind` + `uri` + `style` +
- * `opacity` + `availability`), and a Story can carry an array of them. That is
- * the interchange shape and this model does **not** compete with it: see
- * `story.ts` for the round-trip. What the schema's `Layer` cannot say is:
+ * The canonical schema already has a `Layer`, and a Story can carry an array of
+ * them. That is the interchange shape and this model does **not** compete with
+ * it: see `story.ts` for the round-trip.
  *
- *   - a human name (a story layer is identified only by its id),
- *   - whether it is currently visible,
- *   - where it sits in the stack (z-order),
- *   - who it must be credited to (a licence obligation, not a nicety),
- *   - *which* raster/vector protocol the `uri` speaks — the schema's `imagery`
- *     covers XYZ, TMS, WMTS and WMS, which need four different Cesium providers
- *     and are not interchangeable.
- *
- * So `AtlasLayer` is a superset, and everything the schema has no field for
- * travels in `style.atlas` where a `Story` round-trip preserves it (Zod strips
- * unknown *top-level* keys; `style` is a `z.record(z.unknown())` bag, so it
- * survives). Nothing here is a class or holds a Cesium object: the model stays
- * plain JSON so it can go into localStorage and into a Story unchanged.
+ * The five fields that used to have no home in the schema — a human name, the
+ * visible flag, the stack position, the attribution a licence obliges, and
+ * *which* raster/vector protocol the `uri` speaks (the schema's `imagery` covers
+ * XYZ, TMS, WMTS and WMS, which need four different Cesium providers and are not
+ * interchangeable) — are now real top-level schema fields, so `story.ts` writes
+ * them there and any other tool can read them. `AtlasLayer` is still a superset:
+ * `options` (per-provider fetch settings) and `catalogId` have no schema field
+ * and travel in `style.atlas`, where a `Story` round-trip preserves them (Zod
+ * strips unknown *top-level* keys; `style` is a `z.record(z.unknown())` bag, so
+ * it survives). Nothing here is a class or holds a Cesium object: the model
+ * stays plain JSON so it can go into localStorage and into a Story unchanged.
  */
 
 /** Kinds the canonical schema knows. Aliased so a schema change breaks the
@@ -80,9 +77,9 @@ export interface LayerFormatMeta {
  * Note the lossy edges, which are deliberate and are documented rather than
  * worked around:
  *  - KML and CZML both serialise as the schema's `geojson` kind, because the
- *    schema has no vector kind for them. The real format is kept in
- *    `style.atlas.format`, so a round-trip is lossless *for us* while still
- *    validating against the published schema.
+ *    schema has no vector kind for them. The exact format is written to the
+ *    schema's own `Layer.format`, so the round-trip is lossless for *any*
+ *    reader, not just for us.
  *  - `gaussian-splat` is a distinct schema kind but reaches Cesium the same way
  *    a 3D Tiles tileset does (see `czml.ts`, which returns both as `tilesets`).
  *    Keeping it separate preserves the story's own vocabulary.

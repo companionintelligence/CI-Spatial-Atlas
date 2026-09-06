@@ -71,6 +71,17 @@ import {
  *   - the four `screenSpaceCameraController` flags a vertex drag turns off,
  *   - the cursor class on the widget container.
  *
+ * ## Disabled is not destroyed
+ *
+ * `setEnabled(false)` and `destroy()` are not two strengths of the same thing.
+ * Closing the draw toolbar used to run the effect cleanup and therefore
+ * `destroy()`, which removes the `CustomDataSource` — so every finished shape
+ * vanished off the globe the moment the panel closed. The items were still in
+ * React state and came back when the toolbar re-opened, which made it worse
+ * rather than better: the user watched their work disappear and had no reason
+ * to believe it would return. So the controller now lives as long as the
+ * viewer, and `enabled` gates only input and the draft preview.
+ *
  * ## What it does not do
  *
  * No React state, no UI. Selection is reported through `onSelect` and pushed
@@ -103,6 +114,9 @@ export interface AuthoringControllerOptions {
   /** Stamped onto every shape, so drawn geometry sits on the story's timeline
    *  rather than defaulting to the whole span. */
   timeFor?: () => TimeSpec | undefined;
+  /** Whether input is live at construction. See `setEnabled` — a disabled
+   *  controller still owns and draws its shapes, it just cannot be drawn on. */
+  enabled?: boolean;
   /**
    * Whether this controller DRAWS the committed items, or only edits them.
    *
@@ -133,6 +147,25 @@ export interface AuthoringControllerOptions {
 }
 
 export interface AuthoringController {
+  /**
+   * Arm or disarm *input*, without touching what is already drawn.
+   *
+   * This is the whole difference between closing the draw toolbar and throwing
+   * the user's work away. `destroy()` removes the `CustomDataSource` and every
+   * shape in it; disabling only stops the handlers from acting, drops the shape
+   * in progress and hides the selection handles. The committed shapes stay on
+   * the globe, because from the user's side they are finished work that happens
+   * not to have a toolbar open over it — closing a panel that says "Draw" is
+   * not a request to erase drawings.
+   *
+   * The handlers stay registered rather than being torn off and re-attached:
+   * a `ScreenSpaceEventHandler` built and destroyed on every toggle is exactly
+   * the leak `destroy()` documents, and one that survives a remount
+   * double-handles every click.
+   */
+  setEnabled(enabled: boolean): void;
+  isEnabled(): boolean;
+
   setMode(mode: AuthoringMode): void;
   getMode(): AuthoringMode;
   /** Commit the shape in progress. Returns the item, or null with a warning
@@ -188,6 +221,9 @@ export function createAuthoringController(
   const { onChange, onSelect, onDraft, idPrefix = 'draw', renderItems = true } = options;
 
   let destroyed = false;
+  /** Input gate. `false` means every handler below returns early; it says
+   *  nothing about what is drawn — see `setEnabled`. */
+  let enabled = options.enabled !== false;
   let draft: DraftState = createDraft('idle');
   let style: AuthoringStyle = mergeStyle(DEFAULT_STYLE, options.style ?? {});
   let noteText = '';
@@ -222,6 +258,11 @@ export function createAuthoringController(
   let doubleClickSuppressed = false;
 
   const container = viewer.container as HTMLElement | undefined;
+
+  /** Every input path starts here. Three separate reasons to ignore an event —
+   *  the controller is gone, the tools are disarmed, or the viewer was torn
+   *  down under us — and they read identically at the call site. */
+  const inert = (): boolean => destroyed || !enabled || viewer.isDestroyed();
 
   // -------------------------------------------------------------------------
   // Emitting
@@ -394,7 +435,7 @@ export function createAuthoringController(
   // -------------------------------------------------------------------------
 
   handler.setInputAction((e: { position: Cesium.Cartesian2 }) => {
-    if (destroyed || viewer.isDestroyed()) return;
+    if (inert()) return;
 
     if (!isDrawingMode(draft.mode)) {
       // Idle: a click is a selection. Every layer's entity ids are prefixed, so
@@ -459,14 +500,14 @@ export function createAuthoringController(
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
   handler.setInputAction(() => {
-    if (destroyed || !isDrawingMode(draft.mode)) return;
+    if (inert() || !isDrawingMode(draft.mode)) return;
     // The two LEFT_CLICKs that precede this have already been de-duplicated,
     // so the draft holds exactly the vertices the user placed.
     commit();
   }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
   handler.setInputAction((e: { endPosition: Cesium.Cartesian2 }) => {
-    if (destroyed || viewer.isDestroyed()) return;
+    if (inert()) return;
 
     if (drag) {
       const hit = pickGlobePoint(viewer, e.endPosition);
@@ -496,7 +537,7 @@ export function createAuthoringController(
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
   handler.setInputAction((e: { position: Cesium.Cartesian2 }) => {
-    if (destroyed || viewer.isDestroyed() || isDrawingMode(draft.mode)) return;
+    if (inert() || isDrawingMode(draft.mode)) return;
     if (selection?.kind !== 'item') return;
     const target = parsePickedId(pickEntityId(viewer, e.position));
     if (!target) return;
@@ -563,7 +604,7 @@ export function createAuthoringController(
   // -------------------------------------------------------------------------
 
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (destroyed || viewer.isDestroyed()) return;
+    if (inert()) return;
     if (typingInFormField(event.target)) return;
 
     if (event.key === 'Escape') {
@@ -612,8 +653,32 @@ export function createAuthoringController(
   // -------------------------------------------------------------------------
 
   const api: AuthoringController = {
+    setEnabled(next) {
+      if (destroyed || next === enabled) return;
+      enabled = next;
+      if (!enabled) {
+        // Everything transient goes; everything committed stays. A drag in
+        // flight is ended rather than abandoned, because `endDrag` is what puts
+        // the four camera flags back — leaving them off would freeze the globe
+        // with no visible cause and no armed tool to explain it.
+        endDrag();
+        draft = createDraft('idle');
+        lastVertexWindow = null;
+        // Handles are live drag targets, so a selected shape must give them up
+        // even though the shape itself stays drawn.
+        setSelection(null, { emit: true });
+      }
+      syncDraft();
+      syncCursor();
+      syncDoubleClickSuppression();
+    },
+    isEnabled: () => enabled,
+
     setMode(mode) {
       if (destroyed || draft.mode === mode) return;
+      // Arming a tool that cannot receive a click would draw a live preview
+      // over a globe that ignores it. Disabled means idle, and stays idle.
+      if (!enabled && isDrawingMode(mode)) return;
       draft = setDraftMode(draft, mode);
       lastVertexWindow = null;
       // Arming a tool clears the selection: the handles would otherwise sit

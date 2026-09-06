@@ -4,6 +4,7 @@ import { Viewer, CzmlDataSource, Cesium3DTileset, type CesiumComponentRef } from
 import { storyToCzml, type Story, type Place } from '@companion-atlas/story';
 import type { AtlasMemory } from '../model/atlasModel.js';
 import { BASEMAPS, DEFAULT_BASEMAP, offlineImagery, resolveBasemap } from './basemaps.js';
+import { createTerrain } from './terrain.js';
 import { createLayerScene, isAtlasManagedImagery, type LayerScene } from '../layers/cesium.js';
 import type { AtlasLayer } from '../layers/model.js';
 import { keepForGlobe, type CzmlLike } from './globeCzml.js';
@@ -61,6 +62,91 @@ const LIT_FADE_IN = 1.0e5;
  */
 function nudge(v: Cesium.Viewer | null | undefined): void {
   if (v && !v.isDestroyed()) v.scene.requestRender();
+}
+
+/**
+ * Give up on a terrain provider whose *root* tiles fail, because that is what
+ * actually turns the globe black.
+ *
+ * This is the answer to a bug that was twice diagnosed from screenshots and
+ * twice mis-fixed on the imagery side. With a valid ion token and tile hosts
+ * that cannot be reached, the imagery fallback below **does** engage: Cesium
+ * 1.143's `ImageryLayer._requestImagery` reports the first non-cancelled tile
+ * failure through `TileProviderError.reportError` on the *provider's own*
+ * `errorEvent` (and `IonImageryProvider` forwards its inner provider's), so our
+ * listener fires, the bundled Natural Earth raster is added at index 0 and the
+ * dead ion layer is removed. The globe stays black anyway — because by then
+ * there is no surface left to paint it on:
+ *
+ *   - A failed terrain request sets the tile's `terrainState` to FAILED. The
+ *     state machine's recovery for that is `upsample()` from the parent, and a
+ *     level-0 tile has no parent, so it takes the other path:
+ *     `tile.state = QuadtreeTileLoadState.FAILED`. Nothing in Cesium ever moves
+ *     a tile back out of FAILED, and the terrain machine only runs while the
+ *     tile is LOADING — so a root tile that fails once is unrenderable for as
+ *     long as that provider is installed.
+ *   - The fill-mesh pass that normally papers over missing geometry cannot
+ *     help: `TerrainFillMesh.updateFillTiles` seeds its traversal *only* with
+ *     rendered tiles that already have a `vertexArray`, and propagates outward
+ *     from them. With every root failed there is no seed, so no fill is built.
+ *
+ * Zero surface geometry, whatever the imagery underneath — a black ball of
+ * starfield. And note the trigger is us *succeeding*: `layer.json` loads, we
+ * install the provider, and Cesium throws away the perfectly good ellipsoid
+ * tiles it was drawing (see `invalidateAllTiles` below) to request tiles that
+ * never arrive.
+ *
+ * The recovery is simply to put a working provider back. Assigning
+ * `terrainProvider` runs `Globe` → `GlobeSurfaceTileProvider` →
+ * `QuadtreePrimitive.invalidateAllTiles()`, which frees the level-zero tiles
+ * and rebuilds them, and `EllipsoidTerrainProvider` answers every request
+ * synchronously and offline. The globe comes back flat, one frame later.
+ *
+ * Policy, and why it is this narrow:
+ *
+ *   - **Level 0 only.** A deeper tile that fails is survivable — it upsamples
+ *     from its parent, or gets a fill mesh from its neighbours — and the globe
+ *     still draws. Tearing down terrain globally for one bad tile in the Alps
+ *     would be a worse trade than the coarse geometry Cesium already falls back
+ *     to. Only the roots are fatal, and they are fatal permanently.
+ *   - **One retry per root tile.** A single 502 from a CDN should not cost the
+ *     session its terrain. Cesium's own `timesRetried` cannot express this: the
+ *     terrain path reuses one `TileProviderError` object per provider and never
+ *     calls `reportSuccess` to reset it, so that counter is "errors this
+ *     provider has had", not "times this tile failed". Hence our own key set.
+ *   - **Only while our provider is still installed.** `layers/cesium.ts` hands
+ *     the globe to a user's quantized-mesh layer when they add one; a late
+ *     error from the provider we installed must not stomp on that.
+ *
+ * Exported for the test suite, which drives it with a stub provider — there is
+ * no globe, and no network, in a unit test.
+ */
+export function watchTerrainFailure(
+  v: Cesium.Viewer,
+  provider: Cesium.TerrainProvider,
+): () => void {
+  const retried = new Set<string>();
+  let fellBack = false;
+  const onError = (err: Cesium.TileProviderError): void => {
+    if (fellBack || err.level !== 0) return;
+    const key = `${err.x}/${err.y}`;
+    if (!retried.has(key)) {
+      retried.add(key);
+      // Listeners own this flag; the reporter reads it after the last one runs.
+      err.retry = true;
+      return;
+    }
+    fellBack = true;
+    console.warn(
+      '[cesium] terrain root tile failed twice; falling back to the smooth ellipsoid',
+      err.message,
+    );
+    if (v.isDestroyed() || v.terrainProvider !== provider) return;
+    v.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    nudge(v);
+  };
+  provider.errorEvent.addEventListener(onError);
+  return () => provider.errorEvent.removeEventListener(onError);
 }
 
 function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number; in: number }): void {
@@ -129,6 +215,19 @@ export function CesiumStoryViewer({
   basemapRef.current = basemap;
 
   const { czml, tilesets } = useMemo(() => storyToCzml(story), [story]);
+  // `storyToCzml` turns a story's 3d-tiles and gaussian-splat layers into
+  // tilesets, and the layer stack now also adopts those same layers (AtlasApp
+  // merges `story.layers` into it, so they are toggleable and get an opacity
+  // control). Rendering both mounts every such tileset twice — two coincident
+  // surfaces that z-fight, two sets of tile requests, two copies in memory.
+  // The stack wins, because it is the one the user can operate; matching on URL
+  // rather than id, since the layer model regenerates ids on the way in.
+  const ownTilesets = useMemo(() => {
+    if (!layers.length) return tilesets;
+    const claimed = new Set(layers.map((l) => l.url));
+    return tilesets.filter((t) => !claimed.has(t.url));
+  }, [tilesets, layers]);
+
   // See globeCzml.ts for why this filter is narrower than it looks.
   const passthroughIds = useMemo(() => new Set(extraItemIds), [extraItemIds]);
   const globeCzml = useMemo(
@@ -165,6 +264,7 @@ export function CesiumStoryViewer({
     let disposed = false;
     let raf = 0;
     let cleanupImageryError: (() => void) | undefined;
+    let cleanupTerrainError: (() => void) | undefined;
     let handler: Cesium.ScreenSpaceEventHandler | undefined;
     let cleanupInteract: (() => void) | undefined;
 
@@ -212,9 +312,6 @@ export function CesiumStoryViewer({
           } catch {
             await loadOffline();
           }
-          void withTimeout(Cesium.createWorldTerrainAsync(), 8000, 'ion terrain')
-            .then((t) => { if (alive()) v.terrainProvider = t; })
-            .catch(() => {});
         } else {
           // No ion token. Two layers, deliberately:
           //
@@ -239,6 +336,37 @@ export function CesiumStoryViewer({
           await loadOffline();
         }
       })();
+
+      // Terrain, deliberately *outside* the ion branch and not chained behind
+      // the imagery await above.
+      //
+      // `createTerrain()` (renderers/terrain.ts) resolves in a defined order —
+      // the deployment's own quantized-mesh tileset from `VITE_TERRAIN_URL`,
+      // then ion World Terrain, then the ellipsoid — and only the middle rung
+      // needs a token. This used to call `createWorldTerrainAsync()` inline
+      // inside `if (hasIon)`, which made the one terrain option that works
+      // *without* an account unreachable for exactly the keyless deployments it
+      // exists for: `VITE_TERRAIN_URL` and `VITE_TERRAIN_CREDIT` were
+      // documented settings that no code read. It also sat after `await`ing the
+      // ion imagery, so a slow (or 8-second-timing-out) imagery handshake
+      // delayed terrain that has nothing to do with it.
+      //
+      // No `withTimeout` here: `createTerrain` carries the same 8 s budget on
+      // both of its remote rungs, and it resolves rather than rejects — the
+      // ellipsoid is a legitimate answer, not a failure.
+      void createTerrain()
+        .then((choice) => {
+          if (!alive()) return;
+          console.info(`[cesium] terrain: ${choice.detail}`);
+          // The ellipsoid is already what the Viewer mounts with. Assigning a
+          // second one would call `invalidateAllTiles` — throwing away every
+          // tile loaded so far — to arrive at the same globe.
+          if (choice.source === 'ellipsoid') return;
+          v.terrainProvider = choice.provider;
+          cleanupTerrainError = watchTerrainFailure(v, choice.provider);
+          nudge(v);
+        })
+        .catch((e) => console.warn('[cesium] terrain selection failed', e));
 
       // Apply the *current* lighting choice rather than a hard-coded `false`.
       // This runs a frame or more after mount (Resium hands the viewer over on a
@@ -359,6 +487,7 @@ export function CesiumStoryViewer({
       disposed = true;
       if (raf) cancelAnimationFrame(raf);
       cleanupImageryError?.();
+      cleanupTerrainError?.();
       cleanupInteract?.();
       handler?.destroy();
       setViewerReady(null);
@@ -538,7 +667,7 @@ export function CesiumStoryViewer({
         automaticallyTrackDataSourceClocks={false}
       >
         <CzmlDataSource data={globeCzml} />
-        {tilesets.map((t) => (
+        {ownTilesets.map((t) => (
           <Cesium3DTileset key={t.id} url={t.url} />
         ))}
       </Viewer>

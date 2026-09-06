@@ -6,11 +6,12 @@
 > this app is the only viewer, and the root `npm run dev` / `npm run build` /
 > `npm test` drive it.
 >
-> **Known limitation:** `@companionintelligence/tokens` (imported by
-> `src/theme/index.ts`) resolves through the lockfile to a sibling `../ci-common`
+> **Known limitation:** `@companionintelligence/tokens` (`@import`ed by
+> `src/theme/theme.css`) resolves through the lockfile to a sibling `../ci-common`
 > checkout, outside this repository, so `npm run build` and this app's Docker
-> image cannot complete in a single-repo checkout. Vitest suites don't touch that
-> import and run fine. See `docs/architecture.md` §8.
+> image cannot complete in a single-repo checkout. Vitest suites and
+> `tsc --noEmit` don't touch that import and run fine — only `vite build` is
+> blocked, and only by the CSS `@import`. See `docs/architecture.md` §8.
 
 ## Architecture
 

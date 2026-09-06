@@ -88,7 +88,74 @@
 }
 .io-remove:hover { color: var(--atlas-coral); background: rgba(234, 114, 96, .12); }
 
-.io-actions { display: flex; gap: 8px; }
+.io-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Companion Memory transfer ---------------------------------------------- */
+
+/* Two columns at 336px minus padding: the date pair sits side by side and the
+   four bbox edges land as a 2x2, which is how a bounding box is actually shaped
+   — West/South then East/North reads as two corners rather than four numbers. */
+.io-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.io-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.io-field > span {
+  font: 600 9.5px/1 var(--atlas-mono);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--atlas-fg-dim);
+}
+.io-input {
+  min-width: 0; width: 100%; box-sizing: border-box;
+  padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--atlas-line); background: rgba(4, 18, 26, .5);
+  color: var(--atlas-fg-hi); font: 500 12px Manrope, sans-serif;
+}
+.io-input:disabled { opacity: .5; }
+/* The native date picker's indicator is near-black on this ground and reads as
+   an empty field with nothing to click. */
+.io-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .55; cursor: pointer; }
+
+.io-box {
+  margin: 0; padding: 9px; border: 1px solid var(--atlas-line); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 7px; min-width: 0;
+}
+.io-box legend {
+  padding: 0 5px; font: 600 9.5px/1 var(--atlas-mono);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--atlas-fg-dim);
+}
+
+.io-warnings, .io-problems {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 11.5px; line-height: 1.45;
+}
+/* Warnings are the importer telling the truth about a degradation, not a
+   failure — amber-ish (mint's dim sibling) rather than the coral used for
+   things that actually went wrong. */
+.io-warnings li { color: var(--atlas-fg-dim); padding-left: 11px; position: relative; }
+.io-warnings li::before { content: '·'; position: absolute; left: 2px; color: var(--atlas-teal); }
+.io-problems li { color: var(--atlas-coral); }
+.io-note.warn { color: var(--atlas-coral); }
+
+.io-result {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 9px; border-radius: 10px;
+  border: 1px solid var(--atlas-line); background: rgba(4, 18, 26, .35);
+}
+.io-result.bad { border-color: rgba(234, 114, 96, .4); }
+.io-result.bad .io-summary { color: var(--atlas-coral); }
+
+.io-progress { display: flex; flex-direction: column; gap: 5px; }
+.io-progress-label { font: 500 11.5px var(--atlas-mono); color: var(--atlas-fg-dim); }
+.io-bar {
+  height: 4px; border-radius: 2px; overflow: hidden;
+  background: rgba(64, 155, 155, .18);
+}
+.io-bar > i { display: block; height: 100%; width: 0; background: var(--atlas-teal); transition: width .2s linear; }
+/* No `totalCount` from the server means no honest percentage; a sweeping bar
+   says "working" without claiming to know how far along it is. */
+.io-bar.indeterminate > i { width: 40%; animation: io-sweep 1.1s ease-in-out infinite; }
+@keyframes io-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
 
 /* Drag overlay ---------------------------------------------------------- */
 
@@ -119,4 +186,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .atlas-dropzone { backdrop-filter: none; }
+  /* Hold the sweep still rather than dropping the bar: it is the only thing on
+     screen saying an import is alive, and a static full bar reading "working"
+     beats an animation for someone who asked for no motion. */
+  .io-bar.indeterminate > i { animation: none; width: 100%; opacity: .55; }
+  .io-bar > i { transition: none; }
 }

@@ -1,4 +1,4 @@
-import type { Layer } from '@companion-atlas/story';
+import type { Layer, Story } from '@companion-atlas/story';
 import {
   clampOpacity,
   DEFAULT_OPACITY,
@@ -31,6 +31,32 @@ import { defaultOptionsFor, nameFromUrl, sniffLayerFormat } from './sniff.js';
  *     presentation belongs. Namespacing under `atlas` leaves the rest of the
  *     bag free for renderer style hints an authoring tool may add.
  *
+ * ## The bag used to hold much more than it does now
+ *
+ * When this file was written the schema's `Layer` had only `id`/`kind`/`uri`/
+ * `style`/`opacity`/`availability`, so the five fields that make a layer usable
+ * — `name`, `format`, `visible`, `order` and `attribution` — were smuggled
+ * through `style.atlas` because there was nowhere else to put them. The schema
+ * has since GAINED all five as real top-level fields (see
+ * `packages/story-schema/src/schema.ts`), and this writer now uses them.
+ *
+ * That matters most for **attribution**, which is a licence condition and not
+ * presentation: nearly every open source in the catalog (OSM/ODbL, EOX and
+ * CARTO/CC BY, OpenSeaMap/CC BY-SA) requires its credit line to be carried and
+ * shown, so a story that holds a layer but drops its credit is a story that
+ * cannot lawfully be published. Inside `style` the credit was one
+ * unknown-key-dropping renderer or one lossy server round-trip away from
+ * disappearing with nothing logged; the schema's own comment on
+ * `LayerAttribution` says exactly this. Top level, it is a field a validator can
+ * see and a foreign tool can honour.
+ *
+ * The bag is still written, but only for what the schema genuinely has no field
+ * for (`options`, `catalogId`), and still *read* for all five migrated fields so
+ * that documents written by earlier versions of this code — which are already
+ * out there in localStorage exports and saved stories — keep loading intact.
+ * Nothing is dual-written: two copies of `visible` in one document is a question
+ * ("which one is true?") that no reader can answer correctly.
+ *
  * What a story genuinely cannot express, and is therefore lost to anything but
  * Atlas, is written down in the reader below rather than in a wiki nobody opens.
  */
@@ -38,20 +64,33 @@ import { defaultOptionsFor, nameFromUrl, sniffLayerFormat } from './sniff.js';
 /** The key inside `Layer.style` where the viewer's own fields live. */
 const STYLE_NS = 'atlas';
 
-/** Shape stored under `style.atlas`. Everything here is optional on the way in:
- *  a story authored by another tool will have none of it. */
+/**
+ * Shape stored under `style.atlas`.
+ *
+ * Everything here is optional on the way in: a story authored by another tool
+ * will have none of it, and a story written before the schema grew the real
+ * fields will have the whole of it. The five migrated fields stay in the type
+ * because this is also the *read* shape — see `readBag`.
+ */
 interface AtlasStyleBag {
+  /** @deprecated Legacy read path — written as `Layer.name` since the schema grew it. */
   name?: string;
+  /** @deprecated Legacy read path — written as `Layer.format`. */
   format?: LayerFormat;
+  /** @deprecated Legacy read path — written as `Layer.visible`. */
   visible?: boolean;
+  /** @deprecated Legacy read path — written as `Layer.order`. */
   order?: number;
+  /** @deprecated Legacy read path — written as `Layer.attribution`. */
   attribution?: LayerAttribution;
+  /** Provider options: no schema field, so this is the only home it has. */
   options?: LayerOptions;
+  /** Catalog provenance: likewise viewer-only, and likewise bag-resident. */
   catalogId?: string;
 }
 
 /** Schema kind → the format to assume when the story does not say. Only used
- *  for layers Atlas did not author; ours carry the exact format in the bag. */
+ *  for layers Atlas did not author; ours carry the exact format in `format`. */
 const FORMAT_FOR_KIND: Partial<Record<StoryLayerKind, LayerFormat>> = {
   imagery: 'xyz',
   terrain: 'quantized-mesh',
@@ -67,25 +106,71 @@ const FORMAT_FOR_KIND: Partial<Record<StoryLayerKind, LayerFormat>> = {
 /** Serialise one layer into the canonical schema shape. */
 export function toStoryLayer(l: AtlasLayer): Layer {
   const bag: AtlasStyleBag = {
-    name: l.name,
-    format: l.format,
-    visible: l.visible,
-    order: l.order,
-    ...(l.attribution ? { attribution: l.attribution } : {}),
     ...(l.options ? { options: l.options } : {}),
     ...(l.catalogId ? { catalogId: l.catalogId } : {}),
   };
   return {
     id: l.id,
+    // `kind` is what the layer *is* for the scene graph; `format` is what its
+    // endpoint speaks. Both are written because neither implies the other:
+    // `imagery` spans four incompatible tile protocols, and `geojson` is also
+    // where KML and CZML land.
     kind: layerKind(l.format),
+    name: l.name,
+    format: l.format,
     uri: l.url,
     opacity: l.opacity,
+    visible: l.visible,
+    order: l.order,
+    ...(l.attribution ? { attribution: l.attribution } : {}),
     ...(l.availability ? { availability: { start: l.availability.start, ...(l.availability.stop ? { stop: l.availability.stop } : {}) } } : {}),
+    // An empty bag is still written rather than omitted-when-empty, because a
+    // present-but-empty `style` is what tells a later reader "Atlas wrote this
+    // and had nothing viewer-only to add", as opposed to "another tool wrote
+    // it". Cheap, and it keeps `style` a stable object for style hints.
     style: { [STYLE_NS]: bag as unknown as Record<string, unknown> },
   };
 }
 
 export const toStoryLayers = (layers: readonly AtlasLayer[]): Layer[] => layers.map(toStoryLayer);
+
+/**
+ * Fold the current stack into a story, for save and export.
+ *
+ * The outbound half of this bridge, and the reason it exists: without a call to
+ * this, a user adds four layers, exports the story and gets a document with
+ * none of them — silently, because an absent `layers` array is perfectly valid.
+ *
+ * Merged by id rather than assigned wholesale. `fromStoryLayers` deliberately
+ * drops the kinds this manager does not own (`model`, `pin`, anything without a
+ * `uri`), so a story that arrived carrying those would lose them for good if
+ * saving replaced `story.layers` with only what the panel holds — a data-loss
+ * bug that would look exactly like the one this function fixes, only pointed
+ * the other way. Layers the panel does own keep their original array position
+ * so a saved story's diff stays small; new ones append.
+ *
+ * Returns the story unchanged (same object identity) when there is nothing to
+ * merge — the renderer rebuilds its CZML data source when the story reference
+ * changes, so handing back a fresh object every render would be visible.
+ */
+export function withStoryLayers(story: Story | null, layers: readonly AtlasLayer[]): Story | null {
+  if (!story || layers.length === 0) return story;
+
+  const mine = new Map(toStoryLayers(layers).map((l) => [l.id, l]));
+  const merged: Layer[] = [];
+  for (const existing of story.layers ?? []) {
+    const replacement = mine.get(existing.id);
+    if (replacement) {
+      merged.push(replacement);
+      mine.delete(existing.id);
+    } else {
+      merged.push(existing);
+    }
+  }
+  merged.push(...mine.values());
+
+  return { ...story, layers: merged };
+}
 
 /**
  * Read one story layer back.
@@ -97,33 +182,44 @@ export const toStoryLayers = (layers: readonly AtlasLayer[]): Layer[] => layers.
  *
  * Everything else is read defensively: a story is a document that may have been
  * authored by another tool, hand-edited, or written by an older version of this
- * one, and none of those are a reason to throw.
+ * one, and none of those are a reason to throw. Each field therefore reads
+ * top-level first (what the schema now defines), then `style.atlas` (what this
+ * code used to write), then a derivation from the URL or the kind.
  */
 export function fromStoryLayer(layer: Layer, index = 0): AtlasLayer | null {
   const uri = typeof layer.uri === 'string' ? layer.uri.trim() : '';
   if (!uri) return null;
 
   const bag = readBag(layer);
-  // Prefer what we wrote, then what the URL says, then the schema kind's
+  // Prefer an explicit statement of the protocol — the schema's `format` first,
+  // then the legacy bag copy — then what the URL says, then the schema kind's
   // default. The URL beats the kind because `kind: 'geojson'` is also what a
-  // KML layer serialises as — the kind is lossy, the extension is not.
-  const format = (bag.format && isLayerFormat(bag.format) ? bag.format : undefined)
+  // KML layer serialises as: the kind is lossy, the extension is not.
+  const format = pickFormat(layer.format)
+    ?? pickFormat(bag.format)
     ?? sniffLayerFormat(uri)
     ?? FORMAT_FOR_KIND[layer.kind];
   if (!format) return null;
 
+  const name = firstString(layer.name, bag.name) ?? nameFromUrl(uri);
+  // A story layer that says nothing about visibility is meant to be seen: it
+  // was authored into the story on purpose. That is also what the schema says
+  // ("Absent means visible"), so `!== false` and not `?? true` — a bag holding
+  // a hand-edited non-boolean must not read as hidden.
+  const visible = firstBoolean(layer.visible, bag.visible) !== false;
+  const order = firstFinite(layer.order, bag.order) ?? index;
+  const attribution = readAttribution(layer.attribution) ?? readAttribution(bag.attribution);
+
   const availability = readAvailability(layer);
   return {
     id: layer.id,
-    name: (typeof bag.name === 'string' && bag.name.trim()) || nameFromUrl(uri),
+    name,
     format,
     url: uri,
-    // A story layer that says nothing about visibility is meant to be seen:
-    // it was authored into the story on purpose.
-    visible: bag.visible !== false,
+    visible,
     opacity: layer.opacity == null ? DEFAULT_OPACITY : clampOpacity(layer.opacity),
-    order: typeof bag.order === 'number' && Number.isFinite(bag.order) ? bag.order : index,
-    ...(bag.attribution?.text ? { attribution: bag.attribution } : {}),
+    order,
+    ...(attribution ? { attribution } : {}),
     ...(availability ? { availability } : {}),
     ...(bag.options ? { options: { ...defaultOptionsFor(format).options, ...bag.options } } : defaultOptionsFor(format)),
     ...(typeof bag.catalogId === 'string' ? { catalogId: bag.catalogId } : {}),
@@ -150,6 +246,61 @@ function readBag(layer: Layer): AtlasStyleBag {
   const style = layer.style as Record<string, unknown> | undefined;
   const bag = style?.[STYLE_NS];
   return bag && typeof bag === 'object' ? (bag as AtlasStyleBag) : {};
+}
+
+/**
+ * `unknown` in, `LayerFormat` out.
+ *
+ * The schema's `LayerFormat` enum and this module's are the same ten strings
+ * today, but they are two separate declarations in two packages, so this
+ * validates rather than casts: a format the schema gains and Atlas cannot draw
+ * must fall through to the sniffer, not reach `FORMAT_META[format]` and index
+ * `undefined`.
+ */
+const pickFormat = (v: unknown): LayerFormat | undefined => (isLayerFormat(v) ? v : undefined);
+
+/** First value that is a non-empty string, trimmed. The bag is hand-editable,
+ *  so "present" is not the same as "usable". */
+function firstString(...vs: unknown[]): string | undefined {
+  for (const v of vs) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return undefined;
+}
+
+function firstBoolean(...vs: unknown[]): boolean | undefined {
+  for (const v of vs) if (typeof v === 'boolean') return v;
+  return undefined;
+}
+
+function firstFinite(...vs: unknown[]): number | undefined {
+  for (const v of vs) if (typeof v === 'number' && Number.isFinite(v)) return v;
+  return undefined;
+}
+
+/**
+ * Normalise a credit, from either the schema field or the legacy bag.
+ *
+ * `text` is the whole point — a credit with no line to display is not a credit
+ * — so an entry without one is dropped rather than carried as an empty badge.
+ * The remaining fields are copied individually instead of spread: the bag is
+ * hand-editable free-form JSON, and a stray key spread into the model would
+ * ride along into the next `toStoryLayer` and get stripped by Zod on the way
+ * back, which is a diff that appears and disappears for no visible reason.
+ */
+function readAttribution(a: unknown): LayerAttribution | null {
+  if (!a || typeof a !== 'object') return null;
+  const src = a as Partial<LayerAttribution>;
+  const text = firstString(src.text);
+  if (!text) return null;
+  const licence = firstString(src.licence);
+  const url = firstString(src.url);
+  return {
+    text,
+    ...(licence ? { licence } : {}),
+    ...(url ? { url } : {}),
+    ...(typeof src.onScreen === 'boolean' ? { onScreen: src.onScreen } : {}),
+  };
 }
 
 /**

@@ -5,7 +5,10 @@
  * fed a tree that mirrors the output exactly, so it saves nothing over template
  * strings while adding a dependency to a package whose whole job is to be the
  * one thing everything else depends on. The only real work an XML library would
- * do for us is escaping, and that is `escapeXml` below.
+ * do for us is escaping, and that is `escapeXml` below — plus `escapeHtml` and
+ * `safeUrlAttr`, which an XML library would NOT have done for us, because the
+ * balloon payload is HTML inside CDATA and no XML writer treats that as markup
+ * needing sanitisation.
  *
  * Reads `storyEntities()` rather than `story.items`, so an Atlas story whose
  * content lives in `media[]` exports too — otherwise "export to Google Earth"
@@ -70,9 +73,88 @@ function xmlId(id: string): string {
 
 /** Balloon HTML has to survive as markup, so it goes in CDATA. `]]>` inside the
  *  payload would close the section early and produce malformed XML — split the
- *  sequence across two CDATA sections, the standard escape. */
+ *  sequence across two CDATA sections, the standard escape.
+ *
+ *  This is an XML-wellformedness guard and NOTHING ELSE. Everything inside the
+ *  section reaches the balloon renderer as literal markup, so any story-supplied
+ *  value that goes into `html` must already have been through `escapeHtml` /
+ *  `safeUrlAttr` — see `mediaBalloon`. */
 function cdata(html: string): string {
   return `<![CDATA[${stripInvalidXmlChars(html).replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
+}
+
+/**
+ * Escape a story-supplied value for interpolation into balloon *HTML*.
+ *
+ * XML escaping does not cover this case: the balloon is HTML carried inside a
+ * CDATA section, and CDATA means "pass these bytes through untouched", so
+ * `escapeXml` never runs on that path and `cdata()` only rewrites `]]>`. A
+ * Story is untrusted input — the viewer loads any `?story=<url>` and CI-Server
+ * memories are assembled from third-party imports — so an unescaped caption of
+ * `<img src=x onerror=alert(1)>` is a live injection into whatever opens the
+ * export. Google Earth renders balloon HTML by design; that is the feature, not
+ * a bug in the reader, which is why the fix has to be here.
+ *
+ * Covers text and attribute contexts at once (both quote characters escaped),
+ * so callers cannot pick the wrong one. `&#39;` rather than `&apos;` because
+ * that entity *name* is HTML5-only: Google Earth's older embedded renderer
+ * prints it literally, and an apostrophe rendered as `&apos;` in a caption is a
+ * bug users report.
+ */
+function escapeHtml(s: string): string {
+  return stripInvalidXmlChars(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Schemes a balloon URL may use.
+ *
+ * Escaping alone does not make a URL attribute safe: `href="javascript:alert(1)"`
+ * contains no metacharacter to escape and still executes. Links get the schemes
+ * a reader expects from prose; media gets less, because a `data:` image URL can
+ * carry an SVG document — script included — the moment anything renders it as a
+ * document rather than an image.
+ *
+ * This mirrors `viewer-react/src/ui/safeUrl.ts` deliberately instead of
+ * importing it. This package is the one thing every other package depends on;
+ * a dependency edge back into the viewer would invert that, and the server and
+ * the CLI exporters would drag a browser bundle in behind it. Two dozen lines
+ * duplicated is the cheaper of the two costs — if you change the rules here,
+ * change them there too.
+ */
+const LINK_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
+const MEDIA_SCHEMES = new Set(['http', 'https']);
+
+const SCHEME_RE = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/;
+
+/**
+ * Sanitise a URL for use as an attribute value, or return null to drop it.
+ *
+ * The leading strip is the load-bearing part: `java\tscript:alert(1)` and
+ * `java script:alert(1)` are working payloads because URL parsers discard ASCII
+ * whitespace and C0 controls while resolving, so a value that fails a naive
+ * `/^javascript:/i` test still navigates. Read the scheme only *after* removing
+ * what the parser would remove.
+ */
+function safeUrlAttr(raw: string | undefined, schemes: Set<string>): string | null {
+  if (typeof raw !== 'string') return null;
+  // C0 controls, space, DEL, NBSP, the line/paragraph separators and the BOM —
+  // every character a browser drops on its way to a scheme. Written with
+  // explicit escapes so the rule survives a copy/paste through anything that
+  // eats control characters — the literal form is invisible in a diff.
+  // eslint-disable-next-line no-control-regex
+  const url = raw.replace(/[\u0000-\u0020\u007f\u00a0\u2028\u2029\ufeff]/g, '');
+  if (url === '') return null;
+  const m = SCHEME_RE.exec(url);
+  // No scheme: a relative path or a fragment. In a KML file that resolves
+  // against the document's own location (the `files/` convention inside a KMZ),
+  // so there is no scheme to smuggle and these stay.
+  if (!m) return escapeHtml(url);
+  return schemes.has(m[1]!.toLowerCase()) ? escapeHtml(url) : null;
 }
 
 /** Normalise to a full RFC-3339 instant, matching what the CZML converter does.
@@ -199,16 +281,36 @@ function placemarkHead(
   return out;
 }
 
-/** A `photo`/`video` balloon. Google Earth renders HTML in a description, so the
- *  image travels with the placemark instead of becoming a bare pin. */
+/**
+ * A `photo`/`video` balloon. Google Earth renders HTML in a description, so the
+ * image travels with the placemark instead of becoming a bare pin.
+ *
+ * Every value here comes from the story and is hostile until proven otherwise,
+ * and the two contexts need different treatment. Caption text only needs
+ * `escapeHtml`. A `src`/`href` needs `safeUrlAttr` *as well*, because escaping
+ * a `javascript:` URL leaves a perfectly valid `javascript:` URL — there is no
+ * metacharacter in it to escape. A URL that fails the scheme check is dropped
+ * rather than emitted defanged; the video link degrades to plain text so the
+ * export still records where the media claimed to live.
+ */
 function mediaBalloon(item: Extract<Item, { type: 'photo' | 'video' }>): string {
   const caption = item.description ?? item.title ?? '';
-  const src = item.type === 'photo' ? item.media.thumbnailUrl ?? item.media.url : item.media.posterUrl;
+  const rawSrc = item.type === 'photo' ? item.media.thumbnailUrl ?? item.media.url : item.media.posterUrl;
+  const src = safeUrlAttr(rawSrc, MEDIA_SCHEMES);
   const parts: string[] = [];
-  if (src) parts.push(`<img src="${src}" style="max-width:320px"/>`);
-  if (caption) parts.push(`<p>${caption}</p>`);
+  // `alt` is what the reader shows when the image does not load, which is the
+  // normal outcome for a story whose media sits behind an expiring signed URL.
+  // It is also the second attribute context in this function, so it goes
+  // through the same escape as everything else rather than being trusted
+  // because "it is only a title".
+  if (src) parts.push(`<img src="${src}" alt="${escapeHtml(item.title ?? '')}" style="max-width:320px"/>`);
+  if (caption) parts.push(`<p>${escapeHtml(caption)}</p>`);
   // A video can't play in a KML balloon; a link is the honest fallback.
-  if (item.type === 'video') parts.push(`<p><a href="${item.media.url}">${item.media.url}</a></p>`);
+  if (item.type === 'video') {
+    const href = safeUrlAttr(item.media.url, LINK_SCHEMES);
+    const shown = escapeHtml(item.media.url);
+    parts.push(href ? `<p><a href="${href}">${shown}</a></p>` : `<p>${shown}</p>`);
+  }
   return parts.join('');
 }
 

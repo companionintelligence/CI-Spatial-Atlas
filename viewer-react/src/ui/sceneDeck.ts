@@ -229,8 +229,68 @@ export function sceneBackground(story: Story, scene: Scene): string | undefined 
  * which is also why the caller must drive the clock from `slide.timeMs` rather
  * than assume the playhead only moves forwards.
  */
-export function buildDeck(story: Story, opts: { reduceMotion?: boolean } = {}): DeckSlide[] {
-  return story.scenes.map((scene, index) => {
+/**
+ * A memory the app has already derived, offered as a deck when a story carries
+ * no authored scenes of its own. Structurally the subset of `AtlasMemory` a
+ * slide needs — taken as a parameter rather than imported, so this module stays
+ * free of the view-model and testable on its own.
+ */
+export interface DeckMemory {
+  id: string;
+  title: string;
+  narrative?: string;
+  timeMs: number;
+  lat?: number;
+  lon?: number;
+  place?: string;
+  media?: { url?: string; thumbnailUrl?: string };
+}
+
+/**
+ * Project memories into scenes, for a story that has none.
+ *
+ * `memoryToStory` returns `scenes: []` — a Companion Memory archive is located
+ * media and markers, not an authored narrative — so gating the presenter on
+ * `story.scenes.length` hid it from every real story and left it reachable only
+ * from the bundled demo. `deriveModel` already solves the same problem the same
+ * way for the globe (its zero-scenes branch projects located entities into
+ * memories); this keeps the presenter consistent with what the rest of the
+ * shell is showing rather than inventing a second rule.
+ *
+ * The camera is derived from the memory's own position, because a projected
+ * scene has no authored viewpoint — and a slide that does not move the globe
+ * is not a presentation.
+ */
+function scenesFromMemories(memories: readonly DeckMemory[]): Scene[] {
+  return [...memories]
+    .sort((a, b) => a.timeMs - b.timeMs)
+    .map((m) => ({
+      id: m.id,
+      title: m.title,
+      narrative: m.narrative,
+      time: new Date(m.timeMs).toISOString(),
+      // card-left keeps the globe visible beside the text. A projected memory
+      // has a place worth looking at; fullscreen would hide it.
+      layout: 'card-left' as const,
+      ...(m.lat != null && m.lon != null
+        ? { camera: { lon: m.lon, lat: m.lat, range: 90_000, pitch: -40, durationMs: 2200 } }
+        : {}),
+      ...(m.media?.url || m.media?.thumbnailUrl
+        ? { mediaIds: [m.id] }
+        : {}),
+    }));
+}
+
+export function buildDeck(
+  story: Story,
+  opts: { reduceMotion?: boolean; memories?: readonly DeckMemory[] } = {},
+): DeckSlide[] {
+  // Authored scenes always win: an author who wrote an order meant it, and
+  // projecting memories over the top would silently replace their deck.
+  const scenes = story.scenes.length
+    ? story.scenes
+    : scenesFromMemories(opts.memories ?? []);
+  return scenes.map((scene, index) => {
     const body = parseMarkdown(sceneNarrative(scene));
     const timeMs = sceneTimeMs(scene.time as TimeLike);
     const camera = slideCamera(scene.camera);

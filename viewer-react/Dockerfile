@@ -6,7 +6,7 @@
 # packages/story-schema must be in the build context.
 #
 # KNOWN LIMITATION: this image cannot build to completion today.
-# viewer-react's src/theme/index.ts imports @companionintelligence/tokens,
+# viewer-react/src/theme/theme.css @imports @companionintelligence/tokens/tokens.css,
 # which package-lock.json resolves to `link:../ci-common/packages/tokens` — a
 # path outside this repository, unresolvable in a build context that is only
 # this repo. Everything up to (and validated by CI as of this change) the
