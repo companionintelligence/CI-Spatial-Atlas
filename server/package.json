@@ -9,7 +9,7 @@
     "atlas-mcp": "dist/mcp-stdio.js"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "NODE_ENV=development tsx watch src/index.ts",
     "mcp:stdio": "tsx src/mcp-stdio.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",

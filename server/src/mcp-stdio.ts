@@ -22,6 +22,11 @@ const server = createAtlasMcpServer({
   // No HTTP request, so no bearer token: over stdio the local process *is* the
   // trust boundary (whoever can spawn this can already read the store), and the
   // store is per-process anyway. Tools run as the fully-scoped dev subject.
+  //
+  // This is why `assertAuthSafeToBoot()` (see auth.ts, called from index.ts)
+  // is deliberately NOT invoked here. That guard exists because the HTTP entry
+  // point is reachable by anonymous callers over the network; nothing about
+  // this transport is. Adding it here would only break local agents.
   auth: devSubjectContext()
 });
 

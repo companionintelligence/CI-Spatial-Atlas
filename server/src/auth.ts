@@ -15,9 +15,14 @@
  *   COMPANION_OIDC_JWKS_URI   optional; derived from the issuer otherwise
  *   COMPANION_OIDC_AUDIENCE   comma-separated allowed client ids (= our client id)
  *   ATLAS_DEV_SUBJECT         dev subject used when the issuer is unset
+ *   ATLAS_ALLOW_DEV_AUTH      `1` to permit the issuer-less dev bypass in an
+ *                             environment that is not marked development/test
  *
  * Leaving COMPANION_OIDC_ISSUER empty disables auth for local dev (single dev
  * subject with `*` scope). This is the real verifier — not a decode-only stub.
+ * `assertAuthSafeToBoot()` stops that bypass reaching a deployment: the HTTP
+ * entry point refuses to start unless the environment says it is development
+ * or test, or opts in explicitly.
  *
  * ── Authorisation ─────────────────────────────────────────────────────────
  * Verification answers *who is calling*; these three predicates answer *what
@@ -125,6 +130,73 @@ export async function verifyToken(
  */
 export function devSubjectContext(token = '', env: NodeJS.ProcessEnv = process.env): AuthContext {
   return { subject: env.ATLAS_DEV_SUBJECT ?? 'dev-operator', scopes: ['*'], token };
+}
+
+/**
+ * True when this environment has *positively identified itself* as a developer
+ * machine or a test runner, and may therefore run without real auth.
+ *
+ * Deliberately an allowlist rather than `NODE_ENV === 'production'`. The bug
+ * this guards is a deployment booting unconfigured, and the likeliest shape of
+ * that mistake is `NODE_ENV` never being set at all — so a check that fires
+ * only on an explicit production marker would miss the very case it exists to
+ * catch, failing open exactly like the bypass it is guarding. Absence of proof
+ * is treated as deployed.
+ *
+ * `ATLAS_ALLOW_DEV_AUTH=1` is the escape hatch for environments that are not
+ * production but cannot say so through `NODE_ENV` — staging, demos, and this
+ * repo's own `docker-compose.dev.yml`, whose `atlas-api` builds from
+ * `server/Dockerfile` and therefore inherits `ENV NODE_ENV=production` even in
+ * MOCK mode (docs/INTEGRATION.md "Mode A").
+ */
+export function devAuthBypassAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  const optIn = env.ATLAS_ALLOW_DEV_AUTH?.trim().toLowerCase();
+  if (optIn === '1' || optIn === 'true') return true;
+  const nodeEnv = env.NODE_ENV?.trim().toLowerCase();
+  return nodeEnv === 'development' || nodeEnv === 'test';
+}
+
+/**
+ * Refuse to boot into the dev auth bypass in a deployed environment.
+ *
+ * With no `COMPANION_OIDC_ISSUER`, `verifyBearer()` returns `devSubjectContext()`
+ * — `*` scope — for *every* request, token or not. `*` satisfies both `canRead`
+ * and `canWrite`, so that configuration hands every anonymous caller full
+ * ownership rights over every story and silently voids the per-story
+ * authorisation `api.ts` and `mcp.ts` enforce. Intentional locally; a serious
+ * incident anywhere else.
+ *
+ * Called once at startup from `server/src/index.ts`, the HTTP entry point. It is
+ * deliberately *not* called by `mcp-stdio.ts`: over stdio the local process is
+ * the trust boundary (whoever can spawn it can already read the store) and the
+ * store is per-process, so `devSubjectContext()` is correct there by design.
+ *
+ * @throws Error with an operator-actionable message when the bypass would be
+ *         active outside a development or test environment.
+ */
+export function assertAuthSafeToBoot(env: NodeJS.ProcessEnv = process.env): void {
+  // Real auth configured — nothing to guard, whatever NODE_ENV says.
+  if (oidcConfigFromEnv(env)) return;
+  if (devAuthBypassAllowed(env)) return;
+
+  const subject = devSubjectContext('', env).subject;
+  throw new Error(
+    [
+      'Refusing to start: authentication is disabled but this does not look like a development environment.',
+      '',
+      `COMPANION_OIDC_ISSUER is unset, so every request — with or without a token — would run as`,
+      `"${subject}" holding the "*" scope, giving any anonymous caller read and write access to`,
+      'every story. Per-story authorisation would be inert.',
+      '',
+      `(NODE_ENV=${env.NODE_ENV === undefined ? '<unset>' : JSON.stringify(env.NODE_ENV)})`,
+      '',
+      'Resolve by one of:',
+      '  • Set COMPANION_OIDC_ISSUER (and COMPANION_OIDC_AUDIENCE) to your CI-Portal issuer',
+      '    — e.g. COMPANION_OIDC_ISSUER=https://hub.ci.localhost/api/auth',
+      '  • Set NODE_ENV=development (or test) for genuine local development',
+      '  • Set ATLAS_ALLOW_DEV_AUTH=1 to keep the bypass deliberately — never in production',
+    ].join('\n'),
+  );
 }
 
 /** Verify an `Authorization: Bearer …` header and return its auth context. */

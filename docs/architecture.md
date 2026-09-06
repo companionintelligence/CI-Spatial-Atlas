@@ -621,24 +621,30 @@ docker compose --profile gpu up worker                     # + reconstruction
 
 ## 13. Known gaps / deliberately out of scope today
 
-- **Auth: verification and authorisation are both real now; two gaps remain.**
+- **Auth: verification and authorisation are both real now; one gap remains.**
   `verifyBearer()` in [`server/src/auth.ts`](../server/src/auth.ts) does a real
   `jose.jwtVerify` against the issuer's JWKS, enforcing signature, issuer,
   audience, expiry and a usable `sub`. Authorisation is enforced on top of it:
   every mutating REST route and every MCP tool requires a verified subject
   (401 / "Unauthenticated" otherwise) and is scoped to the story's owner
   (`access.oidcSubject`) via `canWrite`, while reads stay open to
-  public/unlisted stories via `canRead`. What is still outstanding:
+  public/unlisted stories via `canRead`. The dev bypass is now fenced off from
+  deployments: `assertAuthSafeToBoot()` runs in
+  [`server/src/index.ts`](../server/src/index.ts) before the port is bound and
+  exits non-zero if `COMPANION_OIDC_ISSUER` is unset *and* the environment has
+  not identified itself as non-deployed — `NODE_ENV=development`/`test`, or an
+  explicit `ATLAS_ALLOW_DEV_AUTH=1`. The allowlist is deliberate: gating on
+  `NODE_ENV === 'production'` alone would fail open on an unset `NODE_ENV`,
+  which is the likeliest shape of the misconfiguration, so absence of proof is
+  treated as deployed. The stdio MCP entry
+  ([`server/src/mcp-stdio.ts`](../server/src/mcp-stdio.ts)) is exempt by design —
+  there the local process is the trust boundary and the store is per-process.
+  What is still outstanding:
   - **Portal scopes are parsed but not mapped.** `*` is the only scope
     honoured; ownership carries the model. Mapping CI-Portal's scope
     vocabulary onto Atlas operations is a deliberate follow-up — that
     vocabulary isn't defined anywhere Atlas can see yet, so a mapping written
     today would be invented rather than agreed.
-  - **The dev bypass has no deployment guard.** With `COMPANION_OIDC_ISSUER`
-    unset, every request runs as a single `ATLAS_DEV_SUBJECT` holding `*`
-    scope — intentional locally, but nothing stops a deployment from booting
-    that way and handing every caller full scope. A startup check that refuses
-    the bypass outside development is not yet implemented.
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all
   data on restart — see [`REIMAGINE.md` Phase 1](../REIMAGINE.md#8-migration-roadmap)
   for the Postgres/Redis/MinIO migration.
