@@ -1,0 +1,122 @@
+/* Import & export panel.
+ *
+ * Every colour comes from the tokens already declared in theme/atlas.css — the
+ * `--atlas-*` set — so this panel follows the product's committed dark world
+ * rather than carrying a second palette that drifts. Geometry matches
+ * .atlas-sbdrawer deliberately: they are the same kind of object (a docked
+ * right-hand drawer) and should not sit at different widths or radii.
+ */
+
+.atlas-interop {
+  position: absolute;
+  grid-area: stage;
+  z-index: var(--z-drawer);
+  top: 14px;
+  right: 14px;
+  bottom: 118px;
+  width: 336px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  background: var(--atlas-glass);
+  border: 1px solid var(--atlas-line-2);
+  border-radius: 16px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--atlas-shadow);
+  overflow: auto;
+}
+
+.io-head { display: flex; align-items: center; gap: 8px; }
+.io-head h2 { margin: 0; font-size: 14px; font-weight: 700; color: var(--atlas-fg-hi); }
+.io-close {
+  margin-left: auto; width: 28px; height: 28px; border-radius: 8px;
+  border: 1px solid transparent; background: transparent;
+  color: var(--atlas-fg-dim); cursor: pointer;
+}
+.io-close:hover { color: var(--atlas-fg-hi); background: rgba(64, 155, 155, .12); }
+
+.io-section { display: flex; flex-direction: column; gap: 9px; }
+.io-section h3 {
+  margin: 0; font: 600 10.5px/1 var(--atlas-mono);
+  letter-spacing: .12em; text-transform: uppercase; color: var(--atlas-teal);
+}
+.io-section-head { display: flex; align-items: baseline; gap: 8px; }
+.io-section-head h3 { flex: 1; }
+
+.io-hint { margin: 0; font-size: 12px; line-height: 1.55; color: var(--atlas-fg-dim); }
+.io-hint code { font: 500 10.5px var(--atlas-mono); color: var(--atlas-teal); }
+.io-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--atlas-fg-dim); }
+.io-summary { margin: 0; font-size: 12px; font-weight: 600; color: var(--atlas-mint); }
+
+/* The real input is driven by the styled button; keeping it focusable but
+   visually hidden (rather than display:none) preserves keyboard access. */
+.io-file {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.io-file:focus-visible + .atlas-btn { outline: 2px solid var(--atlas-teal); outline-offset: 2px; }
+
+.io-link {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  font: 600 11.5px Manrope, sans-serif; color: var(--atlas-fg-dim);
+}
+.io-link:hover { color: var(--atlas-coral); }
+
+.io-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.io-item {
+  display: flex; align-items: center; gap: 9px; padding: 8px 9px;
+  border: 1px solid var(--atlas-line); border-radius: 10px;
+  background: rgba(4, 18, 26, .35);
+}
+.io-item.bad { border-color: rgba(234, 114, 96, .4); }
+.io-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* The file name is the one string here that can outgrow the drawer, and a
+   clipped name is useless for telling two exports apart — truncate at the
+   front-loaded end and keep the full name in the title attribute. */
+.io-name {
+  font-size: 12.5px; font-weight: 600; color: var(--atlas-fg-hi);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.io-meta { font-size: 11px; line-height: 1.45; color: var(--atlas-fg-dim); }
+.io-item.bad .io-meta { color: var(--atlas-coral); }
+.io-remove {
+  flex: none; width: 24px; height: 24px; border-radius: 7px;
+  border: 1px solid transparent; background: transparent;
+  color: var(--atlas-fg-dim); cursor: pointer;
+}
+.io-remove:hover { color: var(--atlas-coral); background: rgba(234, 114, 96, .12); }
+
+.io-actions { display: flex; gap: 8px; }
+
+/* Drag overlay ---------------------------------------------------------- */
+
+.atlas-dropzone {
+  position: fixed; inset: 0; z-index: var(--z-modal, 90);
+  display: grid; place-items: center;
+  background: rgba(4, 18, 26, .62);
+  backdrop-filter: blur(3px);
+  /* The overlay must never eat the drop: pointer-events would make it the
+     event target and, more importantly, hovering it counts as leaving the
+     element underneath, which flickers the drag state. */
+  pointer-events: none;
+}
+.dz-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 30px 44px; border-radius: 18px;
+  border: 2px dashed var(--atlas-teal);
+  background: var(--atlas-glass);
+  box-shadow: var(--atlas-shadow);
+}
+.dz-card strong { font-size: 17px; color: var(--atlas-fg-hi); }
+.dz-card span { font-size: 12.5px; color: var(--atlas-fg-dim); }
+
+.atlas-interop :focus-visible,
+.io-close:focus-visible,
+.io-remove:focus-visible,
+.io-link:focus-visible { outline: 2px solid var(--atlas-teal); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-dropzone { backdrop-filter: none; }
+}
