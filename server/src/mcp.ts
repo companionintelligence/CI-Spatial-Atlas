@@ -39,7 +39,8 @@ import { canRead, canWrite, isAuthenticated, type AuthContext } from './auth.js'
 import { sceneInstantFromTime } from './compose.js';
 import type { SuiteConnectors } from './connectors.js';
 import { ingest, reconstruct } from './pipeline.js';
-import type { MediaItem, Scene, Story } from './schema.js';
+import { LayerAttribution, LayerFormat } from './schema.js';
+import type { Layer, MediaItem, Scene, Story } from './schema.js';
 import type { JobStore, StoryStore } from './store.js';
 
 export interface AtlasDeps {
@@ -263,20 +264,37 @@ export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
     'atlas_add_layer',
     {
       title: 'Add layer',
-      description: 'Attach a 3D-tiles, gaussian-splat, terrain, imagery, or geojson layer to the story.',
+      description:
+        'Attach a 3D-tiles, gaussian-splat, terrain, imagery, or geojson layer to the story. Pass `attribution` whenever the source licence requires credit (OpenStreetMap/ODbL, EOX and CARTO/CC BY, OpenSeaMap/CC BY-SA all do) — a layer without it cannot be displayed lawfully.',
       inputSchema: {
         storyId: z.string(),
         kind: z.enum(['imagery', 'terrain', '3d-tiles', 'gaussian-splat', 'geojson', 'model', 'pin']),
+        name: z.string().optional().describe('Human-readable label for layer pickers'),
         uri: z.string().optional(),
+        format: LayerFormat.optional().describe('Wire format of `uri`, when it is not inferable by convention'),
+        attribution: LayerAttribution.optional().describe('Source credit required by the layer\'s licence'),
         availability: z.object({ start: z.string(), stop: z.string() }).optional(),
-        opacity: z.number().min(0).max(1).optional()
+        opacity: z.number().min(0).max(1).optional(),
+        visible: z.boolean().optional().describe('Initial on/off state in the viewer (omitted = shown)'),
+        order: z.number().optional().describe('Draw order; lower renders beneath')
       }
     },
-    async ({ storyId, kind, uri, availability, opacity }) => {
+    async ({ storyId, kind, name, uri, format, attribution, availability, opacity, visible, order }) => {
       const gate = await writable(storyId);
       if ('refusal' in gate) return gate.refusal;
       const story = gate.story;
-      const layer = { id: `layer_${Date.now()}`, kind, uri, availability, opacity };
+      const layer: Layer = {
+        id: `layer_${Date.now()}`,
+        kind,
+        name,
+        uri,
+        format,
+        attribution,
+        availability,
+        opacity,
+        visible,
+        order
+      };
       const updated = await store.updateStory(storyId, { layers: [...(story.layers ?? []), layer] });
       return ok({ layerId: layer.id, layers: updated?.layers });
     }
