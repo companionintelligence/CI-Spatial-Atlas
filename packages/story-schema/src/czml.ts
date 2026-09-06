@@ -9,7 +9,7 @@
  * Gaussian splats and 3D Tiles are NOT expressible in CZML; they are returned
  * separately in `tilesets` for the viewer to add as `Cesium3DTileset`s.
  */
-import type { Item, Story, TimeSpec, TrackSample } from './schema.js';
+import type { GeoPath, Item, Story, TimeSpec, TrackSample } from './schema.js';
 import { storyEntities, timelineBounds } from './normalize.js';
 
 export interface CzmlPacket {
@@ -22,6 +22,8 @@ export interface CzmlPacket {
   billboard?: unknown;
   label?: unknown;
   path?: unknown;
+  polyline?: unknown;
+  polygon?: unknown;
   model?: unknown;
   [k: string]: unknown;
 }
@@ -166,6 +168,58 @@ export function storyToCzml(story: Story): CzmlResult {
         });
         break;
       }
+      case 'line': {
+        // A polyline's vertices live in `polyline.positions`, NOT the packet's
+        // top-level `position` — set the latter and Cesium draws nothing while
+        // reporting no error, because the polyline graphic simply has no
+        // hierarchy to build from.
+        const clamp = item.clampToGround ?? !hasHeights(item.positions);
+        czml.push({
+          id: item.id,
+          name: item.title ?? item.id,
+          description: item.description,
+          availability: availability(item.time, docInterval),
+          polyline: {
+            positions: { cartographicDegrees: flatDegrees(item.positions) },
+            material: { solidColor: { color: cssToRgba(item.color ?? '#39c0ff') } },
+            width: item.width ?? 3,
+            // `clampToGround` needs a ground-primitive path, which only works
+            // with GEODESIC arcs; RHUMB silently ignores the draping.
+            clampToGround: clamp,
+            arcType: 'GEODESIC',
+          },
+        });
+        break;
+      }
+      case 'polygon': {
+        const clamp = item.clampToGround ?? !hasHeights(item.positions);
+        // fillOpacity 0 is a real, load-bearing value (KML `<fill>0</fill>`,
+        // simplestyle `"fill-opacity": 0`) meaning outline-only, so `??` — not
+        // `||` — is what decides the default.
+        const fillOpacity = item.fillOpacity ?? 0.5;
+        const outlineWidth = item.outlineWidth ?? 1;
+        czml.push({
+          id: item.id,
+          name: item.title ?? item.id,
+          description: item.description,
+          availability: availability(item.time, docInterval),
+          polygon: {
+            positions: { cartographicDegrees: flatDegrees(item.positions) },
+            ...(item.holes?.length ? { holes: { cartographicDegrees: item.holes.map(flatDegrees) } } : {}),
+            fill: fillOpacity > 0,
+            material: { solidColor: { color: cssToRgba(item.fillColor ?? '#39c0ff', fillOpacity) } },
+            outline: outlineWidth > 0,
+            outlineColor: cssToRgba(item.outlineColor ?? item.fillColor ?? '#ffffff'),
+            outlineWidth,
+            // Cesium only drapes a polygon onto terrain when it is NOT told to
+            // honour per-vertex heights. Leaving this true on a 2D import pins
+            // every vertex to h=0 and the shape vanishes inside any hill.
+            perPositionHeight: !clamp,
+            arcType: 'GEODESIC',
+          },
+        });
+        break;
+      }
       case 'model': {
         czml.push({
           id: item.id,
@@ -225,17 +279,46 @@ function relativeSamples(path: TrackSample[]): number[] {
   return out;
 }
 
+/** A ring/path → the flat `[lon, lat, height, …]` CZML position list. */
+function flatDegrees(path: GeoPath): number[] {
+  const out: number[] = [];
+  for (const p of path) out.push(p.lon, p.lat, p.height ?? 0);
+  return out;
+}
+
+/** Did the author actually supply elevations, or is this a 2D import? Drives the
+ *  clamp-to-terrain default for `line`/`polygon`. */
+function hasHeights(path: GeoPath): boolean {
+  return path.some((p) => p.height != null && p.height !== 0);
+}
+
 function mediaCardHtml(item: Extract<Item, { type: 'photo' | 'video' }>): string {
   const src = item.type === 'photo' ? item.media.url : item.media.posterUrl ?? item.media.url;
   const cap = item.description ?? item.title ?? '';
   return `<div class="atlas-card"><img src="${src}" style="max-width:320px"/><p>${cap}</p></div>`;
 }
 
-/** "#rrggbb" → CZML rgba [r,g,b,a] (0-255). */
-function cssToRgba(hex: string): { rgba: [number, number, number, number] } {
-  const h = hex.replace('#', '');
+/**
+ * "#rgb" / "#rrggbb" / "#rrggbbaa" → CZML rgba [r,g,b,a] (0-255).
+ *
+ * `alpha` (0..1) overrides any alpha carried by the string. That split exists
+ * because the two importers disagree about where opacity lives: simplestyle
+ * keeps `fill` and `fill-opacity` in separate properties, while KML packs it
+ * into the colour's leading byte. Both end up here.
+ *
+ * Exported because the KML serialiser needs the same permissive parse to build
+ * `aabbggrr` — two colour parsers would drift.
+ */
+export function cssToRgba(hex: string, alpha?: number): { rgba: [number, number, number, number] } {
+  let h = hex.replace('#', '').trim();
+  // "#f0c" is a legal CSS shorthand and shows up in hand-written GeoJSON.
+  if (h.length === 3 || h.length === 4) h = h.split('').map((c) => c + c).join('');
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
-  return { rgba: [Number.isNaN(r) ? 255 : r, Number.isNaN(g) ? 64 : g, Number.isNaN(b) ? 64 : b, 255] };
+  const embedded = h.length >= 8 ? parseInt(h.slice(6, 8), 16) : NaN;
+  const a = alpha != null ? Math.round(clamp01(alpha) * 255) : Number.isNaN(embedded) ? 255 : embedded;
+  return { rgba: [Number.isNaN(r) ? 255 : r, Number.isNaN(g) ? 64 : g, Number.isNaN(b) ? 64 : b, a] };
 }
+
+const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
