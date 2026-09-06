@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Consolidated Companion Atlas viewer — Resium (React+Cesium) for desktop/mobile, R3F for WebXR. Phase-1 scaffold (see README).",
+  "description": "Consolidated Companion Atlas viewer \u2014 Resium (React+Cesium) for desktop/mobile, R3F for WebXR. Phase-1 scaffold (see README).",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4174",
     "build": "tsc --noEmit && vite build",
@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "3d-tiles-renderer": "^0.4.22",
     "@companion-atlas/story": "*",
     "@companionintelligence/tokens": "^0.3.1",
     "@fontsource/manrope": "^5.2.8",

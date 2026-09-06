@@ -1,5 +1,5 @@
 {
-  "$comment": "CI-Hub dynamic compose (dynamicComposeSchema). The viewer is the user-facing app (port 8080); companion-atlas-api hosts the REST + MCP surface the Hub wires to via agents.mcp. Validate against CI-Hub/packages/common/src/schemas/dynamic-compose.ts before publishing.",
+  "$comment": "CI-Hub dynamic compose (dynamicComposeSchema). The viewer is the user-facing app (port 8080), built from viewer-react/Dockerfile; companion-atlas-api hosts the REST + MCP surface the Hub wires to via agents.mcp. NOTE: companion-atlas-viewer:latest is not currently published — viewer-react cannot build in a single-repo checkout while @companionintelligence/tokens resolves outside it (see docs/architecture.md \u00a78). NOTE: the viewer is a static nginx bundle, so its VITE_* values are inlined at BUILD time; per-install memory wiring reaches it as ?memory=/?token= URL params, not as service env. Validate against CI-Hub/packages/common/src/schemas/dynamic-compose.ts before publishing.",
   "services": [
     {
       "name": "companion-atlas",

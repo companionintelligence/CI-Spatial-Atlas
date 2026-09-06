@@ -42,7 +42,12 @@ RUN npm run build -w viewer-react
 
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/viewer-react/dist /usr/share/nginx/html
+# Serve on 8080 to match the port this app advertises to CI-Hub in both
+# hub/config.json ("port": 8080) and hub/docker-compose.json
+# ("internalPort": 8080). This image listened on 80 while it was the secondary
+# viewer; now that it is *the* viewer, a Hub install would route to a dead port.
+#
 # SPA fallback so deep links (and ?story=/?memory=… URLs) resolve to index.html.
-RUN printf 'server {\n  listen 80;\n  root /usr/share/nginx/html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' \
+RUN printf 'server {\n  listen 8080;\n  root /usr/share/nginx/html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' \
     > /etc/nginx/conf.d/default.conf
-EXPOSE 80
+EXPOSE 8080

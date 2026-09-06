@@ -1,17 +1,16 @@
 # viewer-react — the consolidated Companion Atlas viewer
 
-> **Status: Resium spike PASSED (2026-07-15).** These files implement the
-> ADR-0001 architecture (Resium/Cesium viewer + React-Three-Fiber for WebXR, one
-> `Story` model). **Verified:** `tsc --noEmit` clean and `vite build` succeeds —
-> Cesium + React + Resium + R3F + `@companion-atlas/story` all compile and bundle
-> together; `vite-plugin-cesium` copies the Cesium runtime assets (Assets, Widgets
-> incl. `widgets.css`, Workers) so there's no viewport-height issue here. The
-> biggest ADR risk (React+Cesium composition) is retired.
+> **Status: this is the viewer.** These files implement the ADR-0001
+> architecture (Resium/Cesium viewer + React-Three-Fiber for WebXR, one `Story`
+> model). The vanilla-TS viewer that used to live in `../src` has been removed —
+> this app is the only viewer, and the root `npm run dev` / `npm run build` /
+> `npm test` drive it.
 >
-> **Still to do for parity:** wire the ion token (`Cesium.Ion.defaultAccessToken`),
-> port the vanilla viewer's UI panels + scrapbook, and add Playwright visual
-> regression — then the vanilla `../src` viewer is removed. The existing vanilla-TS
-> viewer remains the shipping viewer until then (`docs/CONSOLIDATION.md`, Phases 1–2).
+> **Known limitation:** `@companionintelligence/tokens` (imported by
+> `src/theme/index.ts`) resolves through the lockfile to a sibling `../ci-common`
+> checkout, outside this repository, so `npm run build` and this app's Docker
+> image cannot complete in a single-repo checkout. Vitest suites don't touch that
+> import and run fine. See `docs/architecture.md` §8.
 
 ## Architecture
 
@@ -39,9 +38,16 @@
 - `src/renderers/rendererForDevice.ts` — `immersive-vr` support check → renderer.
 - `src/AtlasApp.tsx` — loads the story, switches renderer, shares the story with both.
 
-## Next steps to make it real (from `docs/CONSOLIDATION.md`)
+## Open work
 
-1. `npm install` (adds cesium, resium, react, @react-three/fiber, @react-three/xr).
-2. Wire `npm run cesium:assets` (copy Cesium static assets) into this app's public dir.
-3. Port the CI-Earth-2 React UI panels (search, scrapbook, timeline scrubber).
-4. Add Playwright visual-regression projects for the Cesium renderer (it has none today).
+From [`../docs/CONSOLIDATION.md`](../docs/CONSOLIDATION.md):
+
+1. Drive the Cesium `Viewer` clock from the CZML doc packet — real timeline
+   scrubbing across scenes (`Story.timeline` → `storyToCzml`).
+2. Re-establish visual regression against Resium. The old pixel-diff baselines
+   covered the removed vanilla renderer's deterministic `?static=1` path;
+   Cesium needs its own deterministic setup (offline imagery, ion disabled,
+   locked camera and clock, masked dynamic regions, tolerant
+   `maxDiffPixelRatio`). `tests/viewer.capture.ts` is the harness to build on.
+3. Publish `@companionintelligence/tokens` to a registry CI and Docker can
+   resolve, so `npm run build` and the image work from a clean checkout.

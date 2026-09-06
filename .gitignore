@@ -1,12 +1,21 @@
 /node_modules
-/dist
-/.env
-/.env.local
-/.env.development
-/.env.test
-# Cesium static assets, copied from node_modules via `npm run cesium:assets`
-# (scripts/copy-cesium-assets.ts) — do not commit, do not hand-edit.
-/public/cesium
+
+# Secrets. Deliberately NOT anchored with a leading slash: these patterns must
+# match in every workspace, not just the repo root. viewer-react/.env holds a
+# real Cesium ion token and a Google Maps key, and until now it was covered
+# only by viewer-react/.gitignore — a .env dropped in server/ or packages/*
+# would have been committed. `.env.dev` matters too: docker-compose.dev.yml
+# reads it via `env_file`, so it carries live credentials.
+.env
+.env.*
+# ...but the committed templates are documentation and stay tracked.
+!.env.default
+!.env.example
+!.env.dev.example
+
+# Viewer build output + Playwright capture artifacts
+/viewer-react/dist
+/viewer-react/capture-results
 
 # Nested Atlas server package
 /server/node_modules
@@ -16,8 +25,7 @@
 /packages/*/dist
 
 # Test + build artifacts
-/test-results/earth-*
-/test-results/tiles-*
+/test-results
 /playwright-report
 capture/
 

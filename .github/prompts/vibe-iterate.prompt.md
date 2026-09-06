@@ -1,21 +1,18 @@
 ---
 mode: agent
 model: GPT-5.3-Codex
-description: "Iterate Companion Atlas by adding one scoped feature, preserving declarative scene architecture and passing vibe loop checks."
+description: "Iterate Companion Atlas by adding one scoped feature to viewer-react, preserving declarative scene architecture and passing the workspace checks."
 ---
 
-Add one incremental feature to Companion Atlas.
+Add one incremental feature to Companion Atlas (`viewer-react/`).
 
 Requirements:
 
 1. Keep implementation modular and declarative.
-2. Preserve deterministic `?static=1` visual-test behavior.
-3. Keep mobile and desktop layouts usable.
+2. Keep desktop, mobile, and WebXR layouts usable.
+3. Add or extend Vitest coverage in `viewer-react/test/`.
 4. Validate with:
-- `npm run vibe:build`
-- `npm run vibe:test`
-5. If visual structure changes intentionally:
-- `npm run vibe:test:update`
-- `npm run vibe:test`
+- `npm test`
+- `npm run build`
 
 Deliver a concise summary with files changed and test outcomes.
