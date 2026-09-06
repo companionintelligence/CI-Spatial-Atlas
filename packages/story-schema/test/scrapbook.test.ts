@@ -87,6 +87,18 @@ describe('write-back carries the journey', () => {
     expect(createEventInputFromStory(buildScrapbookStory([B, A])).sourceId).toBe(ab);
   });
 
+  it('pins the idempotency key: the id hash must not drift between releases', () => {
+    // Already-saved journeys dedup on this exact string. Anything that changes the
+    // hash - notably the '\x00' separator in scrapbookId - re-saves every existing
+    // journey as a new event instead of updating it. Update these literals only
+    // with a deliberate migration.
+    expect(createEventInputFromStory(buildScrapbookStory([A, B])).sourceId).toBe('scrapbook-2-4pbs2a');
+    // The separator is load-bearing: without it ['ab','c'] and ['a','bc'] collide.
+    const mk = (ids: string[]) => ids.map((id, i) => ({ id, title: id, timeMs: 1000 + i }));
+    expect(buildScrapbookStory(mk(['ab', 'c'])).id).toBe('scrapbook-2-1ughu7b');
+    expect(buildScrapbookStory(mk(['a', 'bc'])).id).toBe('scrapbook-2-qstin7');
+  });
+
   it('maps visibility to sharingLevel', () => {
     expect(createEventInputFromStory(buildScrapbookStory([A], { visibility: 'unlisted' })).sharingLevel).toBe('household');
     expect(createEventInputFromStory(buildScrapbookStory([A], { visibility: 'public' })).sharingLevel).toBe('public');
