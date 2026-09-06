@@ -5,8 +5,17 @@
  *
  * Dependency-free apart from the canonical Zod schema (used for the final parse).
  */
-import { Story, STORY_SCHEMA_ID } from './schema.js';
-import type { Camera, Item, MediaItem, Scene, Story as StoryT } from './schema.js';
+import { LayerAttribution, LayerFormat, Story, STORY_SCHEMA_ID } from './schema.js';
+import type {
+  Camera,
+  Item,
+  Layer,
+  LayerAttribution as LayerAttributionT,
+  LayerFormat as LayerFormatT,
+  MediaItem,
+  Scene,
+  Story as StoryT,
+} from './schema.js';
 import type { LegacyScrapbook, StoryFormat } from './legacy.js';
 
 /** Which of the historical shapes is this document? */
@@ -122,6 +131,79 @@ export function sceneNarrative(scene: Scene): string | undefined {
 /** Read a scene's highlighted entity ids regardless of legacy spelling. */
 export function sceneHighlightIds(scene: Scene): string[] {
   return scene.itemIds ?? scene.items ?? scene.mediaIds ?? [];
+}
+
+// ---- layers ---------------------------------------------------------------
+
+/**
+ * A layer's presentation fields, resolved.
+ *
+ * `name`, `format`, `attribution`, `visible` and `order` are now real `Layer`
+ * fields. Before they were, the only place to put them was the free-form
+ * `style` bag, under a `style.atlas` sub-object. Documents written that way are
+ * still valid (`style` is `Record<string, unknown>`, so nothing rejects them)
+ * and must keep working, so this reader takes the real field first and falls
+ * back to `style.atlas`.
+ *
+ * A malformed legacy blob is ignored rather than thrown on: this is a
+ * best-effort read of documents nobody can go back and fix, and a story with an
+ * unparseable credit should still load — it just loads without the credit,
+ * which the caller can then notice.
+ */
+export interface ResolvedLayer {
+  /** Human label for a layer list. Absent when the document never carried one. */
+  name?: string;
+  /** Wire format of `uri`, when the document states it. */
+  format?: LayerFormatT;
+  /** Required source credit, when the document carries one. */
+  attribution?: LayerAttributionT;
+  /** Drawn state — absent in the document means visible. */
+  visible: boolean;
+  /** Explicit draw order, low to high. Absent means "use array position". */
+  order?: number;
+}
+
+/** The legacy `style.atlas` blob, if this layer has one. */
+function atlasStyleExt(layer: Layer): Record<string, unknown> | undefined {
+  const ext = layer.style?.atlas;
+  return ext && typeof ext === 'object' && !Array.isArray(ext) ? (ext as Record<string, unknown>) : undefined;
+}
+
+/** Read a layer's presentation fields, real field first, `style.atlas` second. */
+export function resolveLayer(layer: Layer): ResolvedLayer {
+  const ext = atlasStyleExt(layer);
+
+  const legacyName = typeof ext?.name === 'string' ? ext.name : undefined;
+  const legacyVisible = typeof ext?.visible === 'boolean' ? ext.visible : undefined;
+  const legacyOrder = typeof ext?.order === 'number' && Number.isFinite(ext.order) ? ext.order : undefined;
+
+  // Reuse the canonical schemas for the two structured fields rather than
+  // re-describing their shapes here — Zod stays the single source of truth even
+  // on the back-compat path.
+  const legacyFormat = ext ? LayerFormat.safeParse(ext.format) : undefined;
+  const legacyAttribution = ext ? LayerAttribution.safeParse(ext.attribution) : undefined;
+
+  return {
+    name: layer.name ?? legacyName,
+    format: layer.format ?? (legacyFormat?.success ? legacyFormat.data : undefined),
+    attribution: layer.attribution ?? (legacyAttribution?.success ? legacyAttribution.data : undefined),
+    visible: layer.visible ?? legacyVisible ?? true,
+    order: layer.order ?? legacyOrder,
+  };
+}
+
+/**
+ * A story's layers in draw order, each paired with its resolved fields.
+ *
+ * Layers carrying an explicit `order` sort by it; layers without one hold their
+ * array position. The sort is stable, so a document that states no orders at
+ * all comes back exactly as authored.
+ */
+export function storyLayers(story: StoryT): { layer: Layer; resolved: ResolvedLayer }[] {
+  return (story.layers ?? [])
+    .map((layer, index) => ({ layer, resolved: resolveLayer(layer), index }))
+    .sort((a, b) => (a.resolved.order ?? a.index) - (b.resolved.order ?? b.index) || a.index - b.index)
+    .map(({ layer, resolved }) => ({ layer, resolved }));
 }
 
 /** Keep the two legacy visibility spellings in sync so consumers can read either. */
