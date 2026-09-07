@@ -1,11 +1,12 @@
 # Architecture — How Companion Atlas Works
 
-Technical reference for the viewer, the processing server, and how the two
-fit into the wider Companion Intelligence suite. Pairs with
-[`docs/ui-guide.md`](ui-guide.md) (what you see) and
-[`docs/mcp-api.md`](mcp-api.md) (the full MCP tool reference). For the product
-direction and open-web-GIS research behind these decisions, see
-[`REIMAGINE.md`](../REIMAGINE.md).
+Technical reference for the viewer, the processing server, and how the two fit
+into the wider Companion Intelligence suite. Pairs with
+[`docs/mcp-api.md`](mcp-api.md) (the full MCP tool reference) and
+[`docs/REDESIGN.md`](REDESIGN.md) (what the viewer's UI is trying to be). For
+the product direction and open-web-GIS research behind these decisions, see
+[`REIMAGINE.md`](../REIMAGINE.md); for why there is one viewer rather than two,
+see [`docs/adr/0001-resium-viewer-r3f-xr.md`](adr/0001-resium-viewer-r3f-xr.md).
 
 ## 1. System overview
 
@@ -19,13 +20,14 @@ flowchart LR
     end
 
     subgraph Atlas["Companion Atlas"]
-        Viewer["Web viewer<br/>(Cesium by default, three.js classic fallback)"]
+        Viewer["Web viewer<br/>(Resium/Cesium + R3F WebXR)"]
         API["atlas-api<br/>REST + MCP server"]
         Worker["GPU reconstruction worker<br/>COLMAP / ODM / Nerfstudio"]
         Store[("Postgres + Redis + MinIO")]
     end
 
     Memory <-- "query / save story" --> API
+    Memory <-- "located search()" --> Viewer
     OpenClaw -- "MCP tool calls" --> API
     API -- "publish notify" --> Hermes
     OIDC -. "bearer auth" .-> API
@@ -36,294 +38,106 @@ flowchart LR
     API -- "share URL" --> Viewer
 ```
 
-Today's repo ships the **Viewer** (`src/`, two renderers — see
-[§6](#6-renderer-and-imagery-mode-resolution) and [§11](#11-cesium-renderer))
-and the **atlas-api** scaffold (`server/`) — see
-[`docker-compose.yml`](../docker-compose.yml) for how all five pieces run
-together in containers. `Worker`, `Store`, and the suite connectors are
-functional scaffolds (see [§10](#processing-server)); the viewer's `?story=`
-mode (below) lets you exercise the `Story` format end to end without any of
-that infrastructure running.
+Today's repo ships the **Viewer** (`viewer-react/`, two renderers over one
+model — see [§2](#2-viewer-module-map) and [§3](#3-renderer-selection)) and the
+**atlas-api** scaffold (`server/`) — see
+[`docker-compose.yml`](../docker-compose.yml) for how the pieces run together
+in containers. `Worker`, `Store`, and the suite connectors are functional
+scaffolds (see [§6](#6-processing-server)); the viewer's `?story=` and
+`?memory=` modes ([§4](#4-where-the-story-comes-from)) let you exercise the
+`Story` format end to end without any of that infrastructure running.
 
 ## 2. Viewer module map
 
-```mermaid
-flowchart TD
-    main["main.ts"]
-    journeyController["systems/journeyController.ts"]
-    inputSystem["systems/inputSystem.ts"]
-    scrapbook["scrapbook.ts"]
-    atlasStory["atlas/story.ts"]
-    atlasSchema["atlas/schema.ts"]
-
-    subgraph Classic["classic renderer"]
-        sceneSystem["systems/sceneSystem.ts"]
-        scrapbookSystem["systems/scrapbookSystem.ts"]
-        cameraControls["systems/cameraControls.ts"]
-        xrSystem["systems/xrSystem.ts"]
-        tilesSystem["systems/tilesSystem.ts"]
-        atmosphereSystem["systems/atmosphereSystem.ts"]
-        textureFactory["systems/textureFactory.ts"]
-        tileProvider["systems/tileProvider.ts"]
-    end
-
-    subgraph CesiumMode["cesium renderer"]
-        cesiumApp["cesium/cesiumApp.ts"]
-        cesiumScene["cesium/cesiumScene.ts"]
-        cesiumScrapbook["cesium/cesiumScrapbook.ts"]
-    end
-
-    main --> sceneSystem
-    main --> scrapbookSystem
-    main --> inputSystem
-    main --> atlasStory
-    main --> journeyController
-    main -. "renderer=cesium" .-> cesiumApp
-    cesiumApp --> cesiumScene
-    cesiumApp --> cesiumScrapbook
-    cesiumApp --> inputSystem
-    cesiumApp --> journeyController
-    cesiumApp --> atlasStory
-    cesiumScrapbook --> scrapbook
-    sceneSystem --> cameraControls
-    sceneSystem --> xrSystem
-    sceneSystem --> tilesSystem
-    sceneSystem --> atmosphereSystem
-    sceneSystem --> textureFactory
-    sceneSystem --> tileProvider
-    sceneSystem --> scrapbook
-    scrapbookSystem --> scrapbook
-    inputSystem --> scrapbook
-    textureFactory --> tileProvider
-    atlasStory --> atlasSchema
-```
-
-`main.ts` is the composition root for the classic renderer: it builds
-`sceneSystem` and `scrapbookSystem`, wires DOM elements into `inputSystem`'s
-handler callbacks, and owns the 200ms HUD tick loop (journey playback is
-`journeyController.ts`, shared with the Cesium path). When
-[renderer resolution](#6-renderer-and-imagery-mode-resolution) picks Cesium,
-`main.ts` instead delegates the equivalent wiring to `cesium/cesiumApp.ts`,
-which reuses the same renderer-agnostic `inputSystem.ts`, `scrapbook.ts`
-storage, `atlas/story.ts`, and `journeyController.ts` — only the rendering
-layer (`sceneSystem`/`scrapbookSystem` vs `cesiumScene`/`cesiumScrapbook`) is
-renderer-specific. No module reaches back into its composition root — data
-flows down, callbacks flow up.
-
-## 3. Render loop
-
-Specific to the classic three.js renderer (`sceneSystem.ts`) — Cesium drives
-its own internal render loop via `Viewer` + `Clock` (see [§11](#11-cesium-renderer)).
-
-```mermaid
-sequenceDiagram
-    participant RAF as requestAnimationFrame
-    participant Scene as sceneSystem.update()
-    participant Cam as cameraControls.tick()
-    participant XR as xrSystem.tick()
-    participant Tiles as tilesSystem.update()
-    participant R as THREE.WebGLRenderer
-
-    RAF->>Scene: time
-    Scene->>Scene: advance day/night cycle + weather bands
-    Scene->>Scene: update sun/moon position, atmosphere shader uniforms
-    Scene->>Cam: tick(time)
-    Cam->>Cam: damp theta/phi/radius toward target (13%/frame, or eased flight)
-    Scene->>XR: tick()
-    XR->>XR: apply grab-to-rotate delta to worldGroup (if grabbing)
-    Scene->>Tiles: update(camera, renderer)
-    Tiles->>Tiles: refresh LOD by screen-space error (if a 3D Tiles token is configured)
-    Scene->>R: render(scene, camera)
-```
-
-Under `?static=1`, `startLoop()` calls `update()` **exactly once** instead of
-registering `renderer.setAnimationLoop` — no day/night drift, no camera
-damping beyond a single 13% step, which is what makes Playwright screenshots
-reproducible.
-
-## 4. Camera interaction model
-
-Specific to the classic renderer's `cameraControls.ts` — Cesium uses its own
-native camera controls as-is (orbit/tilt/zoom gestures are similar, but there
-is no equivalent hand-rolled state machine; see [§11](#11-cesium-renderer)).
-
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle --> Orbiting: left-drag
-    Orbiting --> Idle: pointerup
-    Idle --> Tilting: right-drag
-    Tilting --> Idle: pointerup
-    Idle --> Zooming: wheel / pinch / double-click
-    Zooming --> Idle: settled
-    Idle --> Flying: flyTo() — Fly To Pin, journey step, or ?story= load
-    Flying --> Idle: eased interpolation completes (t ≥ 1)
-    Flying --> Orbiting: left-drag mid-flight
-    Flying --> Tilting: right-drag mid-flight
-    Flying --> Zooming: wheel / pinch / double-click mid-flight
-    Idle --> Idle: click without drag → onTap (pin hit-test)
-```
-
-Any of orbit, tilt, or zoom input cancels an in-progress flight — every
-`onPointerMove`/`onWheel`/`onDblClick`/pinch handler sets `flight = null`
-unconditionally as its first step, not just the orbit-drag path.
-
-`cameraControls.ts` (`src/systems/cameraControls.ts`) is the single owner of
-orbit state (`theta`, `phi`, `radius`). Every caller — HUD zoom buttons, Fly To
-Pin, journey playback, XR squeeze-to-zoom, story loading — goes through the
-same `zoomIn()`/`zoomOut()`/`flyTo()` API, so there is exactly one place that
-clamps radius to `[1.15, 14]` and phi to `±0.488π`.
-
-<a id="pin-lifecycle"></a>
-## 5. Pin lifecycle
-
-`inputSystem.ts` only forwards DOM events to caller-supplied handler
-callbacks — it never imports `sceneSystem`/`scrapbookSystem` directly. The
-actual orchestration (raycast → create pin → refresh UI) lives in `main.ts`,
-the composition root, matching [§2](#2-viewer-module-map)'s description of how
-`main.ts` wires DOM elements into `inputSystem`'s handlers.
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as inputSystem
-    participant Main as main.ts
-    participant Scene as sceneSystem
-    participant Scrapbook as scrapbookSystem
-    participant Storage as localStorage
-
-    User->>UI: submit "Drop Pin At Viewpoint"
-    UI->>Main: handlers.onCreatePin(label)
-    Main->>Scene: raycastGlobeFromCamera()
-    Scene-->>Main: world point (Vector3)
-    Main->>Scrapbook: addPinFromWorldPoint(point, label)
-    Scrapbook->>Scrapbook: cartesianToLatLon(point)
-    Scrapbook->>Storage: persist() — write ci-earth-scrapbook[account]
-    Scrapbook->>Scrapbook: renderPinsInScene() — rebuild pin meshes + route curve
-    Scrapbook-->>Main: pins, selectedPin
-    Main->>UI: renderState() — pin list, Pin Details form, journey status
-```
-
-The journey route (`createJourneyRoute` in `scrapbookSystem.ts`) is rebuilt on
-**every** pin CRUD operation, not just when a journey is playing — it's a pure
-function of the current pin set, sorted by `createdAt`.
-
-The Cesium renderer follows the identical pattern with `cesium/cesiumApp.ts`
-standing in for `main.ts` and `cesium/cesiumScene.ts` /
-`cesium/cesiumScrapbook.ts` standing in for `sceneSystem`/`scrapbookSystem` —
-see [§11](#11-cesium-renderer).
-
-## 6. Renderer and imagery mode resolution
-
-`main.ts` resolves two independent things from the URL on every load: which
-**renderer** runs (classic three.js vs Cesium) and, for the classic renderer,
-which **imagery mode** it uses.
+The viewer is a React SPA. Everything downstream of `@companion-atlas/story`
+reads the *same* `Story`, so a feature is added once and both renderers get it.
 
 ```mermaid
 flowchart TD
-    Start(["Page load"]) --> CheckRendererParam{"?renderer= present?"}
-    CheckRendererParam -- "cesium or classic" --> UseExplicit["use that renderer"]
-    CheckRendererParam -- absent --> CheckStaticR{"?static=1 present?"}
-    CheckStaticR -- yes --> ForceClassic["renderer = classic<br/>(baselines are captured against it;<br/>real ion imagery isn't diffable)"]
-    CheckStaticR -- no --> CheckToken{"CESIUM_ION_TOKEN configured?"}
-    CheckToken -- yes --> UseCesium["renderer = cesium (default)"]
-    CheckToken -- no --> FallbackClassic["renderer = classic (fallback)"]
-```
+    main["main.tsx<br/>ion token, Maps key, fonts"]
+    app["AtlasApp.tsx<br/>state + composition root"]
+    story["story/useStory.ts"]
+    model["model/atlasModel.ts<br/>Story → view-model"]
+    pkg["@companion-atlas/story<br/>loadStory · storyToCzml · storyEntities"]
 
-Imagery mode only applies once the classic renderer is selected —
-`resolveImageryMode()` checks `?imagery=` **before** `?static=1`, not after:
-an explicit `?imagery=` always wins, and `isStaticMode` is only the fallback
-when `?imagery=` is absent or invalid.
-
-```mermaid
-flowchart TD
-    StartI(["Classic renderer selected"]) --> CheckImagery{"?imagery= present and valid?"}
-    CheckImagery -- "local or live" --> UseParam["use that value directly"]
-    CheckImagery -- "absent / invalid" --> CheckStaticI{"?static=1 present?"}
-    CheckStaticI -- yes --> Local["imagery = local"]
-    CheckStaticI -- no --> Live["imagery = live"]
-    UseParam --> Done(["imagery mode"])
-    Local --> Done
-    Live --> Done
-```
-
-"Local" is **not** zero-network in general — it only skips network tile
-fetches under `?static=1`. `imagery=local` on its own still constructs the
-hillshade and borders/labels overlay layers (gated solely on `isStaticMode`,
-not on imagery mode) and fetches their ESRI tiles over the network; only the
-base globe texture is guaranteed local in that case.
-
-```mermaid
-flowchart LR
-    LiveTiles["imagery = live"] --> TileProvider["tileProvider.ts priority:<br/>Mapbox → ESRI → Google → OSM"]
-    LocalStatic["imagery = local<br/>+ static=1"] --> ZeroNetwork["Procedural + KTX2 textures only<br/>zero network tile fetches"]
-    LocalLive["imagery = local<br/>(static=1 absent)"] --> PartialNetwork["Local base texture,<br/>but hillshade/labels overlays still fetch ESRI tiles"]
-```
-
-## 7. WebXR interaction
-
-Classic renderer only — Cesium has no WebXR support today, so its XR button
-slot instead links back to `?renderer=classic` (see [§11](#11-cesium-renderer)).
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Btn as VRButton / ARButton
-    participant XRSess as WebXR session
-    participant XR as xrSystem
-    participant World as worldGroup
-    participant Dom as renderer.domElement
-    participant Cam as cameraControls
-
-    User->>Btn: click "Enter VR"
-    Btn->>XRSess: requestSession()
-    User->>XR: controller selectstart (trigger)
-    XR->>XR: grabbing = true, capture controller world position
-    loop each XR frame while grabbing
-        XR->>World: rotate worldGroup.y / .x by controller delta × 2.8
-    end
-    User->>XR: controller selectend
-    XR->>XR: grabbing = false
-    User->>XR: controller squeezestart
-    XR->>Dom: dispatch "xr-squeeze-start" CustomEvent
-    Dom->>Cam: zoomIn() (listener registered in sceneSystem.ts)
-```
-
-## 8. Texture pipeline
-
-```mermaid
-flowchart LR
-    subgraph BuildTime["npm run textures:build"]
-        Materials["materials/ source masters"] --> Gen["scripts/generate-textures.ts"]
-        Gen --> Raw["public/textures/raw/{size}/*.jpg,png"]
-        Gen --> Ktx2["public/textures/ktx2/{size}/*.ktx2"]
-        Gen --> Transcoder["public/basis/basis_transcoder.{js,wasm}<br/>(copied once, not per-texture)"]
+    subgraph Sources["story/ + memory/"]
+        places["usePlaces · useWeather · useStreetView"]
+        client["memory/client.ts<br/>CI-Server GraphQL"]
     end
 
-    subgraph RunTime["Runtime — textureFactory.ts"]
-        Load["loadLocalTexturePack()"] --> TryKtx{"KTX2 supported?"}
-        TryKtx -- yes --> Ktx2
-        TryKtx -- "no / load fails" --> Raw
-        Transcoder -. "setTranscoderPath('/basis/')" .-> TryKtx
-        Procedural["createEarthTexture / createCloudTexture /<br/>createWeatherTexture / createNightLightsTexture<br/>(seeded value-noise, fully deterministic)"] --> GlobeMat["Globe / cloud / weather / night-lights materials"]
-        Ktx2 --> GlobeMat
-        Raw --> GlobeMat
-        LiveTiles["createEarthTileTexture / createOverlayTileTexture<br/>fetch provider tiles, remap Mercator → equirectangular"] --> GlobeMat
+    subgraph Renderers["renderers/"]
+        pick["rendererForDevice.ts"]
+        cesium["CesiumStoryViewer.tsx<br/>Resium Viewer + CzmlDataSource"]
+        xr["XRStoryScene.tsx → xr/*<br/>R3F + @react-three/xr"]
     end
+
+    subgraph UI["ui/ + scrapbook/"]
+        shell["Shell · TopBar · Rail"]
+        panels["MemoryInspector · PlaceCard · TimeMachine<br/>CommandPalette · Lightbox · PeoplePanel"]
+        book["scrapbook/useScrapbook.ts<br/>localStorage draft"]
+    end
+
+    main --> app
+    app --> story
+    story --> pkg
+    story --> client
+    app --> model
+    model --> pkg
+    app --> places
+    app --> pick
+    pick --> cesium
+    pick --> xr
+    app --> shell
+    app --> panels
+    app --> book
 ```
 
-`public/basis/` holds only the two Basis Universal transcoder library files
-(`basis_transcoder.js`/`.wasm`, copied once from three.js) — it is the KTX2
-**decoder's** location, not where generated textures live. Every individual
-generated KTX2 file is under `public/textures/ktx2/{size}/{name}.ktx2`.
+| Module | Owns |
+|---|---|
+| `src/main.tsx` | Bootstraps: `Cesium.Ion.defaultAccessToken`, Maps key, Manrope, mounts `AtlasApp` |
+| `src/AtlasApp.tsx` | Composition root — story state, selection, playback, panel wiring |
+| `src/story/useStory.ts` | Resolves the `Story` from Memory, a published URL, or the bundled sample |
+| `src/model/atlasModel.ts` | `Story` → the view-model the UI renders (`AtlasMemory`, place summaries, time-of-day) |
+| `src/memory/client.ts` | CI-Server GraphQL: located `search()` in, `createEvent` story write-back out |
+| `src/renderers/CesiumStoryViewer.tsx` | Resium `<Viewer>` + `<CzmlDataSource>` from `storyToCzml`, one `<Cesium3DTileset>` per tileset |
+| `src/renderers/xr/` | The WebXR globe: locomotion, sky shell, memory pins, wrist menu, Street View plates |
+| `src/ui/` | Shell, rail, inspector, place card, time machine, command palette, lightbox |
+| `src/scrapbook/useScrapbook.ts` | The local scrapbook draft (`localStorage`, account-scoped) |
+| `src/theme/` | `theme.css` (imports the canonical `tokens.css`) + the Atlas surface CSS. CSS only — the WebGL layers carry their own hex literals mirroring `atlas.css` |
 
-The procedural generators (`createEarthTexture`, `createCloudTexture`, etc.)
-take a seeded PRNG (`seededRandomFactory`, a linear congruential generator in
-`sceneSystem.ts`) so the same seed always produces the same pixels — this is
-what makes `?static=1` screenshots byte-for-byte reproducible even without any
-texture files on disk.
+## 3. Renderer selection
 
-## 9. The 4D `Story` data model
+`rendererForDevice()` (`src/renderers/rendererForDevice.ts`) picks one of two
+renderers over the same `Story`:
+
+| Result | When | What renders |
+|---|---|---|
+| `xr` | `navigator.xr.isSessionSupported('immersive-vr')` resolves true | `XRStoryScene` — R3F + `@react-three/xr` globe (Cesium has no WebXR support) |
+| `cesium` | everything else, and on any XR probe failure | `CesiumStoryViewer` — Resium/Cesium globe |
+
+`?renderer=cesium|xr` forces either one, which is how you drive the XR path
+from a desktop browser (with `iwer` emulating a headset in dev).
+
+Imagery degrades independently of all this: with no `VITE_CESIUM_ION_TOKEN`
+the globe falls back to Cesium's bundled offline Natural Earth II raster rather
+than rendering an unpickable black sphere. `VITE_MAPBOX_TOKEN` and
+`VITE_GOOGLE_MAPS_API_KEY` add sharper basemaps, 3D buildings, and Street View
+peeks when present (`src/renderers/basemaps.ts`).
+
+## 4. Where the `Story` comes from
+
+`useStory()` resolves exactly one 4D unit to render, in priority order:
+
+| Source | Trigger | Notes |
+|---|---|---|
+| **Companion Memory** | `?memory=<ci-server-url>` (+ `&token=`), or `VITE_MEMORY_URL` / `VITE_MEMORY_TOKEN` | Real data. Queries CI-Server's located `search()` and maps it with `mediaItemsFromMemory` |
+| **A published story** | `?story=<url>` | Accepts legacy Atlas *and* CI-Earth-2 documents via `loadStory` |
+| **The bundled sample** | nothing configured | So the viewer renders out of the box. The UI marks it "Demo data — not connected" — synthetic places rendered unmarked read as a fake product rather than a disconnected one |
+
+URL params override env vars at runtime, so one built image can point at
+different Companion Memory servers per page load.
+
+## 5. The 4D `Story` data model
 
 ```mermaid
 erDiagram
@@ -369,23 +183,26 @@ erDiagram
     }
 ```
 
-Defined once as TypeScript in [`src/atlas/schema.ts`](../src/atlas/schema.ts)
-(viewer) and mirrored as a runtime-validated Zod schema in
-[`server/src/schema.ts`](../server/src/schema.ts) (server) — the two are kept
-structurally identical by hand today; a future monorepo would share one
-package. [`src/atlas/story.ts`](../src/atlas/story.ts) is the adapter that
-projects a `Story`'s scenes onto today's `Pin[]` model so the existing globe
-can render it (see [ui-guide.md §7](ui-guide.md#7-story-mode-story)).
+Defined once as Zod in
+[`packages/story-schema/src/`](../packages/story-schema/src) — the canonical
+`@companion-atlas/story` package, which generates the JSON Schema
+(`npm run gen:schema -w @companion-atlas/story`) and ships the normalizers
+(`loadStory` reads legacy Atlas *and* CI-Earth-2 documents), the CZML converter
+(`storyToCzml`), and `mediaItemsFromMemory`. The server mirrors it at runtime in
+[`server/src/schema.ts`](../server/src/schema.ts). The viewer projects a `Story`
+into its own view-model in
+[`viewer-react/src/model/atlasModel.ts`](../viewer-react/src/model/atlasModel.ts)
+(see [§2](#2-viewer-module-map)).
 
 <a id="processing-server"></a>
-## 10. Processing server
+## 6. Processing server
 
 `server/` (package `@companion/atlas-server`) is the **3D processing server +
 MCP API**. Full MCP tool reference: [`docs/mcp-api.md`](mcp-api.md). This
 section covers the pieces mcp-api.md doesn't: the REST surface, the
 ingest→reconstruct→tile pipeline, and the suite connectors.
 
-### 10.1 Auto-compose flow (the "automatic" path)
+### 6.1 Auto-compose flow (the "automatic" path)
 
 ```mermaid
 sequenceDiagram
@@ -418,7 +235,7 @@ sequenceDiagram
     MCP-->>Agent: { viewerUrl, storyJsonUrl }
 ```
 
-### 10.2 Image/video → 3D pipeline (`server/src/pipeline.ts`)
+### 6.2 Image/video → 3D pipeline (`server/src/pipeline.ts`)
 
 ```mermaid
 flowchart LR
@@ -448,7 +265,7 @@ Stages 2–3 run in the GPU worker container
 ([`docker/Dockerfile.worker`](../docker/Dockerfile.worker)); `server/src/pipeline.ts`
 only orchestrates — the heavy native tools are not npm dependencies.
 
-### 10.3 REST endpoints (`server/src/api.ts`)
+### 6.3 REST endpoints (`server/src/api.ts`)
 
 `GET /healthz` and `GET /api/public/stories/:id` are unauthenticated — the
 latter is what lets the viewer load a shared story from a `?story=` URL. The
@@ -475,7 +292,7 @@ development only, and currently unguarded (see
 | `GET` | `/api/jobs/:id` | Poll an ingest/reconstruct/tile job — **auth**, scoped to its story's readers |
 | `POST` | `/mcp` | MCP over Streamable HTTP (stateless — one server+transport per request, built with that request's `AuthContext`, so tools are scoped to the caller) |
 
-### 10.4 Suite connectors (`server/src/connectors.ts`)
+### 6.4 Suite connectors (`server/src/connectors.ts`)
 
 | Connector | Env var | Role |
 |---|---|---|
@@ -484,98 +301,29 @@ development only, and currently unguarded (see
 | `HermesConnector` | `HERMES_URL` | Delivers a published story link to a channel/recipient (`deliver`) |
 
 All three are unconditional stubs today regardless of configuration (see
-[§13](#13-known-gaps--deliberately-out-of-scope-today)) — the server runs
+[§8](#8-known-gaps--deliberately-out-of-scope-today)) — the server runs
 standalone without the rest of the suite either way.
 
-## 11. Cesium renderer
+## 7. Reference tables
 
-The default renderer whenever `CESIUM_ION_TOKEN` is configured and
-`?static=1` isn't set (see [§6](#6-renderer-and-imagery-mode-resolution)).
-Replaces the procedural globe with real Cesium ion World Imagery, World
-Terrain, and OSM 3D Buildings — addressing the core "the map doesn't look/work
-right" motivation for adding it (see [`REIMAGINE.md`](../REIMAGINE.md)).
-
-| Module | Classic equivalent | Responsibility |
-|---|---|---|
-| `cesium/cesiumApp.ts` | `main.ts` (classic branch) | Composition root: builds the scene + scrapbook, wires `inputSystem`, HUD tick, journey controller, story loading |
-| `cesium/cesiumScene.ts` | `sceneSystem.ts` | Cesium `Viewer` construction, ion resource loading, raycasting, fly-to, layer toggles, environment/heading readouts |
-| `cesium/cesiumScrapbook.ts` | `scrapbookSystem.ts` | Pins as Cesium `Entity` billboards (via `PinBuilder`) + a glowing polyline journey route, same `Pin[]`/localStorage data model |
-
-### 11.1 Ion resource loading and offline fallback
-
-Imagery, terrain, and buildings load **independently** — one ion outage
-(invalid token, rate limit, restricted network) must not blank out the
-others. Imagery additionally falls back to Cesium's bundled offline Natural
-Earth II raster (ships in `Assets/Textures/`, zero network required) rather
-than leaving zero imagery layers: an empty imagery-layer collection was found
-to make `scene.globe.pick()` unreliable, which broke pin creation's
-raycast-from-viewport-center entirely whenever ion was unreachable.
-
-```mermaid
-flowchart TD
-    Imagery["createWorldImageryAsync()"] -- fails --> OfflineImagery["TileMapServiceImageryProvider.fromUrl(<br/>buildModuleUrl('Assets/Textures/NaturalEarthII'))"]
-    Terrain["createWorldTerrainAsync()"] -- fails --> FlatEllipsoid["default EllipsoidTerrainProvider<br/>(Cesium's built-in flat fallback)"]
-    Buildings["createOsmBuildingsAsync()"] -- fails --> NoBuildings["buildings tileset omitted"]
-```
-
-### 11.2 Ion assets used
-
-| Asset | ion ID | Purpose |
-|---|---|---|
-| Cesium World Imagery | 2 (via `createWorldImageryAsync()`) | Base satellite/aerial imagery |
-| Cesium World Terrain | 1 (via `createWorldTerrainAsync()`) | Global elevation mesh |
-| Cesium OSM Buildings | 96188 (via `createOsmBuildingsAsync()`) | Global 3D building footprints |
-
-### 11.3 Layer toggle remapping
-
-The sidebar's Layers card checkboxes are repurposed for real Cesium data
-rather than the classic renderer's procedural overlays:
-
-| Checkbox | Classic renderer | Cesium renderer |
-|---|---|---|
-| Terrain Hillshade | ESRI hillshade overlay texture | Real elevation on/off (`terrainProvider` swapped to a flat `EllipsoidTerrainProvider` when unchecked) |
-| Borders & Labels | ESRI boundaries/labels overlay texture | OSM 3D Buildings tileset visibility |
-| Clouds / Weather | Procedural texture layers | Disabled (`cb.disabled = true`) — no Cesium equivalent shipped yet |
-
-### 11.4 What's genuinely more accurate than the classic renderer
-
-- **Altitude** (`camera.positionCartographic.height`) is real meters above the
-  WGS84 ellipsoid, not the classic renderer's `(orbitRadius - globeRadius) ×
-  (6371 / globeRadius)` approximation against a 1.24-unit toy globe.
-- **Heading/compass** comes directly from `camera.heading`.
-- **Sun lighting** (`globe.enableLighting`) is computed from the real system
-  clock via Cesium's actual ephemeris, not a scripted day/night cycle.
-
-### 11.5 Deliberate omissions
-
-- **No WebXR.** Cesium has no WebXR support (see [`REIMAGINE.md`](../REIMAGINE.md)
-  and the prior `ARCHITECTURE.md` research) — the XR button slot links to
-  `?renderer=classic` instead of silently disappearing.
-- **No pixel-diff visual regression.** Real ion imagery can change
-  server-side independent of this app's code, so `cesium.spec.ts` asserts on
-  `data-cesium-status` reaching a terminal state (`ready` or `error`) rather
-  than screenshots — see [`docs/ui-guide.md`](ui-guide.md).
-
-## 12. Reference tables
-
-### 12.1 npm scripts — root (`package.json`)
+### 7.1 npm scripts — root (`package.json`)
 
 | Script | Command | Purpose |
 |---|---|---|
-| `dev` | `vite` | Plain Vite dev server |
-| `vibe:dev` | `vite --host 127.0.0.1 --port 4173` | Dev server pinned to the port Playwright expects |
-| `build` / `vibe:build` | `tsc --noEmit && vite build` | Typecheck + production bundle |
-| `preview` | `vite preview` | Serve the production build locally |
-| `typecheck` | `tsc --noEmit` | Type-only check |
-| `test:visual` / `vibe:test` | `playwright test` | Run the visual regression suite |
-| `test:visual:update` / `vibe:test:update` | `playwright test --update-snapshots` | Regenerate baseline screenshots |
-| `vibe:loop` | `vibe:build && vibe:test` | Pre-merge gate |
-| `textures:build` | `tsx scripts/generate-textures.ts` | Regenerate `public/textures` + `public/basis` from `materials/` |
-| `cesium:assets` | `tsx scripts/copy-cesium-assets.ts` | Copy Cesium's Workers/ThirdParty/Assets/Widgets into `public/cesium/` (gitignored; re-run after a Cesium version bump) |
-| `docs:screenshots` | `tsx scripts/capture-doc-screenshots.ts` | Regenerate `docs/screenshots/*.png` (needs `vibe:dev` running) |
+| `dev` | schema build, then `vite` in `viewer-react` | Dev server on `127.0.0.1:4174` |
+| `build` | schema build, then `tsc --noEmit && vite build` | Typecheck + production bundle |
+| `preview` | `vite preview` in `viewer-react` | Serve the production build locally |
+| `test` | Vitest in `viewer-react` + `server` | The fast gate |
+| `typecheck` | schema build, then `tsc --noEmit` in `server` | Type-only check |
+| `lint:canon` | `node scripts/lint-canon.mjs .` | Canon/naming lint |
 | `account:new` | `tsx scripts/new-account.ts` | Write a local `.companion-atlas-account.json` |
 
-### 12.2 npm scripts — server (`server/package.json`)
+Every script has a `deno task` twin in [`deno.json`](../deno.json).
+`packages/story-schema` must be built before anything that imports
+`@companion-atlas/story` typechecks — that is why each root script does it
+first.
+
+### 7.2 npm scripts — server (`server/package.json`)
 
 | Script | Command | Purpose |
 |---|---|---|
@@ -585,29 +333,33 @@ rather than the classic renderer's procedural overlays:
 | `start` | `node dist/index.js` | Run the compiled server |
 | `typecheck` | `tsc -p tsconfig.json --noEmit` | Type-only check |
 
-### 12.3 Environment variables (`.env.default`)
+### 7.3 Environment variables (`.env.default`)
 
 | Group | Variables |
 |---|---|
-| Viewer base imagery (build-time) | `CESIUM_ION_TOKEN`, `GOOGLE_MAP_PLATFORM`, `MAPBOX_API_KEY`, `ESRI_API_ID`, `ESRI_API_KEY`, `ESRI_API_SECRET` |
+| Viewer (build-time, Vite-inlined) | `VITE_CESIUM_ION_TOKEN`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_MAPBOX_TOKEN`, `VITE_MEMORY_URL`, `VITE_MEMORY_TOKEN` |
+| Viewer SPA login — **declared but not wired**, see [§8](#8-known-gaps--deliberately-out-of-scope-today) | `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_REDIRECT_URI`, `VITE_ATLAS_API` |
 | Atlas server URLs | `ATLAS_VIEWER_BASE_URL`, `ATLAS_API_BASE_URL` |
 | Infrastructure | `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `S3_BUCKET` |
 | Suite connectors | `CI_MEMORY_URL`, `OPENCLAW_URL`, `HERMES_URL` |
 | Companion OIDC | `COMPANION_OIDC_ISSUER`, `COMPANION_OIDC_AUDIENCE`, `COMPANION_OIDC_CLIENT_ID`, `COMPANION_OIDC_CLIENT_SECRET`, `ATLAS_DEV_SUBJECT` |
 
-`CESIUM_ION_TOKEN` does double duty in the viewer: it's what makes Cesium the
-default renderer at all (see [§6](#6-renderer-and-imagery-mode-resolution)),
-and separately it's read by the classic renderer's `tilesSystem.ts` to stream
-Cesium ion World Terrain into the procedural globe. The classic renderer skips
-that entirely under `?static=1` regardless of whether the token is set (see
-[§3](#3-render-loop)) — a real token must not make "deterministic" test runs
-start making network calls.
+Every `VITE_*` value is inlined into the bundle at build time and is therefore
+**public**. `VITE_MEMORY_TOKEN` in particular is a build-time default for
+single-tenant deployments only; multi-user installs pass `?token=` per session
+instead.
 
-### 12.4 Docker Compose services (`docker-compose.yml`)
+The four SPA-login variables are the exception to "these configure the viewer":
+setting them changes nothing today. `viewer-react/src/auth/portal.ts` reads
+`VITE_OIDC_*` through `portalConfigFromEnv()`, but nothing calls it, and
+`VITE_ATLAS_API` has no reader in `viewer-react/` at all. They are kept so the
+contract with CI-Portal stays written down, not because they are live.
+
+### 7.4 Docker Compose services (`docker-compose.yml`)
 
 | Service | Image / build | Purpose | Profile |
 |---|---|---|---|
-| `viewer` | `Dockerfile` (nginx) | Static web viewer | default |
+| `viewer` | `viewer-react/Dockerfile` (nginx, `:8080`) | The web viewer | default |
 | `atlas-api` | `server/Dockerfile` | REST + MCP server | default |
 | `worker` | `docker/Dockerfile.worker` (CUDA) | GPU reconstruction | `gpu` |
 | `minio` | `minio/minio` | S3-compatible object store | default |
@@ -619,8 +371,56 @@ docker compose up viewer atlas-api minio postgres redis   # app tier
 docker compose --profile gpu up worker                     # + reconstruction
 ```
 
-## 13. Known gaps / deliberately out of scope today
+[`docker-compose.dev.yml`](../docker-compose.dev.yml) is the local variant: the
+stores and API in containers, the viewer on the host for HMR.
 
+## 8. Known gaps / deliberately out of scope today
+
+- **The viewer cannot be *built* in CI or in Docker — but it can now be
+  *typechecked*.** `@companionintelligence/tokens` is the one dependency
+  `package-lock.json` resolves to `link:../ci-common/packages/tokens`, a sibling
+  checkout of CI-Common outside this repository; it is the only such `link`
+  entry in the lockfile.
+
+  Earlier editions of this list blamed `viewer-react/src/theme/index.ts`, which
+  imported the package for `primaryHex()`/`fontStack()`. That file has been
+  deleted: it had no importers at all, because the WebGL layers that were meant
+  to use it (`layers/cesium.ts`, `authoring/style.ts`, `authoring/entities.ts`)
+  each ended up carrying hex literals mirroring `theme/atlas.css` instead. With
+  it gone there is **no JavaScript or TypeScript import of the package left**,
+  so `tsc -p viewer-react/tsconfig.json --noEmit` succeeds in a single-repo
+  checkout and a typecheck step can be added to the `viewer` CI job today.
+
+  `vite build` is a separate resolution path and still fails.
+  `viewer-react/src/theme/theme.css` line 12 does
+  `@import '@companionintelligence/tokens/tokens.css'`, and vite resolves bare
+  CSS specifiers through node resolution just as it does JS ones — an
+  unresolvable one is a hard build error (`[vite:css] [postcss] ENOENT`), not a
+  passthrough. `theme.css` is loaded unconditionally by `src/main.tsx`, and the
+  tokens it pulls in are what `body { background: var(--background) }` and the
+  `--atlas-*` aliases in `atlas.css` are defined against, so it cannot simply be
+  dropped.
+
+  Two ways to close it, and they are not equivalent:
+  - *Publish* `@companionintelligence/tokens` to GitHub Packages and give CI a
+    `NODE_AUTH_TOKEN`. `viewer-react/.npmrc` already points the scope there.
+    This keeps one canonical source of truth and is the right fix.
+  - *Vendor* `tokens.css` into `viewer-react/src/theme/`. Mechanically trivial —
+    the file is 208 lines with no nested `@import` and no `url()` references, so
+    a copy plus a one-line change to `theme.css` would do it, and the dependency
+    could then leave `viewer-react/package.json` entirely. But it forks the
+    canonical palette into a copy nothing keeps in sync, which is precisely what
+    `npm run lint:canon` exists to prevent. Treat it as a fallback if publishing
+    stays blocked, not as the preferred route.
+
+  Until one of them lands, [`hub/docker-compose.json`](../hub/docker-compose.json)
+  names an image that nothing in this repo produces.
+- **No pixel-diff visual regression.** The old suite covered the removed
+  vanilla-TS viewer's deterministic `?static=1` path. Cesium/Resium has none —
+  making it deterministic (offline imagery, ion disabled, locked camera and
+  clock, masked dynamic regions, tolerant `maxDiffPixelRatio`) is open work
+  from [`docs/CONSOLIDATION.md`](CONSOLIDATION.md). `viewer-react/tests/` holds
+  Playwright *capture* scripts (video for docs/review), not assertions.
 - **Auth: verification and authorisation are both real now; one gap remains.**
   `verifyBearer()` in [`server/src/auth.ts`](../server/src/auth.ts) does a real
   `jose.jwtVerify` against the issuer's JWKS, enforcing signature, issuer,
@@ -645,6 +445,25 @@ docker compose --profile gpu up worker                     # + reconstruction
     vocabulary onto Atlas operations is a deliberate follow-up — that
     vocabulary isn't defined anywhere Atlas can see yet, so a mapping written
     today would be invented rather than agreed.
+- **The viewer has no sign-in. It authenticates by ambient cookie or
+  `?token=`.** `memory/client.ts` sends `credentials: 'include'`, so a CI-Server
+  session cookie already set on the host is used if one exists; otherwise the
+  bearer comes from `?token=<jwt>` on the URL, or from `VITE_MEMORY_TOKEN` baked
+  in at build time. That is the whole of it. There is no OIDC login in the SPA:
+  `viewer-react/src/auth/portal.ts` implements a complete Authorization Code +
+  PKCE (S256) flow — `beginLogin()`, `completeLogin()`,
+  `portalConfigFromEnv()` — and **nothing calls any of it**. There is no
+  `/auth/callback` handling at boot and no sign-in control in the shell.
+
+  It is kept rather than deleted because the flow is correct and its blockers
+  are external: `companion-atlas` is not registered in CI-Portal
+  `PUBLIC_CLIENTS` (a PR against another repo), `.env.default` ships
+  `VITE_OIDC_ISSUER`/`VITE_OIDC_REDIRECT_URI` empty so `portalConfigFromEnv()`
+  returns null in every checked-in configuration, and `VITE_ATLAS_API` has no
+  reader in `viewer-react/`, so a completed login would not change what the
+  viewer can fetch. Wiring sign-in is worth doing as one piece of work together
+  with an Atlas-API client that actually sends the bearer — not before.
+
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all
   data on restart — see [`REIMAGINE.md` Phase 1](../REIMAGINE.md#8-migration-roadmap)
   for the Postgres/Redis/MinIO migration.
@@ -652,14 +471,17 @@ docker compose --profile gpu up worker                     # + reconstruction
   `reconstruct()` in `server/src/pipeline.ts` return well-typed placeholder
   results; they do not yet shell out to COLMAP/ODM/Nerfstudio. The Dockerfile
   for the worker installs the real toolchain in anticipation of this.
-- **Suite connectors are unconditional stubs**, not just no-ops when
-  unconfigured — every method on `CiMemoryConnector`, `OpenClawConnector`, and
-  `HermesConnector` (`server/src/connectors.ts`) returns immediately with a
-  `// TODO` comment regardless of whether its URL is set. Same category of gap
-  as the reconstruction pipeline above.
-- **The classic three.js renderer is still around, not fully replaced.**
-  Cesium ([§11](#11-cesium-renderer)) is now the default live renderer, which
-  substantially delivers on `REIMAGINE.md`'s Phase 2 recommendation, but the
-  classic renderer remains for `?static=1` (deterministic testing) and
-  `?renderer=classic` (WebXR, which Cesium doesn't support) — it was not a
-  full replace-and-delete migration.
+- **Suite connectors: memory is real, OpenClaw and Hermes are not.** This entry
+  used to say all three were unconditional stubs that returned immediately
+  regardless of whether their URL was set. That is no longer true of any of
+  them. Every connector in `server/src/connectors.ts` now has a `configured`
+  getter and guards on it, so an unconfigured connector is a no-op *by design*
+  rather than a stub that ignores its configuration — and
+  `CiMemoryConnector.query()` and `.saveStoryMemory()` do real GraphQL work,
+  delegating to `queryLocatedMedia()` / `saveStoryMemory()` in
+  `server/src/ci-memory-client.ts`. What remains outstanding is narrower:
+  - `CiMemoryConnector.resolveMedia()` returns null — a dedicated single-media
+    lookup is a follow-up; the search query already returns absolutized
+    media/thumbnail URLs for the seeded set.
+  - `OpenClawConnector.notifyStoryReady()` and `HermesConnector.deliver()` have
+    no transport yet. Same category of gap as the reconstruction pipeline above.

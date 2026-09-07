@@ -1,0 +1,140 @@
+{
+  "type": "FeatureCollection",
+  "name": "Lisbon field notes",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "praca",
+      "properties": {
+        "title": "Praça do Comércio",
+        "description": "Where the walk started.",
+        "tags": ["lisbon", "square"],
+        "time": "2026-05-09T09:00:00Z",
+        "marker-color": "#ff4444"
+      },
+      "geometry": { "type": "Point", "coordinates": [-9.1366, 38.7077, 12] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Miradouros", "marker-color": "3c9" },
+      "geometry": {
+        "type": "MultiPoint",
+        "coordinates": [
+          [-9.1305, 38.7118],
+          [-9.1412, 38.7156]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Tram 28 route",
+        "stroke": "#ffcc00",
+        "stroke-width": 4,
+        "start": "2026-05-09T10:00:00Z",
+        "end": "2026-05-09T10:45:00Z"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-9.1366, 38.7077],
+          [-9.1339, 38.7108],
+          [-9.1305, 38.7118]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Ferry legs", "stroke": "#00aaff" },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [-9.1444, 38.6935],
+            [-9.1502, 38.6871]
+          ],
+          [
+            [-9.1502, 38.6871],
+            [-9.1561, 38.6802]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Castelo grounds",
+        "fill": "#33cc99",
+        "fill-opacity": 0.35,
+        "stroke": "#116644",
+        "stroke-width": 2
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-9.1345, 38.7139],
+            [-9.1315, 38.7139],
+            [-9.1315, 38.7159],
+            [-9.1345, 38.7159],
+            [-9.1345, 38.7139]
+          ],
+          [
+            [-9.1338, 38.7145],
+            [-9.1326, 38.7145],
+            [-9.1326, 38.7152],
+            [-9.1338, 38.7152],
+            [-9.1338, 38.7145]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Two parishes", "fill": "#8844cc", "fill-opacity": 0 },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-9.15, 38.7],
+              [-9.14, 38.7],
+              [-9.14, 38.71],
+              [-9.15, 38.7]
+            ]
+          ],
+          [
+            [
+              [-9.13, 38.72],
+              [-9.12, 38.72],
+              [-9.12, 38.73],
+              [-9.13, 38.72]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Mixed bag" },
+      "geometry": {
+        "type": "GeometryCollection",
+        "geometries": [
+          { "type": "Point", "coordinates": [-9.12, 38.75] },
+          {
+            "type": "LineString",
+            "coordinates": [
+              [-9.12, 38.75],
+              [-9.11, 38.76]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Attribute row with no geometry" },
+      "geometry": null
+    }
+  ]
+}

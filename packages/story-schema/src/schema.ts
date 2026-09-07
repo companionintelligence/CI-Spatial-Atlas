@@ -130,6 +130,23 @@ export const TrackSample = z.object({
   time: Iso8601,
 });
 
+/**
+ * A drawn ring/path of vertices, for `line` and `polygon`.
+ *
+ * Deliberately `GeoPoint[]` — the same `{lat,lon,height}` objects every other
+ * placed item uses — and NOT GeoJSON's `[lon, lat]` tuples. Importers convert
+ * once, at the document boundary, so nothing downstream ever has to remember
+ * which of the two axis orders it is holding; silently swapped lat/lon is the
+ * single most common defect in geo code and it renders as "somewhere in the
+ * Gulf of Guinea" rather than as an error.
+ *
+ * Rings are stored UNCLOSED (no repeated final vertex). GeoJSON and KML both
+ * require the closing vertex on the wire, so the importers strip it and the
+ * exporter puts it back; Cesium's polygon hierarchy does not want it, and
+ * keeping it would leave a zero-length edge that breaks outline widths.
+ */
+export const GeoPath = z.array(GeoPoint);
+
 const itemBase = {
   id: z.string(),
   title: z.string().optional(),
@@ -162,6 +179,52 @@ export const Item = z.discriminatedUnion('type', [
   z.object({ ...itemBase, type: z.literal('marker'), position: GeoPoint, icon: z.string().optional(), color: z.string().optional() }),
   z.object({ ...itemBase, type: z.literal('note'), position: GeoPoint, text: z.string() }),
   z.object({ ...itemBase, type: z.literal('track'), path: z.array(TrackSample).min(1), color: z.string().optional() }),
+  // `line`/`polygon` are DRAWN geometry — a border, a route someone sketched, a
+  // parcel outline, anything imported from GeoJSON/KML. They are not `track`:
+  // a track's vertices each carry a timestamp and answer "where were you at
+  // 09:14?", which is why it renders as a moving Cesium entity with a path.
+  // A line's vertices carry no time at all and the whole feature shares one
+  // `time` from `itemBase`. Conflating the two (the obvious temptation, since
+  // both are polylines on screen) would either force fake timestamps onto
+  // drawn shapes or throw away the sampling that makes a track 4D.
+  //
+  // Style lives in flat, primitive fields rather than a nested `style` object,
+  // matching `marker.color`/`track.color` — and every field maps 1:1 onto a
+  // CZML `polyline`/`polygon` property, which is the constraint that keeps the
+  // model honest: if it can't render, it doesn't belong here. Colours are
+  // permissive strings (`#rgb`, `#rrggbb`, `#rrggbbaa`) like `marker.color`;
+  // `cssToRgba` in ./czml is the one place that has to parse them.
+  z.object({
+    ...itemBase,
+    type: z.literal('line'),
+    positions: GeoPath.min(2),
+    color: z.string().optional(),
+    /** Stroke width in screen pixels (CZML `polyline.width`), not metres. */
+    width: z.number().optional(),
+    /**
+     * Drape the line over terrain instead of drawing it at its vertices'
+     * heights. Defaults (in the renderer, not here) to true when no vertex
+     * carries a height: a 2D import drawn at h=0 sinks under any real terrain
+     * and reads as "my GeoJSON didn't load".
+     */
+    clampToGround: z.boolean().optional(),
+  }),
+  z.object({
+    ...itemBase,
+    type: z.literal('polygon'),
+    /** Outer ring, unclosed — see `GeoPath`. */
+    positions: GeoPath.min(3),
+    /** Inner rings punched out of the outer one (GeoJSON rings 1..n, KML `innerBoundaryIs`). */
+    holes: z.array(GeoPath.min(3)).optional(),
+    fillColor: z.string().optional(),
+    /** 0..1. `0` means outline-only — that is how KML's `<fill>0</fill>` arrives. */
+    fillOpacity: z.number().min(0).max(1).optional(),
+    outlineColor: z.string().optional(),
+    /** Screen pixels. `0` means no outline — how KML's `<outline>0</outline>` arrives. */
+    outlineWidth: z.number().optional(),
+    /** See `line.clampToGround`; for a polygon this also means "ignore per-vertex heights". */
+    clampToGround: z.boolean().optional(),
+  }),
   z.object({ ...itemBase, type: z.literal('model'), position: GeoPoint, gltf: z.string(), scale: z.number().optional() }),
   z.object({ ...itemBase, type: z.literal('splat'), position: GeoPoint.optional(), tileset: z.string().optional(), splatUrl: z.string().optional() }),
   z.object({ ...itemBase, type: z.literal('tileset'), position: GeoPoint.optional(), tileset: z.string() }),
@@ -337,6 +400,7 @@ export type Media = z.infer<typeof Media>;
 export type Provenance = z.infer<typeof Provenance>;
 export type Derived3d = z.infer<typeof Derived3d>;
 export type TrackSample = z.infer<typeof TrackSample>;
+export type GeoPath = z.infer<typeof GeoPath>;
 export type Item = z.infer<typeof Item>;
 export type ItemType = Item['type'];
 export type MediaItem = z.infer<typeof MediaItem>;

@@ -7,9 +7,30 @@
  * `${issuer}/oauth2/authorize`, `${issuer}/oauth2/token`. Public PKCE client —
  * no secret. The access token is a JWT the Atlas API verifies (server/src/auth.ts).
  *
- * Scaffold: part of the not-yet-built viewer-react app. `companion-atlas` must be
- * registered in CI-Portal `PUBLIC_CLIENTS` (a Portal PR); local/`.ts.net`/`.local`
- * redirect URIs are auto-allowed, so no Portal record is needed for dev.
+ * NOT WIRED — and deliberately so, not by oversight. Nothing in viewer-react
+ * calls these functions: there is no `/auth/callback` handling at boot, no
+ * sign-in control in the shell, and no consumer for the token if one were
+ * obtained. The viewer authenticates to Companion Memory by ambient CI-Server
+ * session cookie (`credentials: 'include'` in `memory/client.ts`) or an explicit
+ * `?token=<jwt>` / `VITE_MEMORY_TOKEN`; `story/useStory.ts` reads that param and
+ * knows nothing about OIDC.
+ *
+ * Three things block wiring it, and none of them is the code below:
+ *   1. `companion-atlas` is not registered in CI-Portal `PUBLIC_CLIENTS` — that
+ *      is a PR against another repo. (Local/`.ts.net`/`.local` redirect URIs are
+ *      auto-allowed, so dev alone would need no Portal record.)
+ *   2. `.env.default` ships `VITE_OIDC_ISSUER` and `VITE_OIDC_REDIRECT_URI`
+ *      empty, so `portalConfigFromEnv()` returns null in every configuration
+ *      checked into this repo — a sign-in control would render disabled or not
+ *      at all until an operator fills those in.
+ *   3. `VITE_ATLAS_API` has no reader anywhere in viewer-react, so a completed
+ *      login would not change what the viewer can fetch. Wiring sign-in is
+ *      worth doing only together with an Atlas-API client that sends the bearer.
+ *
+ * Kept rather than deleted because the flow itself is correct and the hard part
+ * (PKCE S256, state validation, single-use verifier) is done; see
+ * `docs/architecture.md` §8, which states this gap rather than implying the
+ * `VITE_OIDC_*` variables are live configuration.
  */
 
 export interface PortalAuthConfig {

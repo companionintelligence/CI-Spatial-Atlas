@@ -105,6 +105,17 @@ export async function verifyToken(
   const { payload } = await jwtVerify(token, keys as JWTVerifyGetKey, {
     issuer: cfg.issuer,
     audience: cfg.audience,
+    // Pin the acceptable signature algorithms. `jwtVerify` otherwise accepts
+    // whatever the token's own header asks for, so a JWKS that ever served a
+    // symmetric (`oct`) key — a misconfiguration, or a compromised key set —
+    // would let an attacker sign their own token with the *public* key as an
+    // HMAC secret and have it verify. Listing only asymmetric algorithms makes
+    // that class of confusion impossible rather than unlikely.
+    algorithms: ['EdDSA', 'ES256', 'ES384', 'RS256', 'PS256'],
+    // Reject a token that carries no expiry or no subject before any claim is
+    // read. Without `exp` a leaked token is valid forever, and the `sub` check
+    // below can only run once something has guaranteed the claim is present.
+    requiredClaims: ['sub', 'exp'],
   });
   // A token without a usable `sub` cannot be authorised: `String(undefined)`
   // would mint the literal subject "undefined", which could then own stories.

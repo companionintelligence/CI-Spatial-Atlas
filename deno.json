@@ -6,21 +6,12 @@
     "server"
   ],
   "tasks": {
-    "dev": "deno run -A npm:vite",
-    "vibe:dev": "deno run -A npm:vite --host 127.0.0.1 --port 4173",
-    "build": "deno run -A npm:typescript/lib/tsc.js --noEmit && deno run -A npm:vite build",
-    "vibe:build": "deno task build",
-    "preview": "deno run -A npm:vite preview",
-    "test:visual": "deno run -A npm:playwright/cli.js test --config=playwright.config.js",
-    "test:visual:update": "deno run -A npm:playwright/cli.js test --config=playwright.config.js --update-snapshots",
-    "vibe:test": "deno task test:visual",
-    "vibe:test:update": "deno task test:visual:update",
-    "vibe:loop": "deno task vibe:build && deno task vibe:test",
-    "textures:build": "deno run -A scripts/generate-textures.ts",
-    "typecheck": "deno run -A npm:typescript/lib/tsc.js --noEmit",
+    "dev": "deno task --cwd packages/story-schema build && deno task --cwd viewer-react dev",
+    "build": "deno task --cwd packages/story-schema build && deno task --cwd viewer-react build",
+    "preview": "deno task --cwd viewer-react preview",
+    "test": "deno task --cwd packages/story-schema build && deno task --cwd viewer-react test && deno task --cwd server test",
+    "typecheck": "deno task --cwd packages/story-schema build && deno task --cwd server typecheck",
     "lint:canon": "deno run -A scripts/lint-canon.mjs .",
-    "account:new": "deno run -A scripts/new-account.ts",
-    "docs:screenshots": "deno run -A scripts/capture-doc-screenshots.ts",
-    "cesium:assets": "deno run -A scripts/copy-cesium-assets.ts"
+    "account:new": "deno run -A scripts/new-account.ts"
   }
 }

@@ -87,3 +87,15 @@ export const BuildingIcon = (p: P) => (
     <path d="M8.5 8.5v.01M8.5 12v.01M8.5 15.5v.01M15.5 13v.01M15.5 16.5v.01" />
   </svg>
 );
+
+/** Import & export — arrows crossing in opposite directions. Distinct from
+ *  ShareIcon, which means "copy a link to this view", not "move data". */
+export const ExchangeIcon = (p: P) => (
+  <svg {...S(p)}><path d="M7 21V7m0 0L3.5 10.5M7 7l3.5 3.5" /><path d="M17 3v14m0 0 3.5-3.5M17 17l-3.5-3.5" /></svg>
+);
+
+/** Present — a framed slide. PlayIcon already means "play the journey on the
+ *  globe", which is a different thing from stepping through authored scenes. */
+export const SlidesIcon = (p: P) => (
+  <svg {...S(p)}><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M12 17v3m-3 0h6" /><path d="m10 8.5 4 2.5-4 2.5z" /></svg>
+);

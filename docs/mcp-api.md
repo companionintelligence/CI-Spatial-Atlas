@@ -4,9 +4,9 @@ The Atlas MCP server (`server/src/mcp.ts`) is the programmatic surface for
 building and publishing **4D scrapbook stories** — manually (a person in an
 MCP‑capable app) or automatically (OpenClaw, Hermes, the CI agent). Every tool
 operates on a `companion.atlas/story@1` document (see
-[`../src/atlas/schema.ts`](../src/atlas/schema.ts)).
+[`../packages/story-schema/src/`](../packages/story-schema/src)).
 
-See [`architecture.md` §10.1](architecture.md#101-auto-compose-flow-the-automatic-path)
+See [`architecture.md` §6.1](architecture.md#61-auto-compose-flow-the-automatic-path)
 for a sequence diagram of the automatic recipe below end to end.
 
 ## Transports

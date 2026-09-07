@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>Lisbon, two days</name>
+    <description>Exported from a notebook; times are real.</description>
+
+    <!-- aabbggrr: opaque red is ff0000ff, NOT ff0000. -->
+    <Style id="redLine">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>5</width>
+      </LineStyle>
+    </Style>
+
+    <!-- Half-transparent green fill with a dark outline. -->
+    <Style id="greenArea">
+      <LineStyle>
+        <color>ff104010</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>8000ff00</color>
+      </PolyStyle>
+    </Style>
+
+    <!-- Outline-only: <fill>0</fill> must survive as fillOpacity 0. -->
+    <Style id="outlineOnly">
+      <LineStyle>
+        <color>ffff0000</color>
+        <width>3</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>ff00ffff</color>
+        <fill>0</fill>
+      </PolyStyle>
+    </Style>
+
+    <Style id="pinBlue">
+      <IconStyle>
+        <color>ffff0000</color>
+      </IconStyle>
+    </Style>
+
+    <!-- A StyleMap indirection: the normal pair points at the shared style. -->
+    <StyleMap id="routeStyle">
+      <Pair>
+        <key>normal</key>
+        <styleUrl>#redLine</styleUrl>
+      </Pair>
+      <Pair>
+        <key>highlight</key>
+        <styleUrl>#greenArea</styleUrl>
+      </Pair>
+    </StyleMap>
+
+    <Folder>
+      <name>Day 1</name>
+
+      <Placemark id="pm_praca">
+        <name>Praça do Comércio</name>
+        <description>Arrived at dusk.</description>
+        <styleUrl>#pinBlue</styleUrl>
+        <TimeStamp><when>2026-05-09T18:20:00Z</when></TimeStamp>
+        <Point><coordinates>-9.1366,38.7077,12</coordinates></Point>
+      </Placemark>
+
+      <Placemark id="pm_tram">
+        <name>Tram 28</name>
+        <styleUrl>#routeStyle</styleUrl>
+        <TimeSpan>
+          <begin>2026-05-09T19:00:00Z</begin>
+          <end>2026-05-09T19:40:00Z</end>
+        </TimeSpan>
+        <LineString>
+          <tessellate>1</tessellate>
+          <coordinates>
+            -9.1366,38.7077
+            -9.1339,38.7108
+            -9.1305,38.7118
+          </coordinates>
+        </LineString>
+      </Placemark>
+
+      <Folder>
+        <name>Viewpoints</name>
+        <Placemark id="pm_castelo">
+          <name>Castelo grounds</name>
+          <styleUrl>#greenArea</styleUrl>
+          <Polygon>
+            <outerBoundaryIs>
+              <LinearRing>
+                <coordinates>-9.1345,38.7139 -9.1315,38.7139 -9.1315,38.7159 -9.1345,38.7159 -9.1345,38.7139</coordinates>
+              </LinearRing>
+            </outerBoundaryIs>
+            <innerBoundaryIs>
+              <LinearRing>
+                <coordinates>-9.1338,38.7145 -9.1326,38.7145 -9.1326,38.7152 -9.1338,38.7152 -9.1338,38.7145</coordinates>
+              </LinearRing>
+            </innerBoundaryIs>
+          </Polygon>
+        </Placemark>
+      </Folder>
+    </Folder>
+
+    <Folder>
+      <name>Day 2</name>
+
+      <!-- One Placemark, three geometries. -->
+      <Placemark id="pm_multi">
+        <name>Belém cluster</name>
+        <styleUrl>#outlineOnly</styleUrl>
+        <TimeSpan><begin>2026-05-10T09:00:00Z</begin><end>2026-05-10T13:00:00Z</end></TimeSpan>
+        <MultiGeometry>
+          <Point><coordinates>-9.2058,38.6916</coordinates></Point>
+          <LineString>
+            <coordinates>-9.2058,38.6916 -9.2160,38.6935</coordinates>
+          </LineString>
+          <Polygon>
+            <outerBoundaryIs>
+              <LinearRing>
+                <coordinates>-9.2100,38.6900 -9.2050,38.6900 -9.2050,38.6940 -9.2100,38.6900</coordinates>
+              </LinearRing>
+            </outerBoundaryIs>
+          </Polygon>
+        </MultiGeometry>
+      </Placemark>
+
+      <!-- A timed path: this is the thing Google Earth barely supports. -->
+      <Placemark id="pm_walk">
+        <name>Morning walk</name>
+        <styleUrl>#redLine</styleUrl>
+        <gx:Track>
+          <altitudeMode>absolute</altitudeMode>
+          <when>2026-05-10T09:05:00Z</when>
+          <when>2026-05-10T09:20:00Z</when>
+          <when>2026-05-10T09:35:00Z</when>
+          <gx:coord>-9.2058 38.6916 8</gx:coord>
+          <gx:coord>-9.2101 38.6928 11</gx:coord>
+          <gx:coord>-9.2160 38.6935 14</gx:coord>
+        </gx:Track>
+      </Placemark>
+
+      <!-- Entity-escaped text must decode, and re-escape on the way back out. -->
+      <Placemark id="pm_escape">
+        <name>Caf&#233; &amp; Bar &lt;Nicola&gt;</name>
+        <Point><coordinates>-9.1400,38.7140</coordinates></Point>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

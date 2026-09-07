@@ -74,9 +74,9 @@ source of truth (it becomes so once the server + viewer adopt it — Phase 0 rem
       `timeline` now optional, superset unions, the emptiness rule removed). Do it
       behind tests: add the dep, reconcile the `mcp.ts`/`api.ts`/`store.ts` call
       sites, then delete the duplicate Zod.
-- [ ] **Viewer adoption:** point `src/atlas/schema.ts` + `src/atlas/story.ts`'s
-      loader at `loadStory`/`storyToCzml` from the package (the existing vanilla
-      viewer can import it too, before `viewer-react` is ready).
+- [x] **Viewer adoption:** the viewer loads stories through
+      `loadStory`/`storyToCzml` from `@companion-atlas/story`; the duplicate
+      viewer-local schema went with the vanilla viewer.
 - [ ] Do **not** re-import CI-Earth-2's `packages/scrapbook`; its converter is
       already ported to `packages/story-schema/src/czml.ts`. (That package lives in
       CI-Earth-2, which is being archived — there is nothing to delete in this repo.)
@@ -107,8 +107,12 @@ source of truth (it becomes so once the server + viewer adopt it — Phase 0 rem
       working clock (the **Resium spike** — the single biggest technical risk;
       time-box it first).
 - [ ] Port CI-Earth-2's React UI panels (search, scrapbook, timeline scrubber).
-- [ ] Keep the existing vanilla-TS viewer shipping until Resium reaches visual
+- [x] Keep the existing vanilla-TS viewer shipping until Resium reaches
       parity, then remove it (`src/systems/*`, `src/cesium/*`, `src/main.ts`).
+      **Done** — `viewer-react` is the only viewer. Note this landed on feature
+      parity, *not* on visual parity: the pixel-diff baselines below were never
+      extended to Resium, and were removed along with the renderer they
+      covered. Re-establishing them is now unblocked work, not a prerequisite.
 
 ---
 
