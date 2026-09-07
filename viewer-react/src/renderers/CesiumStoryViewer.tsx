@@ -176,11 +176,18 @@ function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number
  */
 const EMPTY_IDS: readonly string[] = [];
 
+/** The three projections Cesium can draw, named for the app rather than for
+ *  Cesium's enum — `SCENE2D` is not a phrase anyone says out loud. */
+export type SceneModeName = '3d' | '2d' | 'columbus';
+
+const SCENE_MORPH_SECONDS = 1.2;
+
 export function CesiumStoryViewer({
   story, memories, places = [], focusedId, basemap = DEFAULT_BASEMAP, sunLighting = false,
   buildings = false,
   onViewer, onPick, onPickPlace, onHover, onInteract,
   layers = [], claimedUrls, timeMs = null, extraItemIds = EMPTY_IDS,
+  sceneMode = '3d', reduceMotion = false,
 }: {
   story: Story;
   memories: AtlasMemory[];
@@ -215,6 +222,20 @@ export function CesiumStoryViewer({
   /** Clock position, so time-windowed layers hide themselves outside their
    *  availability and `{Time}`-dimensioned sources (GIBS) follow the scrub. */
   timeMs?: number | null;
+  /**
+   * Which projection the globe is drawn in. Google Earth offers 2D and 3D of
+   * the same project and Atlas offered only 3D — `sceneModePicker` was disabled
+   * and there was no other route, so a story that is really a map (a route, a
+   * boundary, a set of places) could only ever be read at an angle.
+   *
+   * Columbus view is offered too because it is the honest middle: a flat map
+   * that still has height, which is where a 3D tileset or a raised track still
+   * reads correctly and a plain 2D projection flattens it away.
+   */
+  sceneMode?: SceneModeName;
+  /** Morphs become cuts. A projection change is a large, whole-screen motion —
+   *  exactly what someone who asked for less of it meant. */
+  reduceMotion?: boolean;
   /** Ids of story items that have no scene, and therefore no memory pin
    *  standing in for them — imported KML/GeoJSON features, and anything drawn
    *  by hand. Their CZML packets are rendered rather than filtered away. */
@@ -569,6 +590,40 @@ export function CesiumStoryViewer({
   useEffect(() => {
     layerSceneRef.current?.sync(layers, timeMs);
   }, [viewer, layers, timeMs, basemap]);
+
+  // Projection. Cesium morphs between the three rather than rebuilding, so the
+  // camera, every data source and the clock survive the change — which is why
+  // this is a scene call and not a remount.
+  //
+  // Guarded on the *current* mode: `morphTo*` restarts the animation even when
+  // the scene is already there, and this effect re-runs for reasons that have
+  // nothing to do with the projection.
+  const requestedModeRef = useRef<Cesium.SceneMode | null>(null);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const scene = viewer.scene;
+    const want =
+      sceneMode === '2d' ? Cesium.SceneMode.SCENE2D
+      : sceneMode === 'columbus' ? Cesium.SceneMode.COLUMBUS_VIEW
+      : Cesium.SceneMode.SCENE3D;
+    // Guard on the last mode we ASKED for, not on the scene's current mode.
+    //
+    // Those come apart, and when they do, guarding on `scene.mode` wedges the
+    // control: a morph that is interrupted, or that Cesium does not finish,
+    // leaves the scene in one projection while React holds another, and the
+    // next press computes the mode the scene is *already* in — so the guard
+    // returns and the button appears dead. Observed exactly that: the scene sat
+    // in 2D while the control read "3D", and no number of presses moved it.
+    //
+    // Re-issuing a morph the scene is already in is harmless; failing to issue
+    // one is not.
+    if (requestedModeRef.current === want) return;
+    requestedModeRef.current = want;
+    const seconds = reduceMotion ? 0 : SCENE_MORPH_SECONDS;
+    if (want === Cesium.SceneMode.SCENE2D) scene.morphTo2D(seconds);
+    else if (want === Cesium.SceneMode.COLUMBUS_VIEW) scene.morphToColumbusView(seconds);
+    else scene.morphTo3D(seconds);
+  }, [viewer, sceneMode, reduceMotion]);
 
   // camera, clock and entity layers all survive a basemap change.
   useEffect(() => {

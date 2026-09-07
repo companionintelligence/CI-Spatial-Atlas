@@ -4,6 +4,8 @@ import type { Camera, Item, Story } from '@companion-atlas/story';
 import { createAuthoringController, type AuthoringController } from './controller.js';
 import { createDraft, snapshot, type AuthoringMode, type DraftSnapshot } from './draft.js';
 import { describeCamera } from './camera.js';
+import { createHistory, summarize, type HistorySummary } from './history.js';
+import type { Measurement, MeasureUnits } from './measure.js';
 import { DEFAULT_STYLE, mergeStyle, type AuthoringStyle } from './style.js';
 import { storyIds, type AuthoringSelection } from './store.js';
 import { hydrateItems, readItems, writeItems, type AuthoringStorage } from './persist.js';
@@ -88,6 +90,20 @@ export interface UseAuthoringOptions {
    *  drawn by its CZML instead — see `AuthoringControllerOptions.renderItems`,
    *  which explains why the two must not both be on. */
   renderItems?: boolean;
+  /**
+   * Which units measurements are reported in. Seeds the setting; the toolbar's
+   * own toggle takes over from there.
+   *
+   * Deliberately NOT persisted alongside the drawn shapes. `persist.ts`'s bucket
+   * is scoped to the connected account and holds *content*; a display preference
+   * is neither, and threading one through a scope that resolves after an auth
+   * round trip would mean the first render of every session shows the wrong
+   * units and then flips. A per-session default is honest about what it is.
+   */
+  units?: MeasureUnits;
+  /** Notified when a measurement is taken, replaced or cleared. It is never an
+   *  `Item` and never reaches the story — see `measure.ts`. */
+  onMeasure?: (measurement: Measurement | null) => void;
 }
 
 export interface AuthoringControl {
@@ -110,8 +126,26 @@ export interface AuthoringControl {
   setItems: (items: Item[]) => void;
   finish: () => void;
   cancel: () => void;
+  /** Take back the last point of the shape IN PROGRESS. Not `undo` — see the
+   *  header of `history.ts`. */
   undoVertex: () => void;
   deleteSelected: () => void;
+
+  /** The retained measurement, or null. Never an `Item`, never in `items`,
+   *  never merged into a story. */
+  measurement: Measurement | null;
+  clearMeasurement: () => void;
+  units: MeasureUnits;
+  setUnits: (units: MeasureUnits) => void;
+
+  /** Step the committed items back / forward one authoring action. */
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  /** What the next undo would take back, e.g. `"delete area"`. */
+  undoLabel: string | null;
+  redoLabel: string | null;
   /** Read the live camera. Returns the value AND stores it as `camera`. */
   captureCamera: () => Camera | null;
   camera: Camera | null;
@@ -134,6 +168,9 @@ export function useAuthoring(
   const [items, setItemsState] = useState<Item[]>([]);
   const [camera, setCamera] = useState<Camera | null>(null);
   const [ready, setReady] = useState(false);
+  const [measurement, setMeasurementState] = useState<Measurement | null>(null);
+  const [units, setUnitsState] = useState<MeasureUnits>(options.units ?? 'metric');
+  const [historyState, setHistoryState] = useState<HistorySummary>(() => summarize(createHistory([])));
 
   const controllerRef = useRef<AuthoringController | null>(null);
   /** The last array the controller emitted. Compared by identity so the sync
@@ -169,6 +206,13 @@ export function useAuthoring(
   onItemsChangeRef.current = options.onItemsChange;
   const onSelectRef = useRef(options.onSelect);
   onSelectRef.current = options.onSelect;
+  const onMeasureRef = useRef(options.onMeasure);
+  onMeasureRef.current = options.onMeasure;
+  /** Read at construction only, like `enabled` — every later change goes
+   *  through `setUnits` on the live controller. Making it a dependency would
+   *  destroy the drawing layer to change a label from metres to feet. */
+  const unitsRef = useRef(units);
+  unitsRef.current = units;
   const storyRef = useRef(story);
   storyRef.current = story;
 
@@ -180,6 +224,7 @@ export function useAuthoring(
     const controller = createAuthoringController(viewer, {
       style,
       enabled: enabledRef.current,
+      units: unitsRef.current,
       renderItems: options.renderItems,
       reservedIds: () => storyIds(storyRef.current),
       onChange: (next, change) => {
@@ -211,6 +256,14 @@ export function useAuthoring(
         onSelectRef.current?.(next);
       },
       onDraft: setDraft,
+      onMeasure: (next) => {
+        setMeasurementState(next);
+        onMeasureRef.current?.(next);
+      },
+      // Fires only when the ANSWER changes (the controller compares before
+      // emitting), so this does not re-render the toolbar on every recorded
+      // action once undo is already available.
+      onHistory: setHistoryState,
     });
     controllerRef.current = controller;
     setReady(true);
@@ -228,6 +281,12 @@ export function useAuthoring(
       setItemsState(existing);
     }
     setModeState(controller.getMode());
+    // A remount takes the CustomDataSource with it, so the measurement's
+    // geometry is genuinely gone — the panel must not go on reporting a reading
+    // for a line that is no longer on the globe. History is re-based by the
+    // `setItems` above and read back here rather than assumed.
+    setMeasurementState(null);
+    setHistoryState(controller.getHistory());
 
     return () => {
       controllerRef.current = null;
@@ -335,6 +394,23 @@ export function useAuthoring(
   const undoVertex = useCallback(() => { controllerRef.current?.undoVertex(); }, []);
   const deleteSelected = useCallback(() => { controllerRef.current?.deleteSelected(); }, []);
 
+  // Undo/redo go through the controller rather than being reimplemented over
+  // React state, for the same reason `items` does: the controller is what holds
+  // the Cesium entities, the selection and the history, and a second copy of
+  // any of the three would be a second copy to keep in step.
+  const undo = useCallback(() => { controllerRef.current?.undo(); }, []);
+  const redo = useCallback(() => { controllerRef.current?.redo(); }, []);
+
+  const clearMeasurement = useCallback(() => { controllerRef.current?.clearMeasurement(); }, []);
+
+  const setUnits = useCallback((next: MeasureUnits) => {
+    controllerRef.current?.setUnits(next);
+    // Mirrored into React state whether or not a controller exists yet: the
+    // toolbar's toggle has to reflect the press even one frame before the
+    // viewer arrives, or it reads as a dead control.
+    setUnitsState(next);
+  }, []);
+
   const captureCamera = useCallback((): Camera | null => {
     const next = controllerRef.current?.captureCamera() ?? null;
     if (next) setCamera(next);
@@ -362,10 +438,21 @@ export function useAuthoring(
     onDelete: deleteSelected,
     onCaptureCamera: () => { captureCamera(); },
     capturedCamera: camera ? `Captured · ${describeCamera(camera)}` : null,
+    measurement,
+    onClearMeasurement: clearMeasurement,
+    units,
+    onUnits: setUnits,
+    canUndo: historyState.canUndo,
+    canRedo: historyState.canRedo,
+    undoLabel: historyState.undoLabel,
+    redoLabel: historyState.redoLabel,
+    onUndo: undo,
+    onRedo: redo,
     open: enabled,
   }), [
     mode, setMode, draft, finish, cancel, undoVertex, style, setStyle,
     noteText, setNoteText, selection, deleteSelected, captureCamera, camera, enabled,
+    measurement, clearMeasurement, units, setUnits, historyState, undo, redo,
   ]);
 
   return {
@@ -377,6 +464,12 @@ export function useAuthoring(
     selection, select,
     items, setItems,
     finish, cancel, undoVertex, deleteSelected,
+    measurement, clearMeasurement, units, setUnits,
+    undo, redo,
+    canUndo: historyState.canUndo,
+    canRedo: historyState.canRedo,
+    undoLabel: historyState.undoLabel,
+    redoLabel: historyState.redoLabel,
     captureCamera, camera, flyToCamera,
     toolbarProps,
   };

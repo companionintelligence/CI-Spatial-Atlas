@@ -11,7 +11,16 @@
  * in plain modules.
  */
 
-export type InteropFormat = 'kml' | 'geojson' | 'story' | 'kmz' | 'unknown';
+export type InteropFormat =
+  | 'kml'
+  | 'geojson'
+  | 'story'
+  | 'kmz'
+  /** A photo or video uploaded through `MediaUploadSection`, which joins the
+   *  imported list so it is listed, removable and merged by the same code.
+   *  Never returned by `detectFormat` — nothing sniffs its way to this. */
+  | 'media'
+  | 'unknown';
 
 /** ZIP local-file-header magic, `PK\003\004`. KMZ is a ZIP, and so is every
  *  other archive someone might drop; the KML importer rejects these with a

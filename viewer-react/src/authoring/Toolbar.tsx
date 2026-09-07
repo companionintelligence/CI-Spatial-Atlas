@@ -1,6 +1,16 @@
 import { useId, useState, type SVGProps } from 'react';
-import { DRAW_MODES, type AuthoringMode, type DraftSnapshot } from './draft.js';
+import { TOOL_MODES, type AuthoringMode, type DraftSnapshot } from './draft.js';
 import { MARKER_ICONS, isUsableCustomIcon } from './icons.js';
+import {
+  describeMeasurement,
+  formatArea,
+  formatLength,
+  MEASURE_UNITS,
+  UNIT_LABEL,
+  UNIT_SHORT,
+  type Measurement,
+  type MeasureUnits,
+} from './measure.js';
 import {
   STYLE_SWATCHES,
   WIDTH_STEPS,
@@ -66,6 +76,27 @@ export interface AuthoringToolbarProps {
   /** A one-line summary of the last capture, e.g. from `describeCamera`. */
   capturedCamera?: string | null;
 
+  /** The retained measurement, or null. Never an `Item` — see `measure.ts`. */
+  measurement?: Measurement | null;
+  onClearMeasurement?: () => void;
+  /** The one units setting for the whole feature. */
+  units?: MeasureUnits;
+  onUnits?: (units: MeasureUnits) => void;
+
+  /** Undo/redo over committed authoring actions — NOT `onUndoVertex`, which
+   *  works on the shape in progress. Both are offered, because they are two
+   *  different gestures and a user in the middle of a polygon needs the one
+   *  that does not reach back into finished work. */
+  canUndo?: boolean;
+  canRedo?: boolean;
+  /** What the next press would take back, e.g. `"delete area"`. Rendered into
+   *  the button's title and accessible name, so a screen reader hears which
+   *  action is about to be reversed rather than a bare "Undo". */
+  undoLabel?: string | null;
+  redoLabel?: string | null;
+  onUndo?: () => void;
+  onRedo?: () => void;
+
   /** Render nothing when false — the app's "authoring off" state. */
   open?: boolean;
 }
@@ -76,6 +107,9 @@ const MODE_LABEL: Record<AuthoringMode, string> = {
   line: 'Draw a line',
   polygon: 'Draw an area',
   note: 'Add a note',
+  // Says what it does NOT do, because that is the surprising half: every other
+  // tool in this row leaves something behind.
+  measure: 'Measure distance and area — nothing is saved',
 };
 
 const MODE_SHORT: Record<AuthoringMode, string> = {
@@ -84,6 +118,7 @@ const MODE_SHORT: Record<AuthoringMode, string> = {
   line: 'Line',
   polygon: 'Area',
   note: 'Note',
+  measure: 'Measure',
 };
 
 export function AuthoringToolbar({
@@ -93,6 +128,10 @@ export function AuthoringToolbar({
   noteText, onNoteText,
   selection, onDelete,
   onCaptureCamera, capturedCamera,
+  measurement = null, onClearMeasurement,
+  units = 'metric', onUnits,
+  canUndo = false, canRedo = false, undoLabel = null, redoLabel = null,
+  onUndo, onRedo,
   open = true,
 }: AuthoringToolbarProps) {
   const ids = useId();
@@ -112,16 +151,27 @@ export function AuthoringToolbar({
   const showWidth = styleTarget === 'line' || styleTarget === 'polygon';
   const showIcons = styleTarget === 'marker';
   const showNoteText = mode === 'note' || selectedItem?.type === 'note';
-  const drawing = mode !== 'idle';
+  const measuring = mode === 'measure';
+  // The draw status block belongs to the shape tools. Measuring gets its own,
+  // because its buttons mean different things: there is nothing to "Finish"
+  // into the story, and "Cancel" abandons a reading rather than a shape.
+  const drawing = mode !== 'idle' && !measuring;
+  // Wherever a number is printed, the control that chooses its units is
+  // reachable — and nowhere else, because a Units row over the select tool
+  // governs nothing on screen.
+  const showUnits = measuring || drawing || !!measurement;
 
   return (
     <section className="atlas-draw" aria-label="Drawing tools">
       <div className="draw-modes" role="group" aria-label="Drawing mode">
-        {(['idle', ...DRAW_MODES] as AuthoringMode[]).map((m) => (
+        {TOOL_MODES.map((m) => (
           <button
             key={m}
             type="button"
-            className={`draw-mode${mode === m ? ' active' : ''}`}
+            /* The mode is a class as well as a state, so the stylesheet can
+               give the measure tool its own active colour — it is the one tool
+               in this row that produces nothing. */
+            className={`draw-mode ${m}${mode === m ? ' active' : ''}`}
             aria-pressed={mode === m}
             aria-label={MODE_LABEL[m]}
             title={MODE_LABEL[m]}
@@ -131,6 +181,39 @@ export function AuthoringToolbar({
             <span>{MODE_SHORT[m]}</span>
           </button>
         ))}
+      </div>
+
+      {/* Undo/redo, immediately under the tools they act on.
+          Both are always rendered and disabled when unavailable, rather than
+          being hidden until there is history: a control that appears and
+          disappears cannot be found by muscle memory, and its absence reads as
+          "this app has no undo" rather than "there is nothing to undo yet". */}
+      <div className="draw-row draw-history" role="group" aria-label="Undo and redo">
+        <button
+          type="button"
+          className="draw-action"
+          onClick={onUndo}
+          disabled={!canUndo}
+          aria-keyshortcuts="Control+Z Meta+Z"
+          aria-label={undoLabel ? `Undo ${undoLabel}` : 'Undo'}
+          title={undoLabel ? `Undo ${undoLabel}` : 'Nothing to undo'}
+        >
+          <UndoIcon aria-hidden="true" />
+          <span>Undo</span>
+          <kbd>{'\u2318/Ctrl Z'}</kbd>
+        </button>
+        <button
+          type="button"
+          className="draw-action"
+          onClick={onRedo}
+          disabled={!canRedo}
+          aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z"
+          aria-label={redoLabel ? `Redo ${redoLabel}` : 'Redo'}
+          title={redoLabel ? `Redo ${redoLabel}` : 'Nothing to redo'}
+        >
+          <RedoIcon aria-hidden="true" />
+          <span>Redo</span>
+        </button>
       </div>
 
       {/* Capture is not a drawing mode — it reads the camera and belongs to
@@ -147,12 +230,108 @@ export function AuthoringToolbar({
         ) : null}
       </div>
 
+      {measuring || measurement ? (
+        <div className="draw-status draw-measure">
+          {measuring ? (
+            <p className="draw-count" aria-live="polite">
+              {draft.vertexCount === 0
+                ? 'Click two or more points to measure.'
+                : `${draft.vertexCount} point${draft.vertexCount === 1 ? '' : 's'}${draftMeasure(draft, units)}`}
+            </p>
+          ) : null}
+
+          {/* Said plainly, and said every time the tool is armed. The single
+              most likely misunderstanding of this feature is that a
+              measurement is a shape that got saved — and the cost of that
+              misunderstanding is a story that silently lacks something the
+              author believed was in it. */}
+          {measuring ? (
+            <p className="draw-note">Measurements are not saved with the story.</p>
+          ) : null}
+
+          {measuring ? (
+            <div className="draw-row">
+              <button
+                type="button"
+                className="draw-action primary"
+                onClick={onFinish}
+                disabled={draft.vertexCount < 2}
+              >
+                Take reading
+                <kbd>Enter</kbd>
+              </button>
+              <button
+                type="button"
+                className="draw-action"
+                onClick={onUndoVertex}
+                disabled={draft.vertexCount === 0}
+              >
+                Undo point
+                <kbd>Backspace</kbd>
+              </button>
+            </div>
+          ) : null}
+
+          {/* Labelled, not just a bare number. The block can be on screen with
+              the area tool armed, where an unlabelled "111.2 km" would read as
+              something about the shape being drawn. */}
+          {measurement ? (
+            <p className="draw-count" role="status">
+              Measured <b>{describeMeasurement(measurement, units)}</b>
+            </p>
+          ) : null}
+
+          {measurement ? (
+            <div className="draw-row">
+              <button type="button" className="draw-action" onClick={onClearMeasurement}>
+                <TrashIcon aria-hidden="true" />
+                <span>Clear measurement</span>
+              </button>
+            </div>
+          ) : null}
+
+          {draft.warning && measuring ? (
+            <p className="draw-warning" role="alert">
+              <WarnIcon aria-hidden="true" />
+              <span>{draft.warning}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* The units setting sits outside the measure block on purpose.
+          It governs EVERY number the panel prints — the polygon tool's running
+          perimeter as much as a measurement — so hiding it inside the measure
+          block would leave a user who had switched to feet reading feet under
+          the area tool with no control anywhere to switch back. One setting,
+          reachable wherever it has an effect. */}
+      {showUnits ? (
+        <div className="draw-field">
+          <span className="draw-label" id={`${ids}-units`}>Units</span>
+          <div className="draw-units" role="group" aria-labelledby={`${ids}-units`}>
+            {MEASURE_UNITS.map((u) => (
+              <button
+                key={u}
+                type="button"
+                className={`draw-unit${units === u ? ' active' : ''}`}
+                aria-pressed={units === u}
+                aria-label={UNIT_LABEL[u]}
+                title={UNIT_LABEL[u]}
+                onClick={() => onUnits?.(u)}
+              >
+                {UNIT_SHORT[u]}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {drawing ? (
         <div className="draw-status">
           <p className="draw-count" aria-live="polite">
             {draft.vertexCount === 0
               ? `Click the globe to start${mode === 'polygon' ? ' the outline' : ''}.`
-              : `${draft.vertexCount} point${draft.vertexCount === 1 ? '' : 's'}${measure(draft)}`}
+              : `${draft.vertexCount} point${draft.vertexCount === 1 ? '' : 's'}${draftMeasure(draft, units)}`}
           </p>
           <div className="draw-row">
             <button
@@ -393,26 +572,20 @@ export function AuthoringToolbar({
 }
 
 /** " · 1.2 km" / " · 3.4 ha" — the running measurement, or nothing when there
- *  is not enough shape to measure. */
-function measure(draft: DraftSnapshot): string {
+ *  is not enough shape to measure. Serves the shape tools AND the measure tool,
+ *  so a distance reads identically whichever one produced it. */
+function draftMeasure(draft: DraftSnapshot, units: MeasureUnits): string {
   const parts: string[] = [];
-  if (draft.areaMeters > 0) parts.push(formatArea(draft.areaMeters));
-  if (draft.lengthMeters > 0) parts.push(formatLength(draft.lengthMeters));
+  if (draft.areaMeters > 0) parts.push(formatArea(draft.areaMeters, units));
+  if (draft.lengthMeters > 0) parts.push(formatLength(draft.lengthMeters, units));
   return parts.length ? ` · ${parts.join(' · ')}` : '';
 }
 
-export function formatLength(metres: number): string {
-  if (!Number.isFinite(metres) || metres <= 0) return '0 m';
-  if (metres < 1000) return `${Math.round(metres)} m`;
-  return `${(metres / 1000).toFixed(metres < 10_000 ? 2 : 1)} km`;
-}
-
-export function formatArea(squareMetres: number): string {
-  if (!Number.isFinite(squareMetres) || squareMetres <= 0) return '0 m²';
-  if (squareMetres < 10_000) return `${Math.round(squareMetres)} m²`;
-  if (squareMetres < 1_000_000) return `${(squareMetres / 10_000).toFixed(2)} ha`;
-  return `${(squareMetres / 1_000_000).toFixed(2)} km²`;
-}
+/** Re-exported from `measure.ts`, where the unit conversions live. Kept
+ *  importable from here because that is where they were first written and the
+ *  existing suite imports them from this module — moving the implementation was
+ *  worth it, breaking the import path for a rename was not. */
+export { formatArea, formatLength } from './measure.js';
 
 /** Case-insensitive hex compare, so `#72DDD4` from a colour input still lights
  *  up the `#72ddd4` swatch it came from. */
@@ -472,6 +645,21 @@ const TrashIcon = (p: P) => (
 const WarnIcon = (p: P) => (
   <svg {...S(p)}><path d="M12 4 2.6 20h18.8z" /><path d="M12 10v4M12 17v.01" /></svg>
 );
+/* A ruler laid on the diagonal, with tick marks — the one shape in this set
+   that is an instrument rather than a mark on the map, which is the whole
+   distinction the measure tool is trying to make visible. */
+const RulerIcon = (p: P) => (
+  <svg {...S(p)}>
+    <rect x="1.6" y="8.6" width="20.8" height="6.8" rx="1.6" transform="rotate(-30 12 12)" />
+    <path d="M8.1 7.6l1.1 1.9M11.1 5.9l1.6 2.8M14.1 4.2l1.1 1.9" />
+  </svg>
+);
+const UndoIcon = (p: P) => (
+  <svg {...S(p)}><path d="M4 9h9.5a5 5 0 0 1 0 10H8" /><path d="m8 5-4 4 4 4" /></svg>
+);
+const RedoIcon = (p: P) => (
+  <svg {...S(p)}><path d="M20 9h-9.5a5 5 0 0 0 0 10H16" /><path d="m16 5 4 4-4 4" /></svg>
+);
 
 function ModeIcon({ mode, ...rest }: { mode: AuthoringMode } & P) {
   switch (mode) {
@@ -479,6 +667,7 @@ function ModeIcon({ mode, ...rest }: { mode: AuthoringMode } & P) {
     case 'line': return <LineIcon {...rest} />;
     case 'polygon': return <PolygonIcon {...rest} />;
     case 'note': return <NoteIcon {...rest} />;
+    case 'measure': return <RulerIcon {...rest} />;
     default: return <CursorIcon {...rest} />;
   }
 }

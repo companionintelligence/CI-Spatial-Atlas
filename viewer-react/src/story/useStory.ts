@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadStory, type Story } from '@companion-atlas/story';
 import { fetchMemoryStory } from '../memory/client.js';
+import { memoryCredentialsAllowed } from '../embed/index.js';
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
 
@@ -36,8 +37,17 @@ export function useStory(): {
   const [isSample, setIsSample] = useState(false);
 
   const params = new URLSearchParams(window.location.search);
-  const memoryUrl = params.get('memory') ?? env.VITE_MEMORY_URL;
-  const memoryToken = params.get('token') ?? env.VITE_MEMORY_TOKEN;
+  // An iframe's `src` is written by the *embedding* page, so in embed mode
+  // every parameter is attacker-supplied: `?embed=1&memory=https://evil&token=…`
+  // would point Atlas at a server of the embedder's choosing, with credentials,
+  // inside a frame they control — and the viewer would faithfully connect. An
+  // embed renders `?story=` or the bundled sample and nothing else.
+  //
+  // Environment variables are unaffected: those are the deployment's own
+  // choice, not something a third-party page can write.
+  const urlCredentials = memoryCredentialsAllowed(window.location.search);
+  const memoryUrl = (urlCredentials ? params.get('memory') : null) ?? env.VITE_MEMORY_URL;
+  const memoryToken = (urlCredentials ? params.get('token') : null) ?? env.VITE_MEMORY_TOKEN;
   const source: StorySource = memoryUrl ? 'memory' : 'story';
 
   useEffect(() => {

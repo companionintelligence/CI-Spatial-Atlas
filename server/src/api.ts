@@ -15,17 +15,36 @@
  *   2. `canRead` / `canWrite` — per-story ownership, checked inside the handler
  *      against `access.oidcSubject`. Reaching a story you don't own is a 403.
  *
- * Only `GET /healthz` and `GET /api/public/stories/:id` are unauthenticated;
- * `GET /api/stories` and `GET /api/stories/:id` are reachable anonymously but
- * return only what `canRead` allows (public/unlisted), which is what lets the
- * viewer load a shared story without a token.
+ * Media upload lives in `media.ts` and is registered here (`registerMediaRoutes`)
+ * so the `authenticated` preHandler below is the *same function* guarding it —
+ * a second copy of an auth gate is a gate that eventually differs from the
+ * first. See that file for why `GET /api/media/o/*` is the one route whose
+ * authorisation is an unguessable key rather than a token.
+ *
+ * Only `GET /healthz`, `GET /api/public/stories/:id` and `GET /api/media/o/*`
+ * are unauthenticated; `GET /api/stories` and `GET /api/stories/:id` are
+ * reachable anonymously but return only what `canRead` allows
+ * (public/unlisted), which is what lets the viewer load a shared story without
+ * a token.
+ *
+ * Cross-origin access is a third, separate question and lives in `cors.ts`. The
+ * viewer is never same-origin with this API in any configuration this repo
+ * ships, so without it the browser refuses the upload before the auth layers
+ * above ever see the request.
  */
 
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import cors from '@fastify/cors';
 
 import { canRead, canWrite, isAuthenticated, verifyBearer, type AuthContext } from './auth.js';
+import {
+  CORS_ALLOWED_HEADERS, CORS_EXPOSED_HEADERS, CORS_METHODS,
+  corsOriginCheck, corsPolicyFromEnv, type CorsPolicy,
+} from './cors.js';
 import { sceneInstantFromTime } from './compose.js';
 import type { SuiteConnectors } from './connectors.js';
+import { registerMediaRoutes } from './media.js';
+import { objectStoreConfigFromEnv, uploadLimitsFromEnv, type ObjectStore, type UploadLimits } from './object-store.js';
 import { ingest, reconstruct } from './pipeline.js';
 import type { MediaItem, Scene } from './schema.js';
 import type { JobStore, StoryStore } from './store.js';
@@ -41,8 +60,26 @@ export interface ApiDeps {
   connectors: SuiteConnectors;
   viewerBaseUrl: string;
   apiBaseUrl: string;
+  /**
+   * Where uploaded media is stored, or null when this deployment has none.
+   *
+   * Passed in rather than read from the environment inside `buildApi`, so a
+   * test's app is never quietly wired to whatever `S3_*` variables happen to be
+   * set on the machine running it. `index.ts` is the one place that reads the
+   * env (`objectStoreFromEnv`).
+   */
+  objectStore?: ObjectStore | null;
+  /** Upload size cap + content-type allowlist. Defaults from env. */
+  uploadLimits?: UploadLimits;
   /** Fastify logger config. Defaults on; tests pass `false` to stay quiet. */
   logger?: boolean;
+  /**
+   * Which origins may call this API from a browser. Defaults from the
+   * environment (`ATLAS_CORS_ORIGINS`), passed in for the same reason
+   * `objectStore` is: a test's app must not inherit whatever the machine
+   * running it happens to have set.
+   */
+  cors?: CorsPolicy;
 }
 
 /**
@@ -60,6 +97,22 @@ async function authenticated(req: FastifyRequest, reply: FastifyReply): Promise<
 export function buildApi(deps: ApiDeps): FastifyInstance {
   const { store, connectors, viewerBaseUrl, apiBaseUrl } = deps;
   const app = Fastify({ logger: deps.logger ?? true });
+
+  // Registered before anything else so a preflight is answered even for a route
+  // that would 401 — a browser that cannot preflight never gets to send the
+  // real request, and the resulting failure names CORS, not authentication.
+  const corsPolicy = deps.cors ?? corsPolicyFromEnv();
+  void app.register(cors, {
+    origin: corsOriginCheck(corsPolicy),
+    methods: CORS_METHODS,
+    allowedHeaders: CORS_ALLOWED_HEADERS,
+    exposedHeaders: CORS_EXPOSED_HEADERS,
+    // Deliberately absent: `credentials`. See `cors.ts` — Atlas authenticates
+    // with a bearer token the caller attaches on purpose, never with an ambient
+    // cookie, so no allowlist mistake can turn into a hostile page acting as
+    // the signed-in user.
+    maxAge: 600,
+  });
 
   // Attach auth to every request (public routes simply ignore it).
   app.addHook('preHandler', async (req) => {
@@ -84,6 +137,22 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   }
 
   app.get('/healthz', async () => ({ ok: true, service: 'companion-atlas', version: '0.1.0' }));
+
+  // ── Media upload ─────────────────────────────────────────────────────────
+  // `storageReason` is read from the environment even when no store was passed,
+  // so an unconfigured deployment answers with the variables it is missing
+  // instead of a generic refusal.
+  const storageConfig = objectStoreConfigFromEnv();
+  registerMediaRoutes(
+    app,
+    {
+      objectStore: deps.objectStore ?? null,
+      limits: deps.uploadLimits ?? uploadLimitsFromEnv(),
+      apiBaseUrl,
+      storageReason: storageConfig.configured ? undefined : storageConfig.reason,
+    },
+    authenticated
+  );
 
   // ── Public, shareable story document the viewer fetches ──────────────────
   app.get<{ Params: { id: string } }>('/api/public/stories/:id', async (req, reply) => {

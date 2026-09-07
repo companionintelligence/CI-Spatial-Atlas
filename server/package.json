@@ -18,10 +18,12 @@
   },
   "dependencies": {
     "@companion-atlas/story": "file:../packages/story-schema",
+    "@fastify/cors": "^11.3.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "exiftool-vendored": "^28.3.0",
     "fastify": "^5.2.0",
     "jose": "^5.9.6",
+    "minio": "^8.0.7",
     "openid-client": "^6.1.0",
     "zod": "^3.24.0"
   },

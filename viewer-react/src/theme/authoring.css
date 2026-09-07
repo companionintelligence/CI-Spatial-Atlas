@@ -51,9 +51,14 @@
 .atlas-draw::-webkit-scrollbar-thumb { background: var(--atlas-line-2); border-radius: 8px; }
 
 /* ---- mode switcher ------------------------------------------------------- */
+/* Six tools now, not five: the measure tool joined the row because it is armed
+   and disarmed exactly like the others, and putting it anywhere else would make
+   "which tool is live" two questions instead of one. `1fr` columns keep the
+   pills equal, and the label font is already 9px — the constraint that gives is
+   the tap target, which the coarse-pointer rule below restores. */
 .draw-modes {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 2px;
   padding: 3px;
   border-radius: 12px;
@@ -77,6 +82,14 @@
   transition: color .15s, background .15s, border-color .15s;
 }
 .draw-mode svg { width: 17px; height: 17px; }
+/* The measure tool is not a drawing tool, and its active state says so: dusk
+   rather than the teal→aqua gradient every shape tool lights up with. It is the
+   same signal `entities.ts` uses on the globe, so the pill and the geometry it
+   produces are recognisably the same thing. */
+.draw-mode.measure.active {
+  background: linear-gradient(135deg, var(--atlas-dusk), var(--atlas-coral));
+  box-shadow: 0 0 16px rgba(255, 178, 122, .26);
+}
 .draw-mode:hover { color: var(--atlas-fg); }
 .draw-mode.active {
   color: var(--atlas-ink);
@@ -127,6 +140,37 @@
   padding: 2px 4px;
 }
 .draw-action.primary kbd { color: var(--atlas-ink); border-color: color-mix(in srgb, var(--atlas-ink) 40%, transparent); }
+
+/* The two history buttons share a row and neither should grow into the other's
+   space when one has a `kbd` hint and the other does not. */
+.draw-history .draw-action { flex: 1 1 0; min-width: 0; }
+
+/* ---- measurement --------------------------------------------------------- */
+/* Bordered in dusk so the block that holds a reading is visibly not the block
+   that holds a selected shape — the two can be on screen together. */
+.draw-measure { border-color: color-mix(in srgb, var(--atlas-dusk) 40%, var(--atlas-line)); }
+.draw-measure .draw-count b { color: var(--atlas-dusk); font: 700 13px var(--atlas-mono); }
+
+.draw-units { display: flex; gap: 5px; }
+.draw-unit {
+  flex: 1;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  color: var(--atlas-fg-dim);
+  font: 600 10.5px var(--atlas-mono);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.draw-unit:hover { color: var(--atlas-fg); border-color: var(--atlas-line-2); }
+.draw-unit.active {
+  color: var(--atlas-dusk);
+  border-color: var(--atlas-dusk);
+  background: color-mix(in srgb, var(--atlas-dusk) 12%, transparent);
+}
 
 /* ---- status, warnings ---------------------------------------------------- */
 .draw-status {
@@ -272,6 +316,7 @@
 .draw-swatch:focus-visible,
 .draw-swatch-custom:focus-within,
 .draw-width:focus-visible,
+.draw-unit:focus-visible,
 .draw-icon:focus-visible,
 .draw-input:focus-visible,
 .draw-range:focus-visible,
@@ -323,6 +368,7 @@
   .draw-mode { min-height: 44px; }
   .draw-action { min-height: 40px; }
   .draw-swatch { width: 30px; height: 30px; }
+  .draw-unit { min-height: 40px; }
   .draw-width { min-height: 34px; }
 }
 

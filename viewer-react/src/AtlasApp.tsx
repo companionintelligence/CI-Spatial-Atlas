@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
-import { buildScrapbookStory, curateJourney, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
+import { buildScrapbookStory, curateJourney, type Camera, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
 import { useStory } from './story/useStory.js';
 import { usePlaces } from './story/usePlaces.js';
-import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
+import { CesiumStoryViewer, type SceneModeName } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
 import { Rail, TopBar } from './ui/Shell.js';
 import { MapLayers } from './ui/MapLayers.js';
@@ -31,7 +31,9 @@ import { useImported, withImported } from './interop/useImported.js';
 import { applyMemoryPlaces, type MemoryImport } from './memory/import.js';
 import { isFramableBounds, type GeoPlace } from './memory/geocode.js';
 import { useFileDrop } from './interop/useFileDrop.js';
+import { atlasChrome, restoredView, SharePanel, EmbedBar } from './embed/index.js';
 import { useAuthoring } from './authoring/useAuthoring.js';
+import { poseFromCamera } from './authoring/camera.js';
 import { useScenes } from './scenes/index.js';
 import { SceneList } from './scenes/SceneList.js';
 import { SceneEditor } from './scenes/SceneEditor.js';
@@ -90,6 +92,12 @@ const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
  */
 export function AtlasApp() {
   const { story: loadedStory, error, loading, source, isSample, memory } = useStory();
+  // Reading mode. One decision for the whole shell rather than a `&&` per
+  // surface — the surface list is an exhaustive union, so adding a panel forces
+  // a decision about whether an embed shows it. See embed/embedMode.ts.
+  const chrome = useMemo(() => atlasChrome(window.location.search), []);
+  /** The camera and moment a shared or embedded link asked to open at. */
+  const opened = useMemo(() => restoredView(window.location.search), []);
   // A Companion Memory import REPLACES the loaded story rather than merging
   // into it. `deriveModel` reads its memory list from `story.scenes` whenever
   // there are any, so an archive merged into a scened story renders as nothing;
@@ -131,6 +139,9 @@ export function AtlasApp() {
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
+  // Projection. Starts on the globe because that is what Atlas is for; a story
+  // that is really a map is one click from being read as one.
+  const [sceneMode, setSceneMode] = useState<SceneModeName>('3d');
   const [sunLighting, setSunLighting] = useState(false);
   const [buildings, setBuildings] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -189,12 +200,19 @@ export function AtlasApp() {
   const [sbOpen, setSbOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [interopOpen, setInteropOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareCamera, setShareCamera] = useState<Camera | null>(null);
   const [presenting, setPresenting] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
   const lastSync = useRef(0);
   const flownToRef = useRef<string | null>(null);
   const introDone = useRef(false);
+  /** Whether the URL's `?view=` has been honoured. Deliberately separate from
+   *  `introDone`, which is reset every time a journey is played so the new
+   *  story gets its own opening flight: a restored view is a fact about *this
+   *  page load*, and re-applying it on every journey would fight the journey. */
+  const openedDone = useRef(false);
   const lightboxRef = useRef<AtlasMemory | null>(null);
   lightboxRef.current = lightbox;
   /** journey scene id → base memory id, for the currently playing journey. */
@@ -431,11 +449,62 @@ export function AtlasApp() {
   // Open *on the memories*: once the viewer + model are both ready, frame the
   // first memory and set the clock to its moment (so its region is lit, not the
   // default empty night hemisphere), then let playback carry the journey.
+  //
+  // Unless the URL asked for somewhere else. A shared or embedded link carries
+  // `?view=` and `?t=`, and this effect is what they are up against: it runs a
+  // beat after the restore and flies to the first memory instead, so without
+  // the branch below the parameters are decoration — written by the share
+  // panel, parsed on open, and then overridden before anyone sees them. The
+  // clock needs the same treatment: `scrub` does not stop playback, so an
+  // autoplaying story would walk straight off the requested moment on the next
+  // tick.
   useEffect(() => {
     if (!viewer || !model || introDone.current) return;
+
+    if (opened.camera && !openedDone.current) {
+      openedDone.current = true;
+      introDone.current = true;
+
+      if (opened.timeMs != null) {
+        // Clamped into the story's own window. `?t=` is attacker-supplied in an
+        // embed and stale in a shared link — a story re-cut to a shorter span
+        // still has to open somewhere it can show. Without this the scrubber
+        // reads a date the globe is not displaying: `setCurrentMs` would take
+        // the out-of-range value while Cesium's CLAMPED clock quietly holds the
+        // playhead at the end.
+        const { startMs, stopMs } = model.timeline;
+        scrub(Math.min(Math.max(opened.timeMs, startMs), stopMs));
+        pause();
+      }
+
+      // Claim the memory the clock is already standing on. The playback
+      // fly-through fires on the very next tick and flies to `lastPassed`,
+      // which — on any link that opens mid-story — is a memory somewhere else
+      // entirely; it would take the camera off the view the link exists to
+      // show, a second after arriving. Claiming it leaves playback free to
+      // carry on to the *next* memory, which is what an autoplaying shared
+      // link should do.
+      const atMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+      flownToRef.current = lastPassed(model.memories, atMs)?.id ?? flownToRef.current;
+
+      const pose = poseFromCamera(opened.camera);
+      // Flown here rather than through `draw.flyToCamera`, which needs the
+      // authoring controller — a thing an embed never mounts, and which arrives
+      // a render late even in the full app. The opening shot must not depend on
+      // the drawing layer existing.
+      if (pose) {
+        void viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromRadians(pose.longitude, pose.latitude, pose.height),
+          orientation: { heading: pose.heading, pitch: pose.pitch, roll: pose.roll },
+          duration: reduceMotion ? 0 : 1.6,
+        });
+      }
+      return;
+    }
+
     const first = model.memories[0];
     if (first) { introDone.current = true; select(first); }
-  }, [viewer, model, select]);
+  }, [viewer, model, select, scrub, pause, opened, reduceMotion]);
 
   // ————— the scrapbook loop: collect → curate → play → save —————
 
@@ -603,7 +672,13 @@ export function AtlasApp() {
 
   // ⌘K / Ctrl-K toggles the command palette (never behind the lightbox, which
   // sits above it — an invisible focused palette would steal keystrokes).
+  //
+  // Not bound at all in embed mode, and `preventDefault` is why: an iframe that
+  // swallows ⌘K takes the shortcut away from the *host page* whenever the
+  // pointer happens to be over the map. Whether Atlas would then show a palette
+  // is beside the point — the key never reaches the page the reader is on.
   useEffect(() => {
+    if (!chrome.commandPalette) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -613,11 +688,18 @@ export function AtlasApp() {
     };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, []);
+  }, [chrome.commandPalette]);
 
+  // Opens the share panel rather than copying straight to the clipboard. The
+  // old handler copied `location.href`, which does not contain the view its
+  // label promised, and swallowed every clipboard failure — a button that
+  // silently does nothing. The pose is captured at the moment the panel opens,
+  // because the camera keeps moving while the panel is up.
   const share = useCallback(() => {
-    try { void navigator.clipboard?.writeText(safeShareUrl()); } catch { /* ignore */ }
-  }, []);
+    setShareCamera(draw.captureCamera());
+    setShareOpen(true);
+  }, [draw]);
+  const closeShare = useCallback(() => setShareOpen(false), []);
 
   // A "Saved" banner must not outlive the thing it described: editing the draft
   // (or clearing it) invalidates the confirmation.
@@ -665,7 +747,7 @@ export function AtlasApp() {
     },
     [imported, frameAll],
   );
-  const { dragging } = useFileDrop((files) => void takeFiles(files));
+  const { dragging } = useFileDrop((files) => void takeFiles(files), chrome.interop);
   // Imported items have no scene, so no memory pin represents them — the
   // renderer needs to know not to filter their CZML away.
   const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
@@ -800,9 +882,13 @@ export function AtlasApp() {
 
 
   return (
-    <div className="atlas-app">
+    // `.atlas-app` reserves a 60px rail column and a 54px top-bar row in its
+    // grid template, so hiding those components without collapsing the tracks
+    // would inset an embedded globe inside an empty L-shaped band.
+    <div className={`atlas-app${chrome.embedded ? ' is-embed' : ''}`}>
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
+      {chrome.rail && (
       <Rail
         onSearch={() => setPaletteOpen(true)}
         onFrameAll={frameAll}
@@ -825,6 +911,8 @@ export function AtlasApp() {
         canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
         importedCount={imported.items.length}
       />
+      )}
+      {chrome.topBar && (
       <TopBar
         onSearch={() => setPaletteOpen(true)}
         onShare={share}
@@ -832,6 +920,8 @@ export function AtlasApp() {
         sample={isSample}
         showPlaces={showPlaces}
         onTogglePlaces={togglePlaces}
+        sceneMode={sceneMode}
+        onSceneMode={setSceneMode}
         layers={(
           <MapLayers
             open={layersOpen}
@@ -848,6 +938,7 @@ export function AtlasApp() {
           />
         )}
       />
+      )}
       <main className="atlas-stage">
         <CesiumStoryViewer
           story={story}
@@ -864,6 +955,8 @@ export function AtlasApp() {
           onInteract={pause}
           layers={layerControl.layers}
           claimedUrls={layerControl.claimedUrls}
+          sceneMode={sceneMode}
+          reduceMotion={reduceMotion}
           timeMs={currentMs || model.timeline.startMs}
           extraItemIds={importedIds}
         />
@@ -871,7 +964,9 @@ export function AtlasApp() {
           <div className="atlas-overlay">
             <StatsRibbon stats={model.stats} />
             <PlaceChip memory={currentPlace} />
-            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
+            {chrome.scrapbook && (
+              <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
+            )}
             <Legend />
           </div>
         )}
@@ -902,7 +997,7 @@ export function AtlasApp() {
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}
-            onCollect={() => focused && toggleCollect(focused)}
+            onCollect={chrome.collect ? () => { if (focused) toggleCollect(focused); } : undefined}
           />
         )
       )}
@@ -916,6 +1011,7 @@ export function AtlasApp() {
         onScrub={scrub}
         onStep={step}
       />
+      {chrome.scrapbook && (
       <ScrapbookDrawer
         open={sbOpen}
         entries={sbEntries}
@@ -935,7 +1031,11 @@ export function AtlasApp() {
         onSave={() => void saveScrapbook()}
         onDownload={downloadScrapbook}
       />
-      <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPersonJourney} />
+      )}
+      {chrome.people && (
+        <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPersonJourney} />
+      )}
+      {chrome.commandPalette && (
       <CommandPalette
         open={paletteOpen}
         memories={model.memories}
@@ -951,9 +1051,10 @@ export function AtlasApp() {
           ? { lat: focused.lat, lon: focused.lon }
           : undefined}
       />
+      )}
       <Lightbox memory={lightbox} onClose={closeLightbox} />
-      <AuthoringToolbar {...draw.toolbarProps} />
-      {scenesOpen && (
+      {chrome.drawing && <AuthoringToolbar {...draw.toolbarProps} />}
+      {chrome.sceneAuthoring && scenesOpen && (
         <aside className="atlas-scenes" aria-label="Scene authoring">
           <SceneList
             scenes={sceneControl.scenes}
@@ -987,6 +1088,7 @@ export function AtlasApp() {
           />
         </aside>
       )}
+      {chrome.interop && (
       <InteropPanel
         open={interopOpen}
         onClose={closeInterop}
@@ -999,7 +1101,18 @@ export function AtlasApp() {
         memory={memory}
         onMemoryImported={onMemoryImported}
         shareUrl={safeShareUrl}
+        // Where an upload gets pinned. The focused memory, then the place card,
+        // then nothing — and "nothing" is a state the section reports rather
+        // than papering over with 0,0, which is in the Atlantic.
+        uploadPosition={
+          focused?.lat != null && focused?.lon != null
+            ? { lat: focused.lat, lon: focused.lon }
+            : focusedPlace?.latitude != null && focusedPlace?.longitude != null
+              ? { lat: focusedPlace.latitude, lon: focusedPlace.longitude }
+              : null
+        }
       />
+      )}
       <Presenter
         story={story}
         open={presenting}
@@ -1014,7 +1127,37 @@ export function AtlasApp() {
         initialSceneId={focused?.id ?? null}
         reduceMotion={reduceMotion}
       />
-      <DropOverlay visible={dragging} />
+      {chrome.interop && <DropOverlay visible={dragging} />}
+      {chrome.share && (
+        <SharePanel
+          open={shareOpen}
+          onClose={closeShare}
+          href={window.location.href}
+          camera={shareCamera}
+          // The moment on screen, not `model.timeline.startMs` — a link that
+          // reopened at the start of the archive would not be a link to "this
+          // view" in any sense the button's label claims.
+          timeMs={currentMs || null}
+          // A memory-backed view cannot honestly be embedded: the credentials
+          // are stripped on the way out (they have to be) and the reader would
+          // get the bundled sample instead. The panel says so rather than
+          // producing a snippet that renders somebody else's demo.
+          privateSource={source === 'memory'}
+          storyTitle={story.title}
+        />
+      )}
+      {chrome.embedBar && (
+        <EmbedBar
+          title={story.title}
+          // The same data question the rail asks — kept identical on purpose,
+          // because a Present button that opens an empty deck is the failure
+          // this bar exists to avoid.
+          canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
+          onPresent={() => setPresenting(true)}
+          presenting={presenting}
+          href={window.location.href}
+        />
+      )}
     </div>
   );
 }

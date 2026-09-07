@@ -1,3 +1,4 @@
+import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import {
   BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon, SparkIcon,
   SearchIcon, ShareIcon, FlagIcon, ExchangeIcon, SlidesIcon, PlusIcon,
@@ -65,8 +66,17 @@ export function Rail({
   );
 }
 
+const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
+  { id: '3d', short: '3D', label: 'Globe — the world as a sphere' },
+  { id: 'columbus', short: '2.5D', label: 'Flat map with height — keeps 3D tilesets and raised tracks readable' },
+  { id: '2d', short: '2D', label: 'Flat map — best for routes, boundaries and places' },
+];
+
 /** Top bar — wordmark, connection state, ⌘K search, places toggle, share. */
-export function TopBar({ onSearch, onShare, live, sample, showPlaces, onTogglePlaces, layers }: {
+export function TopBar({
+  onSearch, onShare, live, sample, showPlaces, onTogglePlaces, layers,
+  sceneMode = '3d', onSceneMode,
+}: {
   onSearch: () => void;
   onShare: () => void;
   live?: boolean;
@@ -77,6 +87,10 @@ export function TopBar({ onSearch, onShare, live, sample, showPlaces, onTogglePl
   onTogglePlaces?: () => void;
   /** Map-layers control, rendered inline in the bar. */
   layers?: React.ReactNode;
+  /** Projection. Sits beside the layer control because it is the same kind of
+   *  decision — how the world is drawn, not what is on it. */
+  sceneMode?: SceneModeName;
+  onSceneMode?: (mode: SceneModeName) => void;
 }) {
   return (
     <header className="atlas-top">
@@ -106,6 +120,45 @@ export function TopBar({ onSearch, onShare, live, sample, showPlaces, onTogglePl
         </button>
       )}
       {layers}
+      {onSceneMode && (
+        // A three-way segmented control rather than a 2D/3D toggle: Columbus is
+        // a real third answer — a flat map that still has height, which is
+        // where a 3D tileset or a raised track still reads and plain 2D
+        // flattens it away. A toggle would have hidden it or dropped it.
+        <div className="atlas-scenemode" role="group" aria-label="Projection">
+          {SCENE_MODES.map(({ id, short, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={`atlas-scenemode-btn${sceneMode === id ? ' active' : ''}`}
+              data-mode={id}
+              aria-pressed={sceneMode === id}
+              title={label}
+              aria-label={label}
+              onClick={() => onSceneMode(id)}
+            >
+              {short}
+            </button>
+          ))}
+        </div>
+      )}
+      {onSceneMode && (
+        // The same capability in one button, for a bar too narrow to hold
+        // three. Which of the two is shown is a CSS decision (see atlas.css);
+        // both are always in the DOM, so nothing here depends on measuring the
+        // viewport in JavaScript. A cycle button is a weaker affordance than a
+        // segmented control — you cannot see the options — so the label says
+        // where it goes, not where it is.
+        <button
+          type="button"
+          className="atlas-scenemode-cycle"
+          title={sceneMode === '3d' ? 'Switch to the flat map' : 'Switch to the globe'}
+          aria-label={sceneMode === '3d' ? 'Switch to the flat map' : 'Switch to the globe'}
+          onClick={() => onSceneMode(sceneMode === '3d' ? '2d' : '3d')}
+        >
+          {sceneMode === '3d' ? '2D' : '3D'}
+        </button>
+      )}
       <button className="atlas-icon-btn" title="Copy link to this view" aria-label="Copy link to this view" onClick={onShare}><ShareIcon /></button>
     </header>
   );

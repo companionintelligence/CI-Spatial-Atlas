@@ -28,6 +28,25 @@ export const DRAFT_LINE_ID = 'authoring-draft-line';
 export const DRAFT_FILL_ID = 'authoring-draft-fill';
 export const DRAFT_VERTEX_PREFIX = 'authoring-draft-vertex:';
 
+/**
+ * The retained measurement.
+ *
+ * One prefix for all four entities (`authoring-measure`) so the whole reading
+ * comes off the globe in a single `removeByPrefix` — a measurement that lost its
+ * line but kept its label would look exactly like a stray annotation, which is
+ * the one thing `measure.ts` exists to prevent.
+ *
+ * It is drawn but never selectable: `parsePickedId` reports `measure` and the
+ * controller's click handler ignores it, so clicking through a measurement does
+ * not deselect the shape you were working on and cannot arm a drag on
+ * something that is not an item.
+ */
+export const MEASURE_PREFIX = 'authoring-measure';
+export const MEASURE_LINE_ID = 'authoring-measure-line';
+export const MEASURE_FILL_ID = 'authoring-measure-fill';
+export const MEASURE_LABEL_ID = 'authoring-measure-label';
+export const MEASURE_VERTEX_PREFIX = 'authoring-measure-vertex:';
+
 /** The other layers' prefixes, so selection can round-trip through one model. */
 export const MEMORY_PREFIX = 'mem:';
 export const PLACE_PREFIX = 'place:';
@@ -37,6 +56,7 @@ export type PickedTarget =
   | { kind: 'vertex'; index: number }
   | { kind: 'move' }
   | { kind: 'draft' }
+  | { kind: 'measure' }
   | { kind: 'memory'; id: string }
   | { kind: 'place'; id: string };
 
@@ -56,6 +76,12 @@ export function parsePickedId(entityId: string | null | undefined): PickedTarget
   if (entityId === MOVE_HANDLE_ID) return { kind: 'move' };
   if (entityId === DRAFT_LINE_ID || entityId === DRAFT_FILL_ID) return { kind: 'draft' };
   if (entityId.startsWith(DRAFT_VERTEX_PREFIX)) return { kind: 'draft' };
+  // Before the `authoring-vertex:` test below, and it matters:
+  // `authoring-measure-vertex:0` does NOT start with `authoring-vertex:`, but
+  // reading these two lines in the wrong order is exactly how someone later
+  // "simplifies" the vertex test into a `startsWith('authoring-')` that swallows
+  // a measurement's handles and drags them as if they were an item's.
+  if (entityId.startsWith(MEASURE_PREFIX)) return { kind: 'measure' };
 
   if (entityId.startsWith(VERTEX_PREFIX)) {
     const index = Number.parseInt(after(entityId, VERTEX_PREFIX), 10);
@@ -87,3 +113,4 @@ export const itemEntityId = (id: string): string => `${ITEM_PREFIX}${id}`;
 export const outlineEntityId = (id: string): string => `${OUTLINE_PREFIX}${id}`;
 export const vertexEntityId = (index: number): string => `${VERTEX_PREFIX}${index}`;
 export const draftVertexEntityId = (index: number): string => `${DRAFT_VERTEX_PREFIX}${index}`;
+export const measureVertexEntityId = (index: number): string => `${MEASURE_VERTEX_PREFIX}${index}`;

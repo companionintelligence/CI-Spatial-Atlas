@@ -18,6 +18,8 @@
  *   draft.ts        the drawing state machine (no deps)
  *   gesture.ts      the two input rules that decide what a click means
  *   store.ts        the item list, selection model, and merge back into a Story
+ *   history.ts      undo/redo over committed authoring actions (no deps)
+ *   measure.ts      distance/area readings that are NOT story content (no deps)
  *   style.ts        the tool's style, and how it lands on canonical fields
  *   icons.ts        the marker icon gallery
  *   camera.ts       camera pose ↔ canonical `Camera` (units live here)
@@ -43,9 +45,14 @@ export * from './geometry.js';
 export * from './gesture.js';
 export * from './draft.js';
 export * from './store.js';
+export * from './history.js';
+export * from './measure.js';
 export * from './style.js';
 export * from './icons.js';
 export * from './camera.js';
 export * from './ids.js';
 export * from './persist.js';
-export { AuthoringToolbar, formatArea, formatLength, type AuthoringToolbarProps } from './Toolbar.js';
+// `formatArea`/`formatLength` come from `./measure.js` above — the Toolbar
+// re-exports them for the call sites that already import them from there, but
+// exporting them twice from this barrel would be an ambiguous re-export.
+export { AuthoringToolbar, type AuthoringToolbarProps } from './Toolbar.js';

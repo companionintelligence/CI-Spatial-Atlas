@@ -48,11 +48,18 @@ ARG VITE_MEMORY_TOKEN=""
 # global DEM worth tiling require and only the operator can know.
 ARG VITE_TERRAIN_URL=""
 ARG VITE_TERRAIN_CREDIT=""
+# The Atlas API this bundle uploads photos and videos to. A build arg for the
+# same reason as the two above — an `environment:` entry on the running
+# container reaches a bundle that was compiled hours earlier. Empty means the
+# Import & export panel renders its upload control disabled and says why, which
+# is the honest state of an image built without one.
+ARG VITE_ATLAS_API=""
 ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN \
     VITE_MEMORY_URL=$VITE_MEMORY_URL \
     VITE_MEMORY_TOKEN=$VITE_MEMORY_TOKEN \
     VITE_TERRAIN_URL=$VITE_TERRAIN_URL \
-    VITE_TERRAIN_CREDIT=$VITE_TERRAIN_CREDIT
+    VITE_TERRAIN_CREDIT=$VITE_TERRAIN_CREDIT \
+    VITE_ATLAS_API=$VITE_ATLAS_API
 RUN npm run build -w viewer-react
 
 FROM nginx:1.27-alpine AS runtime

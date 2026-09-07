@@ -1,16 +1,28 @@
 import * as Cesium from 'cesium';
-import type { GeoPath, Item } from '@companion-atlas/story';
-import { editableVertices, itemAnchor, previewPath, type DraftState } from './draft.js';
+import type { GeoPath, GeoPoint, Item } from '@companion-atlas/story';
+import {
+  editableVertices,
+  itemAnchor,
+  previewPath,
+  RING_PREVIEW_MODES,
+  type DraftState,
+} from './draft.js';
 import { closeRing } from './geometry.js';
 import {
   DRAFT_FILL_ID,
   DRAFT_LINE_ID,
   draftVertexEntityId,
   itemEntityId,
+  MEASURE_FILL_ID,
+  MEASURE_LABEL_ID,
+  MEASURE_LINE_ID,
+  MEASURE_PREFIX,
+  measureVertexEntityId,
   MOVE_HANDLE_ID,
   outlineEntityId,
   vertexEntityId,
 } from './ids.js';
+import { describeMeasurement, type Measurement, type MeasureUnits } from './measure.js';
 import { resolveIconUrl } from './icons.js';
 import { toCartesian, toCartesians } from './pick.js';
 
@@ -35,6 +47,15 @@ const INK = Cesium.Color.fromCssColorString('#041620');
 const MINT = Cesium.Color.fromCssColorString('#58ebbf');
 const AQUA_LIGHT = Cesium.Color.fromCssColorString('#72ddd4');
 const FG = Cesium.Color.fromCssColorString('#d7e6e6');
+/** `--atlas-dusk`. Reserved here for the measure tool: it is the one warm hue in
+ *  the palette and nothing in `STYLE_SWATCHES`' defaults reaches for it, so a
+ *  measurement cannot be mistaken for a shape someone drew. */
+const DUSK = Cesium.Color.fromCssColorString('#ffb27a');
+
+/** The measure tool's colour, as the string the draft preview takes. Exported
+ *  so the controller can arm the rubber band in it without restating a hex —
+ *  the palette lives in this file and nowhere else. */
+export const MEASURE_COLOR = '#ffb27a';
 
 /** Handles must never be hidden by the terrain they sit on — an unreachable
  *  vertex handle is a shape that cannot be edited. */
@@ -311,7 +332,10 @@ export function updateDraftEntities(
     entities.line.polyline.positions = new Cesium.ConstantProperty(positions.length >= 2 ? positions : []);
   }
   if (entities.fill.polygon) {
-    const showFill = draft.mode === 'polygon' && positions.length >= 3;
+    // Measure closes into a ring for the same reason polygon does: it reports an
+    // area once there are three points, and an area for a shape the user cannot
+    // see is a number they have no way to check.
+    const showFill = RING_PREVIEW_MODES.includes(draft.mode) && positions.length >= 3;
     entities.fill.polygon.show = new Cesium.ConstantProperty(showFill);
     entities.fill.polygon.hierarchy = new Cesium.ConstantProperty(
       new Cesium.PolygonHierarchy(showFill ? positions : []),
@@ -335,6 +359,128 @@ export function updateDraftEntities(
       },
     });
   });
+}
+
+/**
+ * Draw the retained measurement, or clear it when there is none.
+ *
+ * ## It must not look like a drawn shape
+ *
+ * This is the whole visual problem. A measurement lives on the same globe, in
+ * the same data source, as the user's actual work, and if it reads as a shape
+ * they drew then the feature has made the app *less* trustworthy rather than
+ * more — someone will save the story expecting the measurement in it, or spend
+ * a minute trying to select and delete something that was never an item.
+ *
+ * So it is drawn in the app's warning-adjacent colour rather than the drawing
+ * palette's teal/mint, dashed rather than solid, without the fill weight a real
+ * area gets, and it carries a text label with the reading in it. Nothing on the
+ * globe that a user authored looks like that.
+ *
+ * ## Why it is redrawn wholesale
+ *
+ * Two entities and a handful of dots. Diffing them would be more code than
+ * rebuilding them and could leave a stale vertex behind after a shorter
+ * measurement replaced a longer one — the same reason `updateDraftEntities`
+ * rebuilds its dots.
+ */
+export function updateMeasureEntities(
+  ds: Cesium.CustomDataSource,
+  measurement: Measurement | null,
+  units: MeasureUnits,
+): void {
+  removeByPrefix(ds, MEASURE_PREFIX);
+  if (!measurement) return;
+
+  const points = measurement.points;
+  const positions = toCartesians(points, PREVIEW_LIFT_M);
+  if (positions.length < 2) return;
+
+  // A ring only when there is an area to justify one — see `measurementOf`. A
+  // closing segment drawn under a measurement that reports no area would be a
+  // line the user did not click and that no number refers to.
+  const ring = measurement.areaMeters > 0;
+  const linePositions = ring ? toCartesians(closeRing(points), PREVIEW_LIFT_M) : positions;
+
+  ds.entities.add({
+    id: MEASURE_LINE_ID,
+    polyline: {
+      positions: linePositions,
+      width: 2.5,
+      material: new Cesium.PolylineDashMaterialProperty({ color: DUSK, dashLength: 10 }),
+      clampToGround: false,
+      arcType: Cesium.ArcType.GEODESIC,
+    },
+  });
+
+  if (ring) {
+    ds.entities.add({
+      id: MEASURE_FILL_ID,
+      polygon: {
+        hierarchy: new Cesium.PolygonHierarchy(positions),
+        material: DUSK.withAlpha(0.12),
+        perPositionHeight: true,
+        outline: false,
+        arcType: Cesium.ArcType.GEODESIC,
+      },
+    });
+  }
+
+  points.forEach((p, index) => {
+    ds.entities.add({
+      id: measureVertexEntityId(index),
+      position: toCartesian(p, PREVIEW_LIFT_M),
+      point: {
+        pixelSize: 7,
+        color: DUSK,
+        outlineColor: INK,
+        outlineWidth: 2,
+        disableDepthTestDistance: ON_TOP,
+      },
+    });
+  });
+
+  // The reading, on the globe. Without it the number lives only in a panel that
+  // may be scrolled away or, on a phone, covering the thing being measured —
+  // and a measurement you have to hunt for is one you re-take instead.
+  const anchor = labelAnchor(points);
+  if (anchor) {
+    ds.entities.add({
+      id: MEASURE_LABEL_ID,
+      position: toCartesian(anchor, PREVIEW_LIFT_M),
+      label: {
+        text: describeMeasurement(measurement, units),
+        font: '600 12px Manrope, sans-serif',
+        fillColor: FG,
+        showBackground: true,
+        backgroundColor: INK.withAlpha(0.78),
+        backgroundPadding: new Cesium.Cartesian2(8, 5),
+        pixelOffset: new Cesium.Cartesian2(0, -14),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: ON_TOP,
+      },
+    });
+  }
+}
+
+/**
+ * Where the reading is written.
+ *
+ * The midpoint of the path *by vertex index*, not the centroid. For a two-point
+ * measurement — by far the common case — the centroid and the midpoint are the
+ * same, but for an L-shaped route the centroid can sit well off the line, and a
+ * number floating in empty space next to a route reads as belonging to whatever
+ * else happens to be under it.
+ */
+function labelAnchor(points: GeoPath): GeoPoint | null {
+  if (points.length === 0) return null;
+  if (points.length === 1) return points[0]!;
+  const mid = points.length / 2;
+  const lo = points[Math.floor(mid) - 1]!;
+  const hi = points[Math.floor(mid)]!;
+  return points.length % 2 === 1
+    ? points[Math.floor(mid)]!
+    : { lon: (lo.lon + hi.lon) / 2, lat: (lo.lat + hi.lat) / 2 };
 }
 
 /** Remove every entity whose id starts with `prefix`. Iterates over a COPY of

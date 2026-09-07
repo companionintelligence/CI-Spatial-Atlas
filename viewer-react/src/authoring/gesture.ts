@@ -63,3 +63,60 @@ export function typingInFormField(target: unknown): boolean {
   const tag = el.tagName.toUpperCase();
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
+
+/** The shape of a `KeyboardEvent` this module actually reads. Duck-typed for
+ *  the same reason `typingInFormField` is: the rule is worth a test, and a test
+ *  should not need a DOM to construct a keystroke. */
+export interface KeyChord {
+  key?: unknown;
+  ctrlKey?: unknown;
+  metaKey?: unknown;
+  shiftKey?: unknown;
+  altKey?: unknown;
+  /** The element the keystroke was aimed at, if there is one. */
+  target?: unknown;
+}
+
+/**
+ * Does this keystroke mean undo, redo, or neither?
+ *
+ * Pulled out of the controller because every clause below is a decision with a
+ * failure mode, and all of them are invisible until someone hits the exact
+ * combination:
+ *
+ *  - **Text fields are excluded.** The listener lives on `window` (a Cesium
+ *    canvas is not focusable, so a listener on it would never fire), which
+ *    means it sees Ctrl+Z typed into the toolbar's note field. The browser's
+ *    own undo owns a text field, and stealing it there to un-delete a polygon
+ *    somewhere else on the globe would be startling and unrecoverable — the
+ *    typing is gone and the shape is back.
+ *  - **Alt disqualifies.** On several European keyboard layouts AltGr reports
+ *    as `ctrlKey && altKey`, so `AltGr+z` (a real character on those layouts)
+ *    would otherwise read as undo.
+ *  - **Ctrl and Cmd are both accepted**, because this app runs on both and a
+ *    user should not have to know which one this particular panel wanted.
+ *  - **`Ctrl+Y` is redo, but `Cmd+Y` is not.** Ctrl+Y is the Windows
+ *    convention and costs nothing to honour; on macOS Cmd+Y is the browser's
+ *    own History window, and taking it would break something the user expects
+ *    from every other page.
+ *  - **`event.key` is lower-cased** — with Shift held, a browser reports `Z`,
+ *    so a case-sensitive comparison silently makes redo do nothing.
+ *
+ * Returning `null` (rather than a boolean per combination) is what lets the
+ * caller leave a keystroke it does not want entirely alone, `preventDefault`
+ * included.
+ */
+export function historyIntent(event: KeyChord | null | undefined): 'undo' | 'redo' | null {
+  if (!event || typeof event.key !== 'string') return null;
+  if (typingInFormField(event.target)) return null;
+  if (event.altKey === true) return null;
+
+  const ctrl = event.ctrlKey === true;
+  const meta = event.metaKey === true;
+  if (!ctrl && !meta) return null;
+
+  const key = event.key.toLowerCase();
+  if (key === 'z') return event.shiftKey === true ? 'redo' : 'undo';
+  if (key === 'y' && ctrl && !meta) return 'redo';
+  return null;
+}

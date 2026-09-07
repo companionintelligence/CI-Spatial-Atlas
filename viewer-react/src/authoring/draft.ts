@@ -25,20 +25,43 @@ import { DEFAULT_STYLE, type AuthoringStyle } from './style.js';
  * that two clicks six pixels apart were one double-click.
  */
 
-export type AuthoringMode = 'idle' | 'marker' | 'line' | 'polygon' | 'note';
+export type AuthoringMode = 'idle' | 'marker' | 'line' | 'polygon' | 'note' | 'measure';
 
 /** The modes that actually place geometry, in toolbar order. */
 export const DRAW_MODES: readonly AuthoringMode[] = ['marker', 'line', 'polygon', 'note'];
 
+/**
+ * `measure` is a mode, and it is deliberately NOT in `DRAW_MODES`.
+ *
+ * It clicks like the line tool, rubber-bands like the line tool and finishes
+ * like the line tool, so it earns a place in the same state machine — writing a
+ * second, parallel click-accumulator for it would be the same code with a
+ * different set of bugs. But `DRAW_MODES` means "modes that produce an `Item`",
+ * and measuring produces none: it answers a question and leaves nothing behind
+ * (see `measure.ts`). Every list that iterates `DRAW_MODES` — the commit path's
+ * type mapping, the style row, the export — is asking that narrower question,
+ * so measure must not be in it.
+ */
+export const isMeasureMode = (mode: AuthoringMode): boolean => mode === 'measure';
+
+/** Every tool the toolbar offers, in toolbar order — including `idle` (the
+ *  select arrow) and `measure`. Separate from `DRAW_MODES` for the reason
+ *  directly above. */
+export const TOOL_MODES: readonly AuthoringMode[] = ['idle', ...DRAW_MODES, 'measure'];
+
 /** How many vertices each mode needs before it is a legal `Item`. These are the
  *  schema's own minimums (`GeoPath.min(2)`, `.min(3)`), restated so the tool can
- *  enable "Finish" without waiting for a Zod failure to find out. */
+ *  enable "Finish" without waiting for a Zod failure to find out.
+ *
+ *  `measure`'s 2 is not a schema minimum — nothing is validated — it is simply
+ *  the least that answers "how far". */
 export const MIN_VERTICES: Record<AuthoringMode, number> = {
   idle: 0,
   marker: 1,
   note: 1,
   line: 2,
   polygon: 3,
+  measure: 2,
 };
 
 /** Modes that finish on the first click — there is nothing to rubber-band. */
@@ -171,16 +194,38 @@ export function previewRing(draft: DraftState): GeoPath {
   return path.length >= 3 ? path : [];
 }
 
-/** A snapshot for the toolbar. */
+/** Modes whose preview closes into a filled ring. `measure` is here because
+ *  once it reports an area, the shape on screen has to be the shape that area
+ *  belongs to — a number for a ring the user cannot see is unverifiable. */
+export const RING_PREVIEW_MODES: readonly AuthoringMode[] = ['polygon', 'measure'];
+
+/**
+ * A snapshot for the toolbar.
+ *
+ * `lengthMeters` means a different thing per mode, and it has to:
+ *
+ *  - `polygon` reports the **closed perimeter**, because that is the boundary
+ *    of the thing being drawn and the closing segment is part of it.
+ *  - `measure` reports the **open path as clicked**, because "how far from here
+ *    to there" is a walk, not a lap, and silently adding a leg back to the
+ *    start would overstate every route measurement.
+ *
+ * `areaMeters` is 0 for a ring that crosses itself. The spherical-excess sum
+ * will happily return a number for a bow-tie — the lobes cancel — and that
+ * number looks entirely plausible in a readout. Reporting nothing, with the
+ * warning that is already on screen, beats reporting a confident wrong answer.
+ */
 export function snapshot(draft: DraftState): DraftSnapshot {
   const v = draft.vertices;
+  const closed = draft.mode === 'polygon';
+  const ringMode = RING_PREVIEW_MODES.includes(draft.mode);
   return {
     mode: draft.mode,
     vertexCount: v.length,
     canFinish: canFinish(draft),
     warning: draft.warning,
-    lengthMeters: draft.mode === 'polygon' ? pathLengthMeters([...v, ...(v[0] ? [v[0]] : [])]) : pathLengthMeters(v),
-    areaMeters: draft.mode === 'polygon' && v.length >= 3 ? ringAreaMeters(v) : 0,
+    lengthMeters: closed ? pathLengthMeters([...v, ...(v[0] ? [v[0]] : [])]) : pathLengthMeters(v),
+    areaMeters: ringMode && v.length >= 3 && !ringSelfIntersects(v) ? ringAreaMeters(v) : 0,
   };
 }
 
@@ -196,6 +241,13 @@ export function snapshot(draft: DraftState): DraftSnapshot {
 export function warningFor(mode: AuthoringMode, vertices: GeoPath): string | null {
   if (mode === 'polygon' && vertices.length >= 4 && ringSelfIntersects(vertices)) {
     return 'This outline crosses itself — the fill will not render.';
+  }
+  // Different consequence, so a different sentence. Nothing renders wrong when a
+  // measured ring crosses itself; there is simply no area to report, and saying
+  // "the fill will not render" would point at a fill the measure tool does not
+  // have.
+  if (mode === 'measure' && vertices.length >= 4 && ringSelfIntersects(vertices)) {
+    return 'This outline crosses itself — there is no area to report.';
   }
   if (mode === 'line' && vertices.length >= 4 && pathSelfIntersects(vertices)) {
     // Legal, and often intentional (a loop walk). Said once, not refused.
@@ -229,7 +281,11 @@ export interface FinishOptions {
 
 export type DraftResult =
   | { ok: true; item: Item }
-  | { ok: false; reason: 'idle' | 'too-few-vertices' | 'self-intersecting' | 'no-text'; message: string };
+  | {
+      ok: false;
+      reason: 'idle' | 'too-few-vertices' | 'self-intersecting' | 'no-text' | 'measure';
+      message: string;
+    };
 
 /**
  * Commit the draft to a canonical `Item`.
@@ -247,6 +303,25 @@ export function finishDraft(draft: DraftState, opts: FinishOptions): DraftResult
   const mode = draft.mode;
   if (!isDrawingMode(mode)) {
     return { ok: false, reason: 'idle', message: 'No drawing tool is active.' };
+  }
+
+  /*
+   * The hard stop between measuring and authoring.
+   *
+   * `isDrawingMode` is true for `measure` — it clicks and rubber-bands like the
+   * line tool — so without this the switch below would fall through to its
+   * `default` and refuse with `reason: 'idle'`, a message that is not true and
+   * that nobody would look at twice. Worse, a later hand adding a `measure` case
+   * to that switch "for completeness" would quietly start writing measurements
+   * into the story. So the refusal is stated here, at the top, with the reason
+   * in it: a measurement is a question, and questions are not story content.
+   */
+  if (mode === 'measure') {
+    return {
+      ok: false,
+      reason: 'measure',
+      message: 'A measurement is a reading, not story content — it is never saved as an item.',
+    };
   }
 
   // Dedupe first: the committed geometry, not the click log, is what has to be
