@@ -481,20 +481,46 @@ export function AtlasApp() {
     layerControl.mergeStoryLayers(loadedStory?.layers);
   }, [loadedStory, layerControl.mergeStoryLayers]);
 
+  // Drawing. The controller owns rendering for what it draws (its own
+  // CustomDataSource), which is why `draw.items` are merged into the story for
+  // *export* only — feeding them through the story's CZML as well would draw
+  // every shape twice, z-fighting two coincident surfaces and giving each two
+  // pick targets.
+  const draw = useAuthoring(viewer, {
+    story: loadedStory,
+    enabled: drawing,
+    // Drawn shapes now survive a reload. Same bucket rule as the layer stack —
+    // per connected memory, so two accounts on one browser never inherit each
+    // other's annotations.
+    scope: memory?.url ?? null,
+    onSelect: (sel) => {
+      if (sel?.kind === 'memory') setFocusedId(sel.id);
+      else if (sel?.kind === 'place') setFocusedPlace(places.find((p) => p.id === sel.id) ?? null);
+    },
+  });
+
   const draftStory = useCallback(
     (curated: boolean): Story | null => {
       if (sbEntries.length === 0) return null;
       const entries = sbEntries.map(toEntry);
       const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
-      // Fold the layer stack into everything that leaves the app. Without it a
-      // user who added four layers saves and downloads a story with none of
-      // them — and every layer's attribution goes too, which is a licence
-      // condition rather than a nicety.
+      const base = curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
+      // Everything that leaves the app carries everything on the globe.
+      //
+      // Layers, because a user who added four of them would otherwise save a
+      // story with none — and each layer's attribution goes with it, which is a
+      // licence condition rather than a nicety.
+      //
+      // Drawn shapes, because localStorage is a convenience, not custody: it is
+      // per-browser, cleared by a privacy setting, and invisible to anyone the
+      // story is shared with. If saving a journey silently dropped the
+      // annotations the user drew on it, "Save to Memory" would be quietly
+      // lossy in the one direction that is meant to be durable.
       return layerControl.toStory(
-        curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts),
+        draw.items.length ? mergeAuthoredItems(base, draw.items) : base,
       );
     },
-    [sbEntries, sb.draft.visibility, sb.draft.title, layerControl.toStory],
+    [sbEntries, sb.draft.visibility, sb.draft.title, layerControl.toStory, draw.items],
   );
 
   const curate = useCallback(() => {
@@ -600,23 +626,6 @@ export function AtlasApp() {
   // renderer needs to know not to filter their CZML away.
   const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
 
-  // Drawing. The controller owns rendering for what it draws (its own
-  // CustomDataSource), which is why `draw.items` are merged into the story for
-  // *export* only — feeding them through the story's CZML as well would draw
-  // every shape twice, z-fighting two coincident surfaces and giving each two
-  // pick targets.
-  const draw = useAuthoring(viewer, {
-    story: loadedStory,
-    enabled: drawing,
-    // Drawn shapes now survive a reload. Same bucket rule as the layer stack —
-    // per connected memory, so two accounts on one browser never inherit each
-    // other's annotations.
-    scope: memory?.url ?? null,
-    onSelect: (sel) => {
-      if (sel?.kind === 'memory') setFocusedId(sel.id);
-      else if (sel?.kind === 'place') setFocusedPlace(places.find((p) => p.id === sel.id) ?? null);
-    },
-  });
 
   /** What leaves the app: everything on the globe — drawn shapes and layers. */
   const exportStory = useMemo(
