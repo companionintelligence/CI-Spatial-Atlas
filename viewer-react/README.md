@@ -11,7 +11,10 @@
 > checkout, outside this repository, so `npm run build` and this app's Docker
 > image cannot complete in a single-repo checkout. Vitest suites and
 > `tsc --noEmit` don't touch that import and run fine — only `vite build` is
-> blocked, and only by the CSS `@import`. See `docs/architecture.md` §8.
+> blocked, and only by the CSS `@import`. `npm install` is fine too: the
+> dependency is a `link:`, so npm creates the symlink from the lockfile (which
+> carries the linked package's manifest) and never dereferences it. See
+> `docs/architecture.md` §8.
 
 ## Architecture
 
@@ -32,8 +35,10 @@
 - `src/story/useStory.ts` — fetch `?story=<url>` → `loadStory` (accepts legacy
   Atlas *and* Earth-2 documents).
 - `src/renderers/CesiumStoryViewer.tsx` — Resium `<Viewer>` + `<CzmlDataSource>`
-  from `storyToCzml`, plus `<Cesium3DTileset>` per returned tileset. **Intended**
-  to give real 4D scrubbing via the CZML clock once built.
+  from `storyToCzml`, plus `<Cesium3DTileset>` per returned tileset. The CZML
+  document packet drives the Cesium `Clock`, which `src/ui/TimeMachine.tsx`
+  scrubs and `AtlasApp` mirrors into React state — 4D scrubbing is live, not
+  intended.
 - `src/renderers/XRStoryScene.tsx` — R3F `<Canvas><XR>` globe rendering
   `storyEntities(story)` as pins; ports CI-Earth-2's working WebXR path.
 - `src/renderers/rendererForDevice.ts` — `immersive-vr` support check → renderer.
@@ -43,8 +48,12 @@
 
 From [`../docs/CONSOLIDATION.md`](../docs/CONSOLIDATION.md):
 
-1. Drive the Cesium `Viewer` clock from the CZML doc packet — real timeline
-   scrubbing across scenes (`Story.timeline` → `storyToCzml`).
+1. ~~Drive the Cesium `Viewer` clock from the CZML doc packet~~ — **done.**
+   `AtlasApp` applies the story's clock explicitly (`automaticallyTrackDataSourceClocks`
+   is off, because the memory layer used to steal `clockTrackedDataSource` and leave
+   the viewer a story behind) and the Time Machine reads/writes it. Left here struck
+   through rather than deleted: this item outlived its truth by long enough that
+   `docs/INTEGRATION.md` was still listing it as remaining work.
 2. Re-establish visual regression against Resium. The old pixel-diff baselines
    covered the removed vanilla renderer's deterministic `?static=1` path;
    Cesium needs its own deterministic setup (offline imagery, ion disabled,

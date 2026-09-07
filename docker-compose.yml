@@ -26,6 +26,21 @@ services:
         VITE_CESIUM_ION_TOKEN: ${VITE_CESIUM_ION_TOKEN:-}
         VITE_MEMORY_URL: ${VITE_MEMORY_URL:-}
         VITE_MEMORY_TOKEN: ${VITE_MEMORY_TOKEN:-}
+        # Terrain heights without an account. Cesium reads exactly one terrain
+        # wire format (quantized-mesh-1.0) and nobody publishes a free global
+        # service in it, so the keyless route is necessarily "point at a
+        # tileset you built and host yourself" — which only works if the URL
+        # can reach a build. Vite inlines VITE_* at BUILD time, so for a
+        # container this has to be a build arg: setting it in `environment:`
+        # on the runtime service would change nothing, the bundle is already
+        # compiled. `VITE_TERRAIN_CREDIT` is not defaulted on purpose — every
+        # free global DEM worth tiling (Copernicus certainly) requires its own
+        # attribution, and only the operator knows which DEM they tiled.
+        # See viewer-react/src/renderers/terrain.ts for what the tileset must
+        # satisfy, including the EGM2008→ellipsoid conversion coastal pins
+        # depend on.
+        VITE_TERRAIN_URL: ${VITE_TERRAIN_URL:-}
+        VITE_TERRAIN_CREDIT: ${VITE_TERRAIN_CREDIT:-}
     ports:
       # Container-side must be 8080: the viewer image serves the static bundle
       # with nginx `listen 8080` (see viewer-react/Dockerfile), matching the

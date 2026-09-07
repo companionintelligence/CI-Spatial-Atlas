@@ -29,7 +29,7 @@ import type { DeckSlide } from './ui/sceneDeck.js';
 import { InteropPanel, DropOverlay } from './interop/InteropPanel.js';
 import { useImported, withImported } from './interop/useImported.js';
 import { applyMemoryPlaces, type MemoryImport } from './memory/import.js';
-import type { GeoPlace } from './memory/geocode.js';
+import { isFramableBounds, type GeoPlace } from './memory/geocode.js';
 import { useFileDrop } from './interop/useFileDrop.js';
 import { useAuthoring } from './authoring/useAuthoring.js';
 import { AuthoringToolbar, mergeAuthoredItems } from './authoring/index.js';
@@ -312,9 +312,15 @@ export function AtlasApp() {
   const flyToGeoPlace = useCallback((gp: GeoPlace) => {
     if (!viewer || viewer.isDestroyed()) return;
     const b = gp.bounds;
-    const framed = b && b.east > b.west && b.north > b.south;
+    // `isFramableBounds` rather than a truthiness check: a box being *present*
+    // says nothing about it being worth flying to. Nominatim attaches a
+    // boundingbox to every row including house numbers, so a street address
+    // arrives with a ~10m rectangle and framing it puts the camera inside the
+    // roof — the exact case this fallback exists for. The predicate lives with
+    // the parsers that produce the boxes, and covers degenerate and
+    // antimeridian-crossing ones too.
     void viewer.camera.flyTo({
-      destination: framed
+      destination: b && isFramableBounds(b)
         ? Cesium.Rectangle.fromDegrees(b.west, b.south, b.east, b.north)
         : Cesium.Cartesian3.fromDegrees(gp.lon, gp.lat, 1_800_000),
       duration: reduceMotion ? 0 : 1.6,
@@ -472,14 +478,28 @@ export function AtlasApp() {
   // hides itself as the clock leaves its range.
   const layerControl = useLayers(memory?.url ?? null, { timeMs: currentMs || null });
 
+  // The document actually on screen — not just `loadedStory`, which is only the
+  // `?story=` and bundled-demo path. On a Companion Memory session the story on
+  // screen is `memoryToStory` output or an imported archive, so gating the merge
+  // on `loadedStory` is why the layers `draftStory` correctly writes were
+  // write-only: saved, and never read back.
+  const openStory = journey ?? memImport?.story ?? loadedStory;
+
   // A story that arrives carrying layers must put them in the stack, or it
   // renders none of them and says nothing — a layer nobody draws logs nothing.
-  // `mergeStoryLayers` appends and deduplicates on (format, url), so the user's
-  // own stack survives and re-opening a story raises its layers rather than
-  // stacking a second identical copy.
+  // The story id travels with them: those rows belong to the document, so they
+  // stay out of the user's own account-scoped stack, and one the user removes
+  // stays removed instead of being re-adopted on the next render.
   useEffect(() => {
-    layerControl.mergeStoryLayers(loadedStory?.layers);
-  }, [loadedStory, layerControl.mergeStoryLayers]);
+    layerControl.mergeStoryLayers(openStory?.layers, openStory?.id);
+  }, [openStory, layerControl.mergeStoryLayers]);
+
+  // Layers from a dropped `.story.json`. No story id on purpose: the user
+  // brought the file deliberately, so these are theirs — persisted with the rest
+  // of their stack rather than borrowed from whatever document happens to be open.
+  useEffect(() => {
+    layerControl.mergeStoryLayers(imported.layers);
+  }, [imported.layers, layerControl.mergeStoryLayers]);
 
   // Drawing. The controller owns rendering for what it draws (its own
   // CustomDataSource), which is why `draw.items` are merged into the story for
@@ -598,6 +618,12 @@ export function AtlasApp() {
   const closePeople = useCallback(() => setPeopleOpen(false), []);
   const closeInterop = useCallback(() => setInteropOpen(false), []);
 
+  // The way back out of an empty or unwanted import, without a page reload.
+  const clearImport = useCallback(() => {
+    setMemImport(null);
+    introDone.current = false;
+  }, []);
+
   const onMemoryImported = useCallback((r: MemoryImport) => {
     setMemImport(r);
     // The intro flight ("frame the first memory, set the clock to its moment")
@@ -685,7 +711,18 @@ export function AtlasApp() {
   // A memory query that matches nothing returns a perfectly valid *empty* story,
   // so the error branch never fires — without this the user just gets a blank
   // globe and no idea whether it's broken, empty, or filtered.
-  if (source === 'memory' && model.memories.length === 0) {
+  // `!memImport` is load-bearing. This guard is a full-screen early return, and
+  // everything — Rail, InteropPanel, the running transfer state — is mounted
+  // below it. An import whose filter legitimately matched nothing (a wrong year,
+  // a box over open sea) sets `memImport` to an empty story, drives
+  // `model.memories.length` to 0, and `source` is 'memory' for the whole
+  // session regardless. So the guard fired and ejected the user out of the app
+  // and away from the panel they were operating, with no control on the card and
+  // no way back but a page reload — which discarded the filter and the import.
+  // Following the panel's own "narrow it first" advice was the fastest way to
+  // hit it. An empty *import* is now an in-app state (the chip below); this card
+  // is only for an empty initial connection, which is what it was written for.
+  if (source === 'memory' && !memImport && model.memories.length === 0) {
     return (
       <div className="atlas-boot">
         <div className="msg">
@@ -762,6 +799,7 @@ export function AtlasApp() {
           onHover={setHoveredId}
           onInteract={pause}
           layers={layerControl.layers}
+          claimedUrls={layerControl.claimedUrls}
           timeMs={currentMs || model.timeline.startMs}
           extraItemIds={importedIds}
         />
@@ -777,6 +815,12 @@ export function AtlasApp() {
           <div className="atlas-journey-chip" role="status">
             <span>Playing journey · <b>{journey.title}</b></span>
             <button onClick={exitJourney}>Back to all memories</button>
+          </div>
+        )}
+        {!journey && memImport && model.memories.length === 0 && (
+          <div className="atlas-journey-chip" role="status">
+            <span>That import matched nothing with coordinates. Widen the range or the area.</span>
+            <button onClick={clearImport}>Clear import</button>
           </div>
         )}
       </main>

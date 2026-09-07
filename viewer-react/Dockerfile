@@ -35,9 +35,19 @@ RUN npm run build -w packages/story-schema
 ARG VITE_CESIUM_ION_TOKEN=""
 ARG VITE_MEMORY_URL=""
 ARG VITE_MEMORY_TOKEN=""
+# Self-hosted quantized-mesh terrain: the only terrain route that needs no
+# account, and the reason renderers/terrain.ts exists. These have to be ARGs,
+# not runtime ENVs — Vite inlines VITE_* at build time, so an env var on the
+# running container reaches a bundle that was already compiled. The credit
+# carries the DEM's own attribution, which Copernicus and every other free
+# global DEM worth tiling require and only the operator can know.
+ARG VITE_TERRAIN_URL=""
+ARG VITE_TERRAIN_CREDIT=""
 ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN \
     VITE_MEMORY_URL=$VITE_MEMORY_URL \
-    VITE_MEMORY_TOKEN=$VITE_MEMORY_TOKEN
+    VITE_MEMORY_TOKEN=$VITE_MEMORY_TOKEN \
+    VITE_TERRAIN_URL=$VITE_TERRAIN_URL \
+    VITE_TERRAIN_CREDIT=$VITE_TERRAIN_CREDIT
 RUN npm run build -w viewer-react
 
 FROM nginx:1.27-alpine AS runtime

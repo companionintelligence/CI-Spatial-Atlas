@@ -371,6 +371,64 @@ describe('usage policy', () => {
   });
 });
 
+describe('a box worth flying to', () => {
+  it('rejects the ~10 m box Nominatim attaches to a house number', async () => {
+    // The reason this predicate exists, taken from a real jsonv2 row: Nominatim
+    // returns a `boundingbox` for *every* result, addresses included, so a
+    // caller that frames `bounds` whenever it is present puts the camera at
+    // roof height — or under the terrain — on exactly the search that the
+    // "cities get framed, points get an altitude" rule was written for.
+    stubGeocoder([
+      {
+        place_id: 2,
+        osm_type: 'node',
+        osm_id: 1,
+        lat: '52.5170365',
+        lon: '13.3888599',
+        name: '10',
+        display_name: '10, Unter den Linden, Berlin, Germany',
+        category: 'place',
+        type: 'house',
+        boundingbox: ['52.5169865', '52.5170865', '13.3888099', '13.3889099'],
+      },
+    ]);
+    const { geocode, isFramableBounds } = await load();
+
+    const [house] = await geocode('unter den linden 10', { provider: 'nominatim' });
+
+    // The box is still carried through — it is what the provider said.
+    expect(house!.bounds).toBeDefined();
+    // It is simply not something to point a camera at.
+    expect(isFramableBounds(house!.bounds)).toBe(false);
+  });
+
+  it('accepts a city, and a street that is wide in only one direction', async () => {
+    const { isFramableBounds, MIN_FRAME_SPAN_DEG } = await load();
+
+    expect(isFramableBounds({ west: 13.088, south: 52.338, east: 13.761, north: 52.675 })).toBe(true);
+    // Cesium frames a rectangle by its larger dimension, so a long thin road
+    // still gives a sane altitude; requiring both spans would send every street
+    // back to the 1,800 km fallback.
+    expect(
+      isFramableBounds({ west: 13.0, south: 52.5, east: 13.0 + MIN_FRAME_SPAN_DEG * 4, north: 52.5001 }),
+    ).toBe(true);
+  });
+
+  it('rejects a missing, degenerate, inverted or malformed box', async () => {
+    const { isFramableBounds } = await load();
+
+    expect(isFramableBounds(undefined)).toBe(false);
+    expect(isFramableBounds({ west: 13, south: 52, east: 13, north: 52 })).toBe(false);
+    // east < west from a geocoder means a box crossing the antimeridian, and
+    // Cesium reads that rectangle the long way round — framing most of the
+    // planet instead of the place.
+    expect(isFramableBounds({ west: 179.9, south: -17, east: -179.9, north: -16 })).toBe(false);
+    // `!(span > 0)` rather than `span <= 0`, so a NaN out of a malformed
+    // response is rejected instead of quietly passing a comparison.
+    expect(isFramableBounds({ west: Number.NaN, south: 52, east: 14, north: 53 })).toBe(false);
+  });
+});
+
 describe('createPlaceSearch — one request per typing pause', () => {
   it('collapses a burst of keystrokes into a single request', async () => {
     vi.useFakeTimers();

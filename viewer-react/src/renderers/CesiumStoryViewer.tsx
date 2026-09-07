@@ -180,7 +180,7 @@ export function CesiumStoryViewer({
   story, memories, places = [], focusedId, basemap = DEFAULT_BASEMAP, sunLighting = false,
   buildings = false,
   onViewer, onPick, onPickPlace, onHover, onInteract,
-  layers = [], timeMs = null, extraItemIds = EMPTY_IDS,
+  layers = [], claimedUrls, timeMs = null, extraItemIds = EMPTY_IDS,
 }: {
   story: Story;
   memories: AtlasMemory[];
@@ -201,6 +201,17 @@ export function CesiumStoryViewer({
    *  below nothing — the story's own entities live in a CZML data source, which
    *  Cesium renders separately from the imagery stack. */
   layers?: readonly AtlasLayer[];
+  /**
+   * Source URLs the layer stack speaks for: the ones it is drawing, plus the
+   * story-supplied ones the user removed.
+   *
+   * Deriving this from `layers` alone made removing a story's 3D tileset
+   * impossible. The removal un-claimed the URL in the same commit that tore the
+   * stack's own tileset down, so this path remounted it — a flicker, and then
+   * the tileset was back on the globe with no panel row, no visibility toggle
+   * and no opacity control. A removal has to claim the URL too.
+   */
+  claimedUrls?: ReadonlySet<string>;
   /** Clock position, so time-windowed layers hide themselves outside their
    *  availability and `{Time}`-dimensioned sources (GIBS) follow the scrub. */
   timeMs?: number | null;
@@ -223,10 +234,14 @@ export function CesiumStoryViewer({
   // The stack wins, because it is the one the user can operate; matching on URL
   // rather than id, since the layer model regenerates ids on the way in.
   const ownTilesets = useMemo(() => {
-    if (!layers.length) return tilesets;
-    const claimed = new Set(layers.map((l) => l.url));
+    // `claimedUrls` also holds the URLs of story layers the user removed, so a
+    // removal keeps this path stood down instead of un-claiming the tileset and
+    // letting it reappear uncontrollably. The fallback keeps this component
+    // usable without a layer stack at all.
+    const claimed = claimedUrls ?? new Set(layers.map((l) => l.url));
+    if (!claimed.size) return tilesets;
     return tilesets.filter((t) => !claimed.has(t.url));
-  }, [tilesets, layers]);
+  }, [tilesets, layers, claimedUrls]);
 
   // See globeCzml.ts for why this filter is narrower than it looks.
   const passthroughIds = useMemo(() => new Set(extraItemIds), [extraItemIds]);

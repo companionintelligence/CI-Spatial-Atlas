@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   appendLayer,
+  claimedSourceUrls,
+  isStoryLayer,
+  isUserLayer,
   layersOutsideWindow,
   lowerLayer,
   moveLayerToIndex,
@@ -17,7 +20,7 @@ import {
 import { layerFromCatalog, type CatalogEntry } from './catalog.js';
 import { readLayers, writeLayers, type LayerStorage } from './store.js';
 import { draftLayer, probeLayerFormat, sniffLayerFormat, type LayerDraftResult } from './sniff.js';
-import { fromStoryLayers, toStoryLayers, withStoryLayers } from './story.js';
+import { adoptStoryLayers, toStoryLayers, withStoryLayers } from './story.js';
 import type { Layer, Story } from '@companion-atlas/story';
 
 /**
@@ -51,8 +54,31 @@ export interface LayerControl {
   timeMs: number | null;
   addByUrl: (url: string, opts?: AddLayerOptions) => Promise<LayerDraftResult>;
   addFromCatalog: (entry: CatalogEntry) => AtlasLayer;
-  /** Add layers a Story brought with it, without dropping the user's own. */
-  mergeStoryLayers: (layers: readonly Layer[] | undefined) => void;
+  /**
+   * Add layers a Story brought with it, without dropping the user's own.
+   *
+   * @param storyId Provenance. Pass the id of the document the layers came from
+   *   when they belong to it (a `?story=` load, a story reconstructed from
+   *   Companion Memory) — those rows are the story's, are not persisted into the
+   *   user's own stack, and stay removed once removed. Omit it for layers the
+   *   user brought deliberately, such as a dropped `.story.json`: those are
+   *   theirs to keep.
+   */
+  mergeStoryLayers: (layers: readonly Layer[] | undefined, storyId?: string) => void;
+  /**
+   * Every source URL the stack speaks for: the ones it is drawing, plus the
+   * story-supplied ones the user has removed.
+   *
+   * The Cesium renderer needs this and cannot derive it. `storyToCzml` mounts a
+   * story's `3d-tiles`/`gaussian-splat` layers itself, and the layer scene mounts
+   * the same ones from the stack, so one of the two has to stand down or every
+   * such tileset is mounted twice — two coincident surfaces z-fighting, two sets
+   * of tile requests. Keying that hand-off on the live stack alone made removal
+   * impossible: the moment the row went away the URL was un-claimed, the CZML
+   * path remounted the tileset, and it was back on the globe with no panel row,
+   * no toggle and no opacity control. A removal is a claim too.
+   */
+  claimedUrls: ReadonlySet<string>;
   /**
    * The stack in canonical schema shape — the outbound half of the story
    * bridge. Hand this to anything that writes a `Story.layers` itself; prefer
@@ -105,23 +131,81 @@ export function useLayers(scope: string | null, opts: UseLayersOptions = {}): La
   const storageRef = useRef(storage);
   storageRef.current = storage;
 
+  // The live stack, for the handlers that need to look at it without becoming a
+  // new function every time it changes.
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
+
+  /**
+   * Story-supplied source URLs the user has removed.
+   *
+   * A removal has to be remembered rather than inferred, because the two things
+   * that would otherwise undo it both run again after it: the inbound merge
+   * re-reads `story.layers` whenever the open document's reference changes and
+   * would re-adopt the row, and the renderer re-derives its "the stack owns this
+   * tileset" set from the live stack and would remount what nobody is drawing
+   * any more. Keyed by URL because that is the key both of those speak — the
+   * renderer matches tilesets on URL since the layer model regenerates ids, and
+   * `adoptStoryLayer` dedupes on it.
+   *
+   * A ref as well as state: the merge callback must keep a stable identity (it
+   * is an effect dependency in the app), so it cannot close over the state.
+   *
+   * Deliberately session-scoped, not persisted. The stored stack holds only the
+   * user's own layers, so a reload re-opens the story and re-adopts what it
+   * carries — which is the honest answer to "this document says it has this
+   * layer", and leaves a removal as a statement about this session's globe
+   * rather than a permanent grudge against a URL.
+   */
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const dismissedRef = useRef(dismissed);
+  dismissedRef.current = dismissed;
+
+  const dismiss = useCallback((urls: readonly string[]) => {
+    if (!urls.length) return;
+    setDismissed((prev) => {
+      if (urls.every((u) => prev.has(u))) return prev;
+      return new Set([...prev, ...urls]);
+    });
+  }, []);
+
+  /** Adding a URL back by hand is the user overruling their own removal. */
+  const revive = useCallback((url: string) => {
+    setDismissed((prev) => (prev.has(url) ? new Set([...prev].filter((u) => u !== url)) : prev));
+  }, []);
+
   // The account id arrives after the auth round trip, so (re)hydrate when the
   // scope resolves — the same reason `useScrapbook` re-reads on its scope.
   useEffect(() => {
     // `undefined` means "use localStorage"; an explicit `null` means "do not
     // persist at all", which is how a test opts out.
-    setLayers(readLayers(scope, storageRef.current));
+    const stored = readLayers(scope, storageRef.current);
+    setLayers((prev) => {
+      // Layers adopted from the open story are not in *any* bucket (see the
+      // write effect), so a wholesale replace at sign-in would wipe them off the
+      // globe and nothing would put them back: the inbound merge only re-runs
+      // when the document changes, and signing in does not change the document.
+      const adopted = prev.filter(isStoryLayer);
+      return adopted.length ? adopted.reduce((acc, l) => appendLayer(acc, l), stored) : stored;
+    });
   }, [scope]);
 
   useEffect(() => {
-    writeLayers(scope, layers, storageRef.current);
+    // Only the user's own layers are persisted. The stack is account-scoped —
+    // "the sources I keep going back to" — and a story's layers are the story's:
+    // writing them here grafted every visited document's sources onto the user's
+    // stack for ever, and `toStory` then folded them into saves of entirely
+    // different stories. They cost nothing to lose, because opening the document
+    // adopts them again.
+    writeLayers(scope, layers.filter(isUserLayer), storageRef.current);
   }, [layers, scope]);
 
   const addFromCatalog = useCallback((entry: CatalogEntry) => {
     const layer = layerFromCatalog(entry);
+    revive(layer.url);
     setLayers((ls) => appendLayer(ls, layer));
     return layer;
-  }, []);
+  }, [revive]);
 
   /**
    * Add a layer the user typed a URL for.
@@ -143,21 +227,35 @@ export function useLayers(scope: string | null, opts: UseLayersOptions = {}): La
       }
     }
     const result = draftLayer({ url, ...(o.name ? { name: o.name } : {}), ...(format ? { format } : {}) });
-    if (result.ok) setLayers((ls) => appendLayer(ls, result.layer));
+    if (result.ok) {
+      revive(result.layer.url);
+      setLayers((ls) => appendLayer(ls, result.layer));
+    }
     return result;
-  }, [fetchImpl]);
+  }, [fetchImpl, revive]);
 
-  const mergeStoryLayers = useCallback((storyLayers: readonly Layer[] | undefined) => {
-    const incoming = fromStoryLayers(storyLayers);
-    if (!incoming.length) return;
-    // Append rather than replace: the user's own stack is theirs, and a story
-    // opening should add its layers on top, not delete what they collected.
-    // `appendLayer` deduplicates on (format, url), so re-opening the same story
-    // raises its layers instead of stacking a second identical copy.
-    setLayers((ls) => incoming.reduce((acc, l) => appendLayer(acc, l), ls));
+  // The rule itself lives in `story.ts`, pure and tested; this only supplies the
+  // session state it needs. `dismissedRef`, not `dismissed`, because this
+  // callback is an effect dependency in the app — a new identity per removal
+  // would re-run the merge and immediately re-adopt what was just removed.
+  const mergeStoryLayers = useCallback((storyLayers: readonly Layer[] | undefined, storyId?: string) => {
+    setLayers((ls) => adoptStoryLayers(ls, storyLayers, {
+      ...(storyId ? { storyId } : {}),
+      dismissed: dismissedRef.current,
+    }));
   }, []);
 
-  const remove = useCallback((id: string) => setLayers((ls) => removeFromStack(ls, id)), []);
+  const remove = useCallback((id: string) => {
+    // Read the outgoing row through the ref rather than inside the `setLayers`
+    // updater: an updater has to stay pure (React invokes it twice under
+    // StrictMode) and this one has a side effect to record.
+    const going = layersRef.current.find((l) => l.id === id);
+    // Only a story's layers need a tombstone: nothing re-adds a layer the user
+    // typed in, and remembering it would suppress that URL if a story later
+    // offered it — punishing the user for a removal they made in another context.
+    if (going && isStoryLayer(going)) dismiss([going.url]);
+    setLayers((ls) => removeFromStack(ls, id));
+  }, [dismiss]);
   const toggle = useCallback((id: string) => setLayers((ls) => toggleInStack(ls, id)), []);
   const setVisible = useCallback((id: string, v: boolean) => setLayers((ls) => setLayerVisible(ls, id, v)), []);
   const setOpacity = useCallback((id: string, o: number) => setLayers((ls) => setOpacityInStack(ls, id, o)), []);
@@ -165,9 +263,17 @@ export function useLayers(scope: string | null, opts: UseLayersOptions = {}): La
   const raise = useCallback((id: string) => setLayers((ls) => raiseLayer(ls, id)), []);
   const lower = useCallback((id: string) => setLayers((ls) => lowerLayer(ls, id)), []);
   const moveTo = useCallback((id: string, i: number) => setLayers((ls) => moveLayerToIndex(ls, id, i)), []);
-  const clear = useCallback(() => setLayers([]), []);
+  const clear = useCallback(() => {
+    // "Remove all" is a removal of each row, so every story-supplied one earns
+    // its tombstone — otherwise the next merge (or the next render that hands
+    // the renderer a new story object) puts the document's layers straight back
+    // and the button looks like it half-worked.
+    dismiss(layersRef.current.filter(isStoryLayer).map((l) => l.url));
+    setLayers([]);
+  }, [dismiss]);
 
   const stack = useMemo(() => stackTopFirst(layers), [layers]);
+  const claimedUrls = useMemo(() => claimedSourceUrls(layers, dismissed), [layers, dismissed]);
   // Memoised on `layers` alone, so `toStory` only produces a new story object
   // when the stack actually changed — the Cesium viewer rebuilds its CZML data
   // source on a new story reference, and doing that per render would be visible.
@@ -180,7 +286,7 @@ export function useLayers(scope: string | null, opts: UseLayersOptions = {}): La
 
   return {
     layers, stack, count: layers.length, outsideWindow, timeMs,
-    addByUrl, addFromCatalog, mergeStoryLayers, storyLayers, toStory,
+    addByUrl, addFromCatalog, mergeStoryLayers, claimedUrls, storyLayers, toStory,
     remove, toggle, setVisible, setOpacity, rename, raise, lower, moveTo, clear,
     busy,
   };

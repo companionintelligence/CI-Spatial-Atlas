@@ -42,14 +42,22 @@ a naive light inversion). All chrome uses CI-Common tokens; boldness is spent in
 |---|---|---|
 | `--background` | `#041620` | space ground |
 | `--card` / glass | `#0a222e` / `rgba(9,32,43,.66)` + blur | panels (the CI `--xr-glass-*` surface) |
-| `--primary` (teal) | `#abd4d8` | brand, active states, pins |
+| `--teal-200` → `--atlas-teal` | `#abd4d8` | brand accents, active states, pins |
 | `--aqua` / `--aqua-light` | `#00a9a7` / `#72ddd4` | glows, journey arc |
 | `--mint` | `#58ebbf` | timeline density + playhead (from CI-Server timeline nodes) |
 | `--teal-mid` | `#409b9b` | the **synthwave grid horizon** (the "time-machine floor," CI-teal not magenta) |
 | `--dusk` | `#ffb27a` | the **time-of-day** cue (sky-follows-the-moment) |
 | entity accents | place `#b79cff` · focused `#ff8d6e` | pin variants (mirror `entityVisuals.tsx`) |
 
-Type: **Montserrat** (CI canon) + a mono for coordinates/timestamps. Iconography: lucide.
+Type: **Manrope** (CI canon since tokens v0.3; the shell loads it self-hosted via `@fontsource`)
++ a mono for coordinates/timestamps. Iconography: lucide.
+
+> The row above deliberately names `--teal-200`, not `--primary`. `#abd4d8` *was* the dark
+> `--primary` before tokens v0.3 and is still in the ramp, which is why `--atlas-teal` aliases it —
+> but canonical `--primary` is now phthalo **#0a6358** (light) / sage **#c5e8dc** (dark), and
+> `npm run lint:canon` fails any `--primary` declaration that says otherwise. Earlier editions of
+> this table labelled `#abd4d8` as `--primary` and the type as Montserrat; both were the pre-v0.3
+> canon.
 
 ## 4. Screen anatomy → CI-Common component → data source
 
@@ -87,9 +95,15 @@ Type: **Montserrat** (CI canon) + a mono for coordinates/timestamps. Iconography
 
 Status as of 2026-07-15 (Companion-Atlas PR #13): A/C delivered, B/D partial.
 
-- **Phase A — CI shell. ✅ delivered** (as a vendored-token reproduction). Icon rail + top bar +
-  view switcher + ⌘K command palette, themed from vendored `@companionintelligence/tokens`.
-  *Remaining:* adopt the real `@companionintelligence/ui` `AppShell`/`Command` components.
+- **Phase A — CI shell. ✅ delivered.** Icon rail + top bar + view switcher + ⌘K command palette.
+  *Correction:* earlier editions of this line said the tokens were **vendored** into the repo.
+  They are not, and never were — `viewer-react/src/theme/theme.css` `@import`s
+  `@companionintelligence/tokens/tokens.css` as a bare specifier that the lockfile resolves to a
+  sibling `../ci-common` checkout. The distinction is the whole of the open build blocker: a real
+  vendored copy would make `vite build` and the Docker image work in a single-repo checkout, and
+  they do not. See `docs/INTEGRATION.md` §6 and `docs/architecture.md` §8.
+  *Remaining:* adopt the real `@companionintelligence/ui` `AppShell`/`Command` components, and
+  make the token import resolvable without a sibling checkout.
 - **Phase B — Memory data. ✅ delivered.** The viewer connects to a live CI-Server: `memoryToStory`
   maps the located `search()` result (`includeTypes:["event"]`, `hasLocation:true`) into a Story, and
   `fetchMemoryStory` does the transport with a Portal OIDC bearer / session cookie. Point the viewer

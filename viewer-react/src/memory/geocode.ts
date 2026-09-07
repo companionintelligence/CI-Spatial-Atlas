@@ -73,15 +73,62 @@ export interface GeoPlace {
   lat: number;
   lon: number;
   /**
-   * Present for anything with an extent (a city, a park, a country); absent for
-   * a point (an address, a POI). A search UI should fly to the box when there
-   * is one and to a fixed altitude over the point when there is not — flying to
-   * a 20 m "box" around a house puts the camera inside the roof.
+   * Whatever extent the provider volunteered, faithfully, and *not* a promise
+   * that the row is bigger than a doorway.
+   *
+   * The tempting reading — "present for a city, absent for an address" — is
+   * only true of Photon, which emits `extent` for ways and relations and
+   * nothing for a point. Nominatim's jsonv2 attaches a `boundingbox` to *every*
+   * row including house numbers and POIs, so a street address arrives here with
+   * a box about 1e-4 degrees (~10 m) across. A UI that flies to `bounds`
+   * whenever it exists therefore ends up inside the roof on exactly the search
+   * the distinction was invented for.
+   *
+   * So the box is data and the decision is a separate question: ask
+   * `isFramableBounds` before framing, and fall back to the point at a fixed
+   * altitude when it says no.
    */
   bounds?: GeoBounds;
   /** OSM-ish class: "city", "restaurant", "administrative". For an icon or a filter. */
   kind?: string;
   source: GeocoderProvider;
+}
+
+/**
+ * The smallest box worth pointing a camera at, in degrees — ~550 m of latitude.
+ *
+ * Chosen as "a city block or larger". Below it the interesting thing on screen
+ * is the surroundings, not the footprint, and a camera framed to a 10 m
+ * rectangle sits at roof height (or under the terrain, which is worse: the
+ * globe fills the screen with brown and the user cannot tell they arrived).
+ */
+export const MIN_FRAME_SPAN_DEG = 0.005;
+
+/**
+ * Is this box something a camera can usefully frame?
+ *
+ * Three ways it is not, and they fail differently:
+ *
+ *   - degenerate (a provider that repeated one corner) — `Rectangle.fromDegrees`
+ *     accepts it and the camera dives at a zero-area target;
+ *   - inverted, i.e. `east < west` — the only honest reading of that from a
+ *     geocoder is a box crossing the antimeridian, and Cesium reads the
+ *     rectangle the long way round instead, framing most of the planet;
+ *   - real but tiny, which is the common one: see `GeoPlace.bounds`.
+ *
+ * `!(span > 0)` rather than `span <= 0` so a NaN from a malformed response is
+ * rejected rather than silently passing a comparison.
+ *
+ * Either span is enough. Cesium frames a rectangle by its larger dimension, so
+ * a long thin street (wide in longitude, a hair tall) still yields a sane
+ * altitude; requiring both would push every road back to the 1,800 km fallback.
+ */
+export function isFramableBounds(b: GeoBounds | undefined): boolean {
+  if (!b) return false;
+  const width = b.east - b.west;
+  const height = b.north - b.south;
+  if (!(width > 0) || !(height > 0)) return false;
+  return width >= MIN_FRAME_SPAN_DEG || height >= MIN_FRAME_SPAN_DEG;
 }
 
 export interface GeocodeOptions {

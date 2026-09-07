@@ -100,11 +100,26 @@ URL params override all of them per load: `?memory=<url>&token=<jwt>` for live
 memory, `?story=<url>` for a published story, `?renderer=cesium|xr` to force a
 renderer.
 
-> **Note:** `npm install` and `npm run build` need
-> `@companionintelligence/tokens`, which the lockfile resolves to a sibling
+> **Note:** only `npm run build -w viewer-react` (and the viewer's Docker image)
+> needs `@companionintelligence/tokens`, which the lockfile resolves to a sibling
 > `../ci-common` checkout of [CI-Common](https://github.com/companionintelligence/CI-Common).
 > Clone it next to this repo, or authenticate to GitHub Packages
-> (`viewer-react/.npmrc`). Tests run without it.
+> (`viewer-react/.npmrc`).
+>
+> **`npm install` does not need it**, despite what this note used to say. The
+> dependency is a `link:`, and `package-lock.json` already carries the linked
+> package's manifest, so npm creates
+> `node_modules/@companionintelligence/tokens` as a symlink without ever
+> following it: with no sibling checkout it is simply left dangling and install
+> exits 0. `npm test` and `npx tsc -p viewer-react/tsconfig.json --noEmit`
+> likewise pass — nothing on those paths reads the package (the `theme/index.ts`
+> that used to import it programmatically is gone). The single point of failure
+> is the CSS `@import` on line 12 of `viewer-react/src/theme/theme.css`, which
+> only `vite build` resolves. This is not a pedantic distinction: overstating it
+> as "install needs the sibling" is what leads reviewers to conclude CI cannot
+> typecheck a clean checkout, and the `viewer` job in
+> [`.github/workflows/build.yml`](.github/workflows/build.yml) does exactly that
+> today. See [`docs/architecture.md`](docs/architecture.md) §8.
 
 ## Quickstart — processing server + MCP API
 

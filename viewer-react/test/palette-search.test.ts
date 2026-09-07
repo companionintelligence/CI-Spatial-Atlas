@@ -37,15 +37,29 @@ async function load() {
   return { ...geocode, ...palette };
 }
 
-/** Records every URL asked for, and answers with `body`. */
-function stubGeocoder(body: unknown) {
+/**
+ * Records every URL asked for (and the abort signal it was given), and answers
+ * with `body`. `gated` withholds the answer until `open()` — the only way to
+ * observe what happens to a request that is still in flight when the user keeps
+ * typing, which is the whole subject of the retire tests below.
+ */
+function stubGeocoder(body: unknown, { gated = false }: { gated?: boolean } = {}) {
   const calls: string[] = [];
-  const fetchMock = vi.fn(async (url: string) => {
+  const signals: (AbortSignal | undefined)[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  if (!gated) release();
+
+  const fetchMock = vi.fn(async (url: string, init?: { signal?: AbortSignal }) => {
     calls.push(String(url));
+    signals.push(init?.signal);
+    await gate;
     return { ok: true, json: async () => body } as Response;
   });
   vi.stubGlobal('fetch', fetchMock);
-  return { calls };
+  return { calls, signals, open: () => release() };
 }
 
 const photon = (...names: string[]) => ({
@@ -56,6 +70,22 @@ const photon = (...names: string[]) => ({
     properties: { osm_id: 100 + i, osm_type: 'R', osm_value: 'city', name, country: 'Germany' },
   })),
 });
+
+/** One Nominatim row — the provider whose 1.1 s request floor the freeze test needs. */
+const nominatim = (name: string) => [
+  {
+    place_id: 1,
+    osm_type: 'relation',
+    osm_id: 62422,
+    lat: '52.5170365',
+    lon: '13.3888599',
+    name,
+    display_name: `${name}, Germany`,
+    category: 'boundary',
+    type: 'administrative',
+    boundingbox: ['52.338234', '52.675454', '13.088346', '13.761161'],
+  },
+];
 
 const memory = (id: string, title: string, place?: string): AtlasMemory => ({
   id,
@@ -187,6 +217,128 @@ describe('a superseded search leaves the list alone', () => {
     const found = await search.search('b'.repeat(MIN_QUERY_LENGTH - 1));
     expect(found).toEqual([]);
     expect(applyPlaceResults(found, true, true)!.places).toEqual([]);
+  });
+
+  it('retires the search still running for the query the user backspaced away', async () => {
+    vi.useFakeTimers();
+    const { calls } = stubGeocoder(photon('Berlin'));
+    const { createPlaceSearch, applyPlaceResults } = await load();
+    const search = createPlaceSearch();
+
+    // "ber" is searching. The user backspaces to "b", which is below the
+    // geocoder's minimum: the palette clears its rows and — this is the part
+    // that was missing — retires the search it started, rather than just
+    // hiding it and letting it come back.
+    const pending = search.search('ber');
+    search.cancel();
+    await vi.advanceTimersByTimeAsync(2000);
+
+    // Null is the module's "superseded", and `applyPlaceResults` turns that
+    // into "apply nothing", so the emptied box stays empty.
+    expect(await pending).toBeNull();
+    expect(applyPlaceResults(await pending, true, true)).toBeNull();
+    // Retired inside the debounce, so nothing was ever asked of the geocoder.
+    expect(calls).toHaveLength(0);
+  });
+
+  it('drops the answer even when the request was already out', async () => {
+    vi.useFakeTimers();
+    const { calls, signals, open } = stubGeocoder(photon('Berlin'), { gated: true });
+    const { createPlaceSearch, applyPlaceResults } = await load();
+    const search = createPlaceSearch();
+
+    // The harsher half of the same bug: the debounce has fired and the request
+    // is in the air when the user backspaces. Without the retire, this answer
+    // arrived ~300 ms later and repopulated the list with results for a query
+    // that is no longer on screen — and they stayed there until the next edit
+    // long enough to search.
+    const pending = search.search('ber');
+    await vi.advanceTimersByTimeAsync(400);
+    expect(calls).toHaveLength(1);
+
+    search.cancel();
+    open(); // the geocoder answers anyway; it never heard about the backspace
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(signals[0]!.aborted).toBe(true);
+    expect(await pending).toBeNull();
+    expect(applyPlaceResults(await pending, true, true)).toBeNull();
+  });
+});
+
+describe('the geocoder’s bias is frozen for the life of an open palette', () => {
+  it('keeps the reading taken at open while playback marches the focus on', async () => {
+    const { holdNear } = await load();
+
+    // `near` is the focused memory, and playback advances the focus roughly
+    // once a second (the whole story is compressed into 45 s). Every one of
+    // these used to rebuild the searcher.
+    let held = holdNear(null, true, { lat: 52.5, lon: 13.4 });
+    expect(held?.near).toEqual({ lat: 52.5, lon: 13.4 });
+    for (const live of [{ lat: 48.8, lon: 2.3 }, { lat: 41.9, lon: 12.5 }, { lat: 35.7, lon: 139.7 }]) {
+      held = holdNear(held, true, live);
+      expect(held?.near).toEqual({ lat: 52.5, lon: 13.4 });
+    }
+  });
+
+  it('releases on close so the next open reads the camera afresh', async () => {
+    const { holdNear } = await load();
+
+    const held = holdNear(null, true, { lat: 52.5, lon: 13.4 });
+    // Closing releases it; a palette reopened after the story has flown
+    // elsewhere should bias toward where the user is now.
+    expect(holdNear(held, false, { lat: 48.8, lon: 2.3 })).toBeNull();
+    expect(holdNear(null, true, { lat: 48.8, lon: 2.3 })?.near).toEqual({ lat: 48.8, lon: 2.3 });
+  });
+
+  it('stays unbiased for the whole session when nothing was focused at open', async () => {
+    const { holdNear } = await load();
+
+    // "No bias" is a reading like any other — which is why a held reading is
+    // wrapped rather than being the bias itself. Picking a bias up mid-session
+    // would rebuild the searcher, which is the failure being fixed.
+    const atOpen = holdNear(null, true, undefined);
+    expect(atOpen).not.toBeNull();
+    expect(atOpen?.near).toBeUndefined();
+    expect(holdNear(atOpen, true, { lat: 48.8, lon: 2.3 })?.near).toBeUndefined();
+  });
+
+  it('copies the caller’s object rather than holding its reference', async () => {
+    const { holdNear } = await load();
+
+    // AtlasApp builds this inline from the focused memory every render; holding
+    // the reference would pin that render's memory for as long as the palette
+    // is open.
+    const live = { lat: 52.5, lon: 13.4 };
+    const held = holdNear(null, true, live);
+    expect(held?.near).not.toBe(live);
+    expect(held?.near).toEqual(live);
+  });
+
+  it('lets a debounce longer than the focus interval actually fire', async () => {
+    vi.useFakeTimers();
+    const { calls } = stubGeocoder(nominatim('Berlin'));
+    const { createPlaceSearch, holdNear, applyPlaceResults } = await load();
+
+    // The bug in one test. Nominatim's floor is 1.1 s and the focus advances
+    // every ~250 ms, so a searcher rebuilt per focus change never survived long
+    // enough for its timer to fire: no request ever went out and the status
+    // line sat on "Searching places…" for as long as the palette stayed open.
+    let held = holdNear(null, true, { lat: 52.5, lon: 13.4 });
+    const search = createPlaceSearch({ provider: 'nominatim', near: held!.near, lang: 'en' });
+    const pending = search.search('berl');
+
+    for (let t = 0; t < 1200; t += 250) {
+      held = holdNear(held, true, { lat: 35.7 + t / 1000, lon: 139.7 });
+      await vi.advanceTimersByTimeAsync(250);
+    }
+
+    expect(calls).toHaveLength(1);
+    const found = applyPlaceResults(await pending, false, true);
+    expect(found!.places.map((p) => p.name)).toEqual(['Berlin']);
+    // And the request carried the bias from the moment the palette opened, not
+    // wherever the fly-through had reached by the time the timer fired.
+    expect(new URL(calls[0]!).searchParams.get('viewbox')).toBe('12.4,53.5,14.4,51.5');
   });
 });
 
