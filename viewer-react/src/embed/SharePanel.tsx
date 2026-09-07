@@ -9,7 +9,8 @@ import { copyWithFallback, type ClipboardLike, type CopyStatus } from './clipboa
 import './embed.css';
 
 /** Copy — two offset sheets. Not `ShareIcon`, which already means "a link to
- *  this view" on the top bar; these buttons mean "take this text". */
+ *  this view" on the Import & export panel's share button; these buttons mean
+ *  "take this text". */
 const CopyIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <rect x="9" y="9" width="11" height="11" rx="2.2" />

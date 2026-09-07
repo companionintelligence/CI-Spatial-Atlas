@@ -58,6 +58,14 @@ export const PlaneIcon = (p: P) => (
   <svg {...S(p)}><path d="M10.5 13.5 3 11l18-7-7 18-2.5-7.5L10.5 13.5z" /></svg>
 );
 export const PlusIcon = (p: P) => <svg {...S({ ...p, strokeWidth: 1.8 })}><path d="M12 5v14M5 12h14" /></svg>;
+/** The drawing tools. A plus said "add something" — true of the Collect button
+ *  and the layer picker too, which is why it could not also mean "draw". */
+export const PencilIcon = (p: P) => (
+  <svg {...S(p)}>
+    <path d="M4 20l.9-4L16.3 4.6a2.1 2.1 0 0 1 3 3L7.9 19.1 4 20z" />
+    <path d="M14.6 6.6l2.8 2.8" />
+  </svg>
+);
 export const FlagIcon = (p: P) => (
   <svg {...S(p)}><path d="M5 21V4" /><path d="M5 5c2-1.5 4-1.5 6 0s4 1.5 6 0v9c-2 1.5-4 1.5-6 0s-4-1.5-6 0V5z" /></svg>
 );

@@ -741,6 +741,14 @@ export function AtlasApp() {
   // because the camera keeps moving while the panel is up.
   const share = useCallback(() => {
     setShareCamera(draw.captureCamera());
+    // Close the drawer the sheet is about to cover. Now that the share button
+    // lives *inside* Import & export, the two are anchored to the same
+    // top-right corner and the sheet is the wider of the pair — so it hid that
+    // panel whole, including the button just pressed, while every control
+    // underneath stayed in the tab order and reachable by keyboard. Same
+    // one-drawer-at-a-time rule the rail already follows for People and
+    // Collections.
+    setInteropOpen(false);
     setShareOpen(true);
   }, [draw]);
   const closeShare = useCallback(() => setShareOpen(false), []);
@@ -960,7 +968,6 @@ export function AtlasApp() {
         // are things to do, and they belong with the other view controls.
         onDraw={() => setDrawing((d) => !d)}
         drawing={drawing}
-        onShare={share}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}
@@ -1145,6 +1152,11 @@ export function AtlasApp() {
         onFrameImported={frameAll}
         memory={memory}
         onMemoryImported={onMemoryImported}
+        // Sharing moved here from the top bar: a link and an iframe snippet are
+        // ways of getting a view *out*, which is what this panel is. Passed
+        // only when sharing is on, so the button cannot open a panel that the
+        // chrome policy has already decided not to mount.
+        onShare={chrome.share ? share : undefined}
         shareUrl={safeShareUrl}
         // Where an upload gets pinned: the middle of the view, read at the
         // moment the file is chosen.

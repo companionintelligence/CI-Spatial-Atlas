@@ -1,7 +1,7 @@
 import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import {
   BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon,
-  SearchIcon, ShareIcon, FlagIcon, ExchangeIcon, SlidesIcon, PlusIcon,
+  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon,
 } from './icons.js';
 
 
@@ -68,10 +68,14 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
 ];
 
 /** Top bar — wordmark, connection state, and the right-hand cluster of things
- *  you can do to the view: search, draw, named places, layers, projection,
- *  share. All icons, all the same size, in one row. */
+ *  you can do to the view: search, draw, named places, layers, projection.
+ *  All icons, all the same size, in one row.
+ *
+ *  Sharing is NOT here: a link and an `<iframe>` snippet are ways of getting a
+ *  view out of Atlas, which is what the Import & export panel is for, and that
+ *  panel is where the other three exits already live. */
 export function TopBar({
-  onSearch, onDraw, drawing, onShare, live, sample, showPlaces, onTogglePlaces, layers,
+  onSearch, onDraw, drawing, live, sample, showPlaces, onTogglePlaces, layers,
   sceneMode = '3d', onSceneMode,
 }: {
   onSearch: () => void;
@@ -80,7 +84,6 @@ export function TopBar({
   /** Armed state, so the bar shows a tool is live — a drawing mode that looks
    *  identical to browsing is how people lose a click. */
   drawing?: boolean;
-  onShare: () => void;
   live?: boolean;
   /** Showing the bundled demo story because no Companion Memory is connected. */
   sample?: boolean;
@@ -129,7 +132,7 @@ export function TopBar({
           aria-pressed={!!drawing}
           onClick={onDraw}
         >
-          <PlusIcon />
+          <PencilIcon />
         </button>
       )}
       {onTogglePlaces && (
@@ -183,7 +186,6 @@ export function TopBar({
           {sceneMode === '3d' ? '2D' : '3D'}
         </button>
       )}
-      <button className="atlas-icon-btn" title="Copy link to this view" aria-label="Copy link to this view" onClick={onShare}><ShareIcon /></button>
     </header>
   );
 }

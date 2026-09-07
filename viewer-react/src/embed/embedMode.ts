@@ -1,8 +1,8 @@
 /**
  * What an embedded Atlas is allowed to be.
  *
- * Atlas has one sharing affordance today — "Copy link to this view" — and it
- * hands over the *whole application*: the authoring rail, the draw toolbar, the
+ * Atlas has one sharing affordance today — the Import & export panel's share
+ * section — and it hands over the *whole application*: the authoring rail, the draw toolbar, the
  * scene editor, the import panel, the scrapbook drawer, and a Save button
  * wired to somebody else's Companion Memory. That is fine for a colleague and
  * wrong for an `<iframe>` on a blog, which is how a published story is actually
@@ -57,7 +57,9 @@ export const TRANSIENT_PARAMS = ['error', 'error_description', 'error_uri'] as c
 export type ChromeSurface =
   /** Left icon rail — globe, places, people, scrapbook, search, draw, scenes, present, import, avatar. */
   | 'rail'
-  /** Top bar — wordmark, connection chip, ⌘K search, places toggle, layers, projection, share. */
+  /** Top bar — wordmark, connection chip, and the icon cluster: search, draw,
+   *  places toggle, layers, projection. (Share is not here — it is a section of
+   *  the Import & export panel, under `interop`.) */
   | 'topBar'
   /** ⌘K palette, including its global key handler. */
   | 'commandPalette'
@@ -133,18 +135,22 @@ const APP_CHROME: ChromeDecision = Object.freeze({
  *
  *  - **rail / topBar** — every entry point to authoring hangs off them, and the
  *    top bar carries the avatar and the connection chip, which describe the
- *    *author's* session and mean nothing to a stranger. The share button in
- *    particular would offer to copy a link to a view the reader does not own.
+ *    *author's* session and mean nothing to a stranger.
  *  - **drawing / sceneAuthoring / interop** — writing tools. The import panel
  *    also holds "Save to Memory" and the memory transfer, i.e. writes against a
- *    connection an embed must not have in the first place.
+ *    connection an embed must not have in the first place — and, since sharing
+ *    moved into it, the control that would offer a reader a link to a view they
+ *    do not own.
  *  - **scrapbook / collect / people** — the scrapbook is per-browser state
  *    (`useScrapbook` persists to local storage), so a reader collecting inside
  *    an iframe would be filling a draft they can never save, curate or open.
  *    A control that appears to work and goes nowhere is worse than no control.
  *  - **commandPalette** — ⌘K is a global key handler; an iframe swallowing the
  *    host page's shortcut is hostile.
- *  - **share** — see topBar.
+ *  - **share** — the panel the control above opens. Off for the same reason,
+ *    and kept as its own key because the trigger and the panel are separate
+ *    decisions: `AtlasApp` passes `onShare` only when this is true, so the
+ *    button cannot open something that was never mounted.
  *
  * What stays, because without it there is no reason to embed:
  *
