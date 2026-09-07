@@ -934,7 +934,6 @@ export function AtlasApp() {
       <div className="atlas-aurora" aria-hidden="true" />
       {chrome.rail && (
       <Rail
-        onSearch={() => setPaletteOpen(true)}
         onFrameAll={frameAll}
         onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
         onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
@@ -942,8 +941,6 @@ export function AtlasApp() {
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
         onPresent={() => setPresenting(true)}
-        onDraw={() => setDrawing((d) => !d)}
-        drawing={drawing}
         onScenes={() => setScenesOpen((v) => !v)}
         scenesOpen={scenesOpen}
         sceneCount={sceneControl.count}
@@ -959,6 +956,10 @@ export function AtlasApp() {
       {chrome.topBar && (
       <TopBar
         onSearch={() => setPaletteOpen(true)}
+        // Search and Draw moved off the rail: the rail is places to go, these
+        // are things to do, and they belong with the other view controls.
+        onDraw={() => setDrawing((d) => !d)}
+        drawing={drawing}
         onShare={share}
         live={source === 'memory'}
         sample={isSample}

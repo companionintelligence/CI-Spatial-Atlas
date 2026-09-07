@@ -1,20 +1,23 @@
 import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import {
-  BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon, SparkIcon,
+  BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon,
   SearchIcon, ShareIcon, FlagIcon, ExchangeIcon, SlidesIcon, PlusIcon,
 } from './icons.js';
 
 
 /** Left icon rail. Globe navigates home; Places fits the camera to every memory;
  *  People opens the participants facet; Collections opens the scrapbook drawer;
- *  Search opens ⌘K; Present steps through the story's authored scenes; Import
- *  opens the KML/GeoJSON panel. */
+ *  Scenes opens the deck editor; Present steps through the story's authored
+ *  scenes; Import opens the KML/GeoJSON panel.
+ *
+ *  Search and Draw are NOT here — they live in the top bar beside the other
+ *  toggles. The rail is places to go; those two are things to do, and having
+ *  them on both sides of the shell meant the same action had two homes. */
 export function Rail({
-  onSearch, onFrameAll, onPeople, onCollections, scrapbookCount,
-  onPresent, onInterop, canPresent, importedCount, onDraw, drawing,
+  onFrameAll, onPeople, onCollections, scrapbookCount,
+  onPresent, onInterop, canPresent, importedCount,
   onScenes, scenesOpen, sceneCount,
 }: {
-  onSearch: () => void;
   onFrameAll: () => void;
   onPeople: () => void;
   onCollections: () => void;
@@ -26,24 +29,16 @@ export function Rail({
    *  (coming soon)" button was removed below. */
   canPresent: boolean;
   importedCount: number;
-  onDraw: () => void;
   onScenes: () => void;
   scenesOpen: boolean;
   /** Badge, and the honest signal that a story is being written. */
   sceneCount: number;
-  /** Armed state, so the rail shows a tool is active — a drawing mode that
-   *  looks identical to browsing is how people lose a click. */
-  drawing: boolean;
 }) {
   const items = [
     { key: 'globe', label: 'Globe', Icon: GlobeIcon, onClick: onFrameAll, active: true },
     { key: 'places', label: 'Fit all places', Icon: PinIcon, onClick: onFrameAll },
     { key: 'people', label: 'People', Icon: PeopleIcon, onClick: onPeople },
     { key: 'collections', label: 'Scrapbook', Icon: LayersIcon, onClick: onCollections, badge: scrapbookCount },
-    { key: 'search', label: 'Search', Icon: SparkIcon, onClick: onSearch },
-    { key: 'draw', label: drawing ? 'Stop drawing' : 'Draw', Icon: PlusIcon, onClick: onDraw, active: drawing },
-    // Scenes sits beside Draw rather than beside Present: writing the story and
-    // drawing on it are both authoring, and Present is what you do afterwards.
     { key: 'scenes', label: 'Scenes', Icon: FlagIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
     ...(canPresent ? [{ key: 'present', label: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
     { key: 'interop', label: 'Import & export', Icon: ExchangeIcon, onClick: onInterop, badge: importedCount },
@@ -72,12 +67,19 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
   { id: '2d', short: '2D', label: 'Flat map — best for routes, boundaries and places' },
 ];
 
-/** Top bar — wordmark, connection state, ⌘K search, places toggle, share. */
+/** Top bar — wordmark, connection state, and the right-hand cluster of things
+ *  you can do to the view: search, draw, named places, layers, projection,
+ *  share. All icons, all the same size, in one row. */
 export function TopBar({
-  onSearch, onShare, live, sample, showPlaces, onTogglePlaces, layers,
+  onSearch, onDraw, drawing, onShare, live, sample, showPlaces, onTogglePlaces, layers,
   sceneMode = '3d', onSceneMode,
 }: {
   onSearch: () => void;
+  /** Arm or disarm the drawing tools. */
+  onDraw?: () => void;
+  /** Armed state, so the bar shows a tool is live — a drawing mode that looks
+   *  identical to browsing is how people lose a click. */
+  drawing?: boolean;
   onShare: () => void;
   live?: boolean;
   /** Showing the bundled demo story because no Companion Memory is connected. */
@@ -105,9 +107,31 @@ export function TopBar({
         </span>
       )}
       <div className="atlas-grow" />
-      <button className="atlas-search" aria-label="Search memories (Command K)" onClick={onSearch}>
-        <SearchIcon /><span>Jump to a place, date, person…</span><span className="kbd">⌘K</span>
+      {/* Search was a 340px box pretending to be a text field — clicking it
+          opened a palette that has its own input, so the bar carried a second
+          one that could never be typed into. As an icon it costs a fifth of the
+          width and stops making a promise the control does not keep; ⌘K is on
+          the label, which is where the palette's own hint already lives. */}
+      <button
+        className="atlas-icon-btn"
+        title="Search — ⌘K"
+        aria-label="Search memories (Command K)"
+        aria-keyshortcuts="Meta+K Control+K"
+        onClick={onSearch}
+      >
+        <SearchIcon />
       </button>
+      {onDraw && (
+        <button
+          className="atlas-icon-btn"
+          title={drawing ? 'Stop drawing' : 'Draw on the map'}
+          aria-label={drawing ? 'Stop drawing' : 'Draw on the map'}
+          aria-pressed={!!drawing}
+          onClick={onDraw}
+        >
+          <PlusIcon />
+        </button>
+      )}
       {onTogglePlaces && (
         <button
           className="atlas-icon-btn"
