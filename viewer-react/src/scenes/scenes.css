@@ -302,6 +302,88 @@
   box-shadow: 0 0 16px color-mix(in srgb, var(--atlas-teal) 26%, transparent);
 }
 
+/* ---- background picker ---------------------------------------------------
+ * A grid of the story's own pictures. Two columns, because one column of wide
+ * tiles scrolls a 356px drawer forever and three columns make a face
+ * unrecognisable — and recognising the picture is the entire point of showing
+ * it instead of its id. The grid scrolls inside itself so a 200-photo archive
+ * cannot push the camera and narration fields off the panel.
+ * ------------------------------------------------------------------------- */
+.sc-media {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  max-height: 218px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1px; /* room for the focus ring of an edge tile */
+}
+.sc-media::-webkit-scrollbar { width: 8px; }
+.sc-media::-webkit-scrollbar-thumb { background: var(--atlas-line-2); border-radius: 8px; }
+
+.sc-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 4px 6px;
+  border: 1px solid var(--atlas-line);
+  border-radius: 10px;
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  color: var(--atlas-fg-dim);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.sc-thumb:hover { border-color: var(--atlas-line-2); color: var(--atlas-fg); }
+/* Attached: the teal edge the selected deck row uses, so "chosen" looks the
+   same everywhere in this panel. */
+.sc-thumb.active {
+  border-color: var(--atlas-teal);
+  background: color-mix(in srgb, var(--atlas-teal) 12%, transparent);
+  color: var(--atlas-fg-hi);
+}
+/* Attached *and* winning. A brighter ring, but the tile also says "On the
+   slide" in words — this is never the only signal. */
+.sc-thumb.showing { box-shadow: 0 0 0 1px var(--atlas-aqua-light) inset; }
+.sc-thumb-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  /* Cover, because these are 4:3 boxes over an archive of every shape; a
+     letterboxed thumbnail of a face is smaller than a cropped one. */
+  object-fit: cover;
+  border-radius: 7px;
+  /* The tint shows through until the image decodes, and stays if it 404s —
+     which is a plausible end for a URL that passed `isLoadableMedia` but no
+     longer resolves. A blank white box would read as a bug. */
+  background: var(--atlas-bg-2);
+}
+.sc-thumb-name {
+  font: 600 10.5px/1.3 inherit;
+  color: var(--atlas-fg-hi);
+  /* Two lines, then ellipsis: a memory's title is a sentence often enough that
+     one line hides which photo this is. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sc-thumb-kind { font: 700 8.5px/1 var(--atlas-mono); letter-spacing: .06em; text-transform: uppercase; }
+.sc-thumb.showing .sc-thumb-kind { color: var(--atlas-aqua-light); }
+
+/* ---- narration ----------------------------------------------------------- */
+.sc-audio {
+  width: 100%;
+  height: 32px;
+  border-radius: 8px;
+  /* The native control paints its own chrome; the token background stops it
+     sitting on the drawer's glass as a light-grey slab. */
+  background: color-mix(in srgb, var(--atlas-ink) 55%, transparent);
+}
+
 /* ---- camera pose --------------------------------------------------------- */
 .sc-pose {
   display: flex;
@@ -357,6 +439,7 @@
 .sc-pick:focus-visible,
 .sc-mini:focus-visible,
 .sc-layout:focus-visible,
+.sc-thumb:focus-visible,
 .sc-input:focus-visible {
   outline: 2px solid var(--atlas-aqua-light);
   outline-offset: 2px;
@@ -389,6 +472,9 @@
   .sc-mini { width: 34px; height: 34px; }
   .sc-layout { min-height: 52px; }
   .sc-pick { min-height: 40px; }
+  /* A thumbnail is already a large target; the grid is what needs the room, so
+     it gets a taller window rather than taller tiles. */
+  .sc-media { max-height: 260px; }
 }
 
 /* The shell already blanket-disables animation under reduced motion for

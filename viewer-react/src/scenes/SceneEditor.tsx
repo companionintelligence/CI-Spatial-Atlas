@@ -1,6 +1,28 @@
 /**
  * The editor for one scene: its title, its Markdown body, its layout, its
- * moment and its camera pose.
+ * background media, its narration, its moment and its camera pose.
+ *
+ * ## Why the background is a wall of thumbnails
+ *
+ * `Scene.itemIds` is a list of ids into the story's own entities, and an id
+ * that names nothing resolvable produces no background and no complaint — so
+ * the two obvious controls are both traps. A free-text id field is a box in
+ * which almost everything typed does nothing. A list of ids is a list of
+ * `mem-4f2a…` strings, and "attach the harbour photo" is not a decision anyone
+ * makes from those. So the picker is built from `sceneMediaPool`, which offers
+ * only what `sceneBackground` will actually resolve, and shows each one as the
+ * picture it is. Multi-select, because `itemIds` is a list and
+ * `sceneHighlightIds` reads all of it; the tile the presenter is actually
+ * painting says so in words.
+ *
+ * ## Why narration is validated as it is typed
+ *
+ * `buildDeck` stores `safeMediaUrl(scene.audioUrl)`, which is `null` for
+ * anything that is not http(s) — the `ci-memory://` address a real archive is
+ * full of, most obviously. Accepting one here would produce a scene that claims
+ * to be narrated and plays silence, with nothing said anywhere. `checkAudioUrl`
+ * runs the presenter's own sanitiser on each keystroke and the field refuses to
+ * store what the presentation would drop.
  *
  * ## What is typed is what gets rendered
  *
@@ -35,10 +57,22 @@
  *
  * Presentational and fully controlled otherwise, like `authoring/Toolbar.tsx`.
  */
-import { useId, useState, type SVGProps } from 'react';
-import type { Camera, Scene } from '@companion-atlas/story';
+import { useId, useMemo, useState, type SVGProps } from 'react';
+import type { Camera, Scene, Story } from '@companion-atlas/story';
 import { SCENE_LAYOUTS, sceneLayout, type SceneLayout } from '../ui/sceneDeck.js';
 import { hasUsableLocation, type SceneProblem, type ScenePatch } from './index.js';
+import {
+  SCENE_MEDIA_KIND_LABEL,
+  backgroundCandidate,
+  checkAudioUrl,
+  playableAudioUrl,
+  sceneAttachedIds,
+  sceneMediaEmptyMessage,
+  sceneMediaPool,
+  toggleAttachment,
+  unresolvedAttachedIds,
+  type SceneMediaCandidate,
+} from './sceneMedia.js';
 import './scenes.css';
 
 export interface SceneEditorProps {
@@ -58,6 +92,18 @@ export interface SceneEditorProps {
    * no Cesium anywhere near it.
    */
   onCaptureCamera: () => Camera | null;
+  /**
+   * The story the globe is rendering — the pool `sceneBackground` resolves
+   * `Scene.itemIds` against, and therefore the only honest source for the
+   * background picker.
+   *
+   * The *rendered* story, deliberately, not one carrying the authored deck: an
+   * id is a promise that the presented document contains that entity, and the
+   * two documents differ (see `scenes/story.ts`). Optional because the panel
+   * must stay mountable with nothing loaded — the picker then says it has
+   * nothing to offer, which is true.
+   */
+  story?: Story | null;
   /** From `SceneControl.problems`; only this scene's are shown, beside the
    *  field that caused each one. */
   problems?: readonly SceneProblem[];
@@ -189,21 +235,64 @@ export const LAYOUT_LABEL: Record<SceneLayout, { label: string; hint: string }> 
   split: { label: 'Split', hint: 'Half text, half image or globe.' },
 };
 
+/**
+ * What the panel says under the picker.
+ *
+ * Three states, and the distinction between the last two is the point: a scene
+ * can have ids attached and still show nothing, which is exactly the situation
+ * an author cannot diagnose by looking at the slide. Prose rather than JSX so
+ * it is one text node — assertable in a suite, and read out as one phrase.
+ */
+export function backgroundNote(showing: SceneMediaCandidate | null, attachedCount: number): string {
+  if (showing) {
+    return `“${showing.label}” is on the slide. Full screen uses it edge to edge; every other layout puts it at the top of the card.`;
+  }
+  if (attachedCount > 0) {
+    return 'Nothing attached here can be shown, so the slide falls back to the story’s cover image or its tint.';
+  }
+  return 'Optional. Pick one or more; the first the story resolves is the one the slide shows.';
+}
+
+/**
+ * The line about attached ids with no tile, or null when there are none.
+ *
+ * Worth a sentence rather than silence: `sceneFromMemory` seeds a scene with
+ * its memory's id whether or not that memory has a loadable picture, so a
+ * perfectly ordinary scene can carry ids this picker cannot draw — and "Use
+ * none" clears those too, which is a surprise unless it is said first.
+ */
+export function unresolvedNote(ids: readonly string[]): string | null {
+  if (ids.length === 0) return null;
+  const shown = ids.slice(0, 2).join(', ') + (ids.length > 2 ? ', …' : '');
+  const what = ids.length === 1 ? 'one entity' : `${ids.length} entities`;
+  return `This scene also points at ${what} with no picture to show (${shown}). “Use none” clears those too.`;
+}
+
 export function SceneEditor({
-  scene, index, count, onPatch, onRemove, onCaptureCamera, problems = [],
+  scene, index, count, onPatch, onRemove, onCaptureCamera, story = null, problems = [],
 }: SceneEditorProps) {
   const ids = useId();
-  // Local draft for the two free-text fields — see the header. Reset by
+  // Local draft for the three free-text fields — see the header. Reset by
   // comparing the id during render rather than in an effect, so switching
   // scenes never paints one frame of the previous scene's text into the new
   // scene's boxes (which, with a keystroke landing in between, would write it).
-  const [draft, setDraft] = useState({ id: '', title: '', narrative: '' });
+  const [draft, setDraft] = useState({ id: '', title: '', narrative: '', audio: '' });
   const [captureError, setCaptureError] = useState<string | null>(null);
 
   if (scene && draft.id !== scene.id) {
-    setDraft({ id: scene.id, title: scene.title ?? '', narrative: narrativeText(scene) });
+    setDraft({
+      id: scene.id,
+      title: scene.title ?? '',
+      narrative: narrativeText(scene),
+      audio: scene.audioUrl ?? '',
+    });
     if (captureError) setCaptureError(null);
   }
+
+  // Keyed on the story alone: resolving a background walks every item and every
+  // media entry of an archive that routinely holds hundreds, and it does not
+  // depend on the scene — which is the thing changing on every keystroke.
+  const pool = useMemo(() => sceneMediaPool(story), [story]);
 
   if (!scene) {
     return (
@@ -217,10 +306,26 @@ export function SceneEditor({
   const problemFor = (field: string) => mine.find((p) => p.field === field || p.field?.startsWith(`${field}.`));
   const cameraProblem = problemFor('camera');
   const timeProblem = problemFor('time');
+  const mediaProblem = problemFor('itemIds');
+  const audioProblem = problemFor('audioUrl');
   const layout = sceneLayout(scene);
   const pose = describeScenePose(scene.camera);
   const title = draft.id === scene.id ? draft.title : (scene.title ?? '');
   const narrative = draft.id === scene.id ? draft.narrative : narrativeText(scene);
+
+  // What the scene attaches, in whichever spelling it arrived — and which of
+  // those the presenter is actually painting. Both come from `sceneMedia.ts`
+  // so the panel and the slide cannot disagree.
+  const attached = sceneAttachedIds(scene);
+  const showing = backgroundCandidate(pool.candidates, attached);
+  const orphanNote = unresolvedNote(unresolvedAttachedIds(pool.candidates, attached));
+
+  const audio = draft.id === scene.id ? draft.audio : (scene.audioUrl ?? '');
+  const audioCheck = checkAudioUrl(audio);
+  // Never offer a player or a Clear control for text the field is refusing:
+  // that pairing is what made the stored-prefix bug look like a working
+  // attachment. The preview follows the field's verdict, not just storage.
+  const audioPreview = audioCheck.state === 'rejected' ? null : playableAudioUrl(scene.audioUrl);
 
   const capture = () => {
     const outcome = captureOutcome(onCaptureCamera());
@@ -248,7 +353,7 @@ export function SceneEditor({
           value={title}
           placeholder={`Scene ${index + 1}`}
           onChange={(e) => {
-            setDraft({ id: scene.id, title: e.target.value, narrative });
+            setDraft({ id: scene.id, title: e.target.value, narrative, audio });
             onPatch({ title: e.target.value });
           }}
         />
@@ -265,7 +370,7 @@ export function SceneEditor({
           placeholder={'What happened here?\n\nMarkdown: **bold**, *italic*, [links](https://…), - lists, # headings.'}
           aria-describedby={`${ids}-body-help`}
           onChange={(e) => {
-            setDraft({ id: scene.id, title, narrative: e.target.value });
+            setDraft({ id: scene.id, title, narrative: e.target.value, audio });
             onPatch({ narrative: e.target.value });
           }}
         />
@@ -293,6 +398,156 @@ export function SceneEditor({
           ))}
         </div>
         <p className="sc-note">{LAYOUT_LABEL[layout].hint}</p>
+      </div>
+
+      {/* ---- background ---------------------------------------------------
+          Thumbnails rather than an id field, because "attach the harbour
+          photo" is a visual decision and `mem-4f2a…` is not a photo. Every
+          tile is something `sceneBackground` will actually resolve — see
+          `sceneMedia.ts` — so a picked tile always changes the slide. */}
+      <div className="sc-field">
+        <span className="sc-label" id={`${ids}-media`}>Background</span>
+        {pool.candidates.length === 0 ? (
+          <p className="sc-empty">{sceneMediaEmptyMessage(pool)}</p>
+        ) : null}
+        {pool.candidates.length > 0 ? (
+          <>
+            <div className="sc-media" role="group" aria-labelledby={`${ids}-media`}>
+              {pool.candidates.map((c) => {
+                const on = attached.includes(c.id);
+                const onSlide = showing?.id === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`sc-thumb${on ? ' active' : ''}${onSlide ? ' showing' : ''}`}
+                    aria-pressed={on}
+                    title={c.detail ? `${c.label} — ${c.detail}` : c.label}
+                    onClick={() => onPatch({ itemIds: toggleAttachment(attached, c.id) })}
+                  >
+                    {/* Decorative: the button's own text names the picture, and
+                        a duplicate alt would have a screen reader say it
+                        twice. */}
+                    <img className="sc-thumb-img" src={c.thumbUrl} alt="" loading="lazy" decoding="async" />
+                    <span className="sc-thumb-name">{c.label}</span>
+                    <span className="sc-thumb-kind">
+                      {/* Never colour alone: the tile that is *winning* says so
+                          in words, because "attached" and "on the slide" are
+                          different states and only one of them is visible in
+                          the presentation. */}
+                      {onSlide ? 'On the slide' : SCENE_MEDIA_KIND_LABEL[c.kind]}
+                      {c.isPoster ? ' · still' : ''}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="sc-note">{backgroundNote(showing, attached.length)}</p>
+          </>
+        ) : null}
+        {/* Outside the branch above on purpose. An empty picker is exactly when
+            a scene is most likely to be holding ids nothing here can draw —
+            `sceneFromMemory` seeds them, and a Memory archive whose pictures
+            live at internal addresses draws none of them — so the note that
+            explains it, and the only control that clears it, must not vanish
+            with the grid. They did, which left the author looking at an
+            unexplained attachment with no way to remove it. */}
+        {attached.length > 0 ? (
+          <div className="sc-row-actions">
+            <button
+              type="button"
+              className="sc-action ghost"
+              onClick={() => onPatch({ itemIds: null })}
+            >
+              Use none
+            </button>
+          </div>
+        ) : null}
+        {orphanNote ? <p className="sc-note">{orphanNote}</p> : null}
+        {mediaProblem ? (
+          <p className="sc-warning" role="alert"><WarnIcon aria-hidden="true" /><span>{mediaProblem.message}</span></p>
+        ) : null}
+      </div>
+
+      {/* ---- narration ----------------------------------------------------
+          Checked against the presenter's own sanitiser as it is typed: a URL
+          `safeMediaUrl` refuses is dropped by `buildDeck` in silence, and an
+          author who cannot tell the difference between "attached" and
+          "attached and inaudible" is guessing. */}
+      <div className="sc-field">
+        <label htmlFor={`${ids}-audio`}>Narration</label>
+        <input
+          id={`${ids}-audio`}
+          className="sc-input"
+          /* `text`, not `url`: `checkAudioUrl` is the rule here, and the
+             browser's own URL validation disagrees with it in both directions
+             — it rejects the relative link the deck happily plays, and it
+             accepts `javascript:` and `data:`, which the deck drops. Two
+             validators giving one field two different verdicts is worse than
+             either. `inputMode` still asks a phone for the right keyboard. */
+          type="text"
+          inputMode="url"
+          value={audio}
+          placeholder="https://…/narration.mp3"
+          aria-invalid={audioCheck.state === 'rejected' || undefined}
+          aria-describedby={`${ids}-audio-help`}
+          onChange={(e) => {
+            const value = e.target.value;
+            setDraft({ id: scene.id, title, narrative, audio: value });
+            const check = checkAudioUrl(value);
+            // A refused URL CLEARS what is stored; it does not merely decline
+            // to overwrite it. Returning early here was wrong in both
+            // directions, because this fires per keystroke:
+            //
+            //   typing  — every accepted prefix of a rejected URL was written,
+            //     so `data:audio/mpeg;base64,…` left `audioUrl: "data"` on the
+            //     scene, with a player and a Clear button beside the rejection
+            //     warning, and that string rode out into the exported document;
+            //   pasting — no intermediates fire, so the PREVIOUS good URL
+            //     stayed attached and kept playing while the field showed
+            //     refused text, with nothing saying the old track was still on
+            //     the slide.
+            //
+            // Both are the same mistake: what the field says and what the scene
+            // holds have to agree, and the field is the author's intent.
+            onPatch({ audioUrl: check.state === 'ok' || check.state === 'relative' ? check.url : null });
+          }}
+        />
+        {audioPreview ? (
+          <audio
+            className="sc-audio"
+            controls
+            preload="none"
+            src={audioPreview}
+            aria-label={`Narration for ${title.trim() || `Scene ${index + 1}`}`}
+          />
+        ) : null}
+        {audioPreview ? (
+          <div className="sc-row-actions">
+            <button
+              type="button"
+              className="sc-action ghost"
+              onClick={() => {
+                setDraft({ id: scene.id, title, narrative, audio: '' });
+                onPatch({ audioUrl: null });
+              }}
+            >
+              Clear narration
+            </button>
+          </div>
+        ) : null}
+        {audioCheck.state === 'rejected' ? (
+          <p className="sc-warning" role="alert"><WarnIcon aria-hidden="true" /><span>{audioCheck.reason}</span></p>
+        ) : null}
+        {audioCheck.state === 'relative' ? (
+          <p className="sc-warning" role="alert"><WarnIcon aria-hidden="true" /><span>{audioCheck.note}</span></p>
+        ) : null}
+        <p className="sc-note" id={`${ids}-audio-help`}>
+          Optional. Plays when the slide opens — a reader whose browser blocks autoplay gets a play button instead.
+        </p>
+        {audioProblem ? (
+          <p className="sc-warning" role="alert"><WarnIcon aria-hidden="true" /><span>{audioProblem.message}</span></p>
+        ) : null}
       </div>
 
       <div className="sc-field">
@@ -346,7 +601,7 @@ export function SceneEditor({
 
       {/* Anything the field-level slots above did not claim still has to be
           visible: a problem nobody is shown is a save that fails later. */}
-      {mine.filter((p) => p !== cameraProblem && p !== timeProblem).map((p, i) => (
+      {mine.filter((p) => p !== cameraProblem && p !== timeProblem && p !== mediaProblem && p !== audioProblem).map((p, i) => (
         <p className="sc-warning" role="alert" key={`${p.field ?? ''}-${i}`}>
           <WarnIcon aria-hidden="true" /><span>{p.message}</span>
         </p>

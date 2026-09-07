@@ -20,6 +20,7 @@
  * ## The split
  *
  *   model.ts      ids, creation, patching, ordering, validation (no React)
+ *   sceneMedia.ts which story entities can back a slide; narration URL checks
  *   persist.ts    the deck in localStorage, scoped per account
  *   story.ts      the export-only merge into a canonical `Story`
  *   useScenes.ts  the React binding (state + persistence + operations)
@@ -29,6 +30,7 @@
  * `layers/index.ts` and `authoring/index.ts` draw.
  */
 export * from './model.js';
+export * from './sceneMedia.js';
 export * from './persist.js';
 export * from './story.js';
 export * from './useScenes.js';

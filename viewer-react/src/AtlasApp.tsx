@@ -978,6 +978,12 @@ export function AtlasApp() {
             onRemove={() => { if (selectedSceneId) removeScene(selectedSceneId); }}
             onCaptureCamera={draw.captureCamera}
             problems={sceneControl.problems}
+            // The *rendered* story, deliberately — the same object Presenter
+            // builds its deck from. `sceneBackground` resolves an attached id
+            // against this document's `items`/`media`, so offering candidates
+            // from `exportStory` would let the author attach an entity the
+            // presenter cannot see, and the slide would come back blank.
+            story={story}
           />
         </aside>
       )}

@@ -335,6 +335,14 @@ export function patchScene(scene: Scene, patch: ScenePatch): Scene {
     // The legacy `items` spelling shadows nothing (`sceneHighlightIds` prefers
     // `itemIds`) but would be exported alongside a contradicting list.
     if ('items' in next) { delete next.items; changed = true; }
+    // `mediaIds` is the third spelling and the one that bites: it is what
+    // `sceneHighlightIds` falls through to LAST, so on a patch that *clears*
+    // the list — `itemIds: null`, i.e. the editor's "use none" — removing only
+    // `itemIds` uncovers it again and the background the author just detached
+    // reappears, with the control looking broken. Both legacy lists go on the
+    // first edit, for the same reason: after this, `itemIds` is the whole
+    // answer.
+    if ('mediaIds' in next) { delete next.mediaIds; changed = true; }
   }
 
   return changed ? (next as Scene) : scene;
