@@ -394,6 +394,33 @@ export function AtlasApp() {
   // instead of the playback fly-through carrying on.
   const inspect = useCallback((m: AtlasMemory) => { select(m); pause(); }, [select, pause]);
 
+  /**
+   * Where the globe is pointed, in degrees, or null if it is pointed at space.
+   *
+   * `pickEllipsoid` on the centre of the canvas rather than the camera's own
+   * ground track: at an oblique pitch those are different places, and the one a
+   * person means by "here" is the one in the middle of their screen. Falls back
+   * to the camera's own position when the centre ray misses the globe entirely
+   * (a horizon-grazing view), and returns null only when even that is
+   * unreadable — which the caller reports rather than papering over with 0,0,
+   * a spot in the Gulf of Guinea.
+   */
+  const viewCentre = useCallback((): { lat: number; lon: number } | null => {
+    if (!viewer || viewer.isDestroyed()) return null;
+    const { scene, camera } = viewer;
+    const canvas = scene.canvas;
+    const centre = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
+    const hit = camera.pickEllipsoid(centre, scene.globe.ellipsoid);
+    const carto = hit
+      ? Cesium.Cartographic.fromCartesian(hit)
+      : camera.positionCartographic;
+    if (!carto || !Number.isFinite(carto.latitude) || !Number.isFinite(carto.longitude)) return null;
+    return {
+      lat: Cesium.Math.toDegrees(carto.latitude),
+      lon: Cesium.Math.toDegrees(carto.longitude),
+    };
+  }, [viewer]);
+
   // "Fit all places": frame the camera on every located memory at once.
   const frameAll = useCallback(() => {
     if (!viewer || !model) return;
@@ -461,7 +488,15 @@ export function AtlasApp() {
   useEffect(() => {
     if (!viewer || !model || introDone.current) return;
 
-    if (opened.camera && !openedDone.current) {
+    // `camera` OR `timeMs` — the two parameters are decoded independently
+    // (`restoredView`), and gating the whole restore on the camera meant a
+    // `?t=`-only link was parsed and then thrown away. That is not a
+    // hypothetical URL: the share panel takes its camera from
+    // `draw.captureCamera()`, which is null until the authoring controller
+    // mounts, while `timeMs` is essentially always set — so Atlas could hand
+    // out a link to a moment that its own reader ignored, and open at the
+    // first memory instead.
+    if ((opened.camera || opened.timeMs != null) && !openedDone.current) {
       openedDone.current = true;
       introDone.current = true;
 
@@ -487,6 +522,15 @@ export function AtlasApp() {
       const atMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
       flownToRef.current = lastPassed(model.memories, atMs)?.id ?? flownToRef.current;
 
+      // A time-only link still needs an opening shot, or the globe stays on
+      // whatever the default view is while the clock sits on the right moment.
+      // The first memory is the same answer the no-parameter path gives.
+      if (!opened.camera) {
+        const first = model.memories[0];
+        if (first) { setFocusedId(first.id); flyTo(first); }
+        return;
+      }
+
       const pose = poseFromCamera(opened.camera);
       // Flown here rather than through `draw.flyToCamera`, which needs the
       // authoring controller — a thing an embed never mounts, and which arrives
@@ -504,7 +548,7 @@ export function AtlasApp() {
 
     const first = model.memories[0];
     if (first) { introDone.current = true; select(first); }
-  }, [viewer, model, select, scrub, pause, opened, reduceMotion]);
+  }, [viewer, model, select, scrub, pause, opened, reduceMotion, flyTo]);
 
   // ————— the scrapbook loop: collect → curate → play → save —————
 
@@ -1101,16 +1145,19 @@ export function AtlasApp() {
         memory={memory}
         onMemoryImported={onMemoryImported}
         shareUrl={safeShareUrl}
-        // Where an upload gets pinned. The focused memory, then the place card,
-        // then nothing — and "nothing" is a state the section reports rather
-        // than papering over with 0,0, which is in the Atlantic.
-        uploadPosition={
-          focused?.lat != null && focused?.lon != null
-            ? { lat: focused.lat, lon: focused.lon }
-            : focusedPlace?.latitude != null && focusedPlace?.longitude != null
-              ? { lat: focusedPlace.latitude, lon: focusedPlace.longitude }
-              : null
-        }
+        // Where an upload gets pinned: the middle of the view, read at the
+        // moment the file is chosen.
+        //
+        // This was the focused memory, and the panel said "pinned where the
+        // camera is looking" beside it — which was not true and diverged on the
+        // very first load, with no user error required: the opening flight
+        // frames `memories[0]` while `model.focused` defaults to
+        // `memories[length - 1]`, so a photo added to a freshly opened story
+        // landed on a different memory than the one on screen. Flying somewhere
+        // else did not help, because a focused memory does not move with the
+        // camera. A getter rather than a value because the camera moves between
+        // renders and the answer must be the view at the moment of the pick.
+        uploadPosition={viewCentre}
       />
       )}
       <Presenter
@@ -1144,6 +1191,10 @@ export function AtlasApp() {
           // producing a snippet that renders somebody else's demo.
           privateSource={source === 'memory'}
           storyTitle={story.title}
+          // The deck lives in local storage until it is saved or downloaded, and
+          // a link carries neither. Saying so is the difference between sharing
+          // a view and appearing to share a story.
+          unsavedScenes={sceneControl.count}
         />
       )}
       {chrome.embedBar && (

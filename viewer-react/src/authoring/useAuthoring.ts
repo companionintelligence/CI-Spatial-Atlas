@@ -437,7 +437,7 @@ export function useAuthoring(
     selection,
     onDelete: deleteSelected,
     onCaptureCamera: () => { captureCamera(); },
-    capturedCamera: camera ? `Captured · ${describeCamera(camera)}` : null,
+    capturedCamera: camera ? `Captured · ${describeCamera(camera, units)}` : null,
     measurement,
     onClearMeasurement: clearMeasurement,
     units,

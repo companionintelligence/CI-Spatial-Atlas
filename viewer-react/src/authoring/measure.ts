@@ -84,6 +84,10 @@ const METRES_PER_MILE = 1609.344;
 const SQ_METRES_PER_SQ_FOOT = METRES_PER_FOOT * METRES_PER_FOOT;
 const SQ_METRES_PER_ACRE = 4046.8564224;
 const SQ_METRES_PER_SQ_MILE = METRES_PER_MILE * METRES_PER_MILE;
+/** The rung boundaries in the unit being *printed*, so the choice of rung can be
+ *  made after rounding rather than before. */
+const FEET_PER_MILE = 5280;
+const SQ_FEET_PER_ACRE = 43_560;
 
 /**
  * Metres → a human string.
@@ -98,12 +102,19 @@ const SQ_METRES_PER_SQ_MILE = METRES_PER_MILE * METRES_PER_MILE;
 export function formatLength(metres: number, units: MeasureUnits = 'metric'): string {
   if (!Number.isFinite(metres) || metres <= 0) return units === 'imperial' ? '0 ft' : '0 m';
   if (units === 'imperial') {
-    const feet = metres / METRES_PER_FOOT;
-    if (metres < METRES_PER_MILE) return `${Math.round(feet)} ft`;
+    // Rounded BEFORE the rung is chosen. Rounding after it lets a value just
+    // short of the boundary print in the smaller unit at the larger unit's
+    // value — 1609.2 m rendered as "5280 ft", which is one mile, written in
+    // feet. The reading is not wrong, but it is the one number on screen a
+    // person would use to check the tool against something they know, and it
+    // reads as a bug.
+    const feet = Math.round(metres / METRES_PER_FOOT);
+    if (feet < FEET_PER_MILE) return `${feet} ft`;
     const miles = metres / METRES_PER_MILE;
     return `${miles.toFixed(miles < 10 ? 2 : 1)} mi`;
   }
-  if (metres < 1000) return `${Math.round(metres)} m`;
+  const m = Math.round(metres);
+  if (m < 1000) return `${m} m`;
   return `${(metres / 1000).toFixed(metres < 10_000 ? 2 : 1)} km`;
 }
 
@@ -113,11 +124,13 @@ export function formatLength(metres: number, units: MeasureUnits = 'metric'): st
 export function formatArea(squareMetres: number, units: MeasureUnits = 'metric'): string {
   if (!Number.isFinite(squareMetres) || squareMetres <= 0) return units === 'imperial' ? '0 ft²' : '0 m²';
   if (units === 'imperial') {
-    if (squareMetres < SQ_METRES_PER_ACRE) return `${Math.round(squareMetres / SQ_METRES_PER_SQ_FOOT)} ft²`;
+    const sqFt = Math.round(squareMetres / SQ_METRES_PER_SQ_FOOT);
+    if (sqFt < SQ_FEET_PER_ACRE) return `${sqFt} ft²`;
     if (squareMetres < SQ_METRES_PER_SQ_MILE) return `${(squareMetres / SQ_METRES_PER_ACRE).toFixed(2)} ac`;
     return `${(squareMetres / SQ_METRES_PER_SQ_MILE).toFixed(2)} mi²`;
   }
-  if (squareMetres < 10_000) return `${Math.round(squareMetres)} m²`;
+  const sq = Math.round(squareMetres);
+  if (sq < 10_000) return `${sq} m²`;
   if (squareMetres < 1_000_000) return `${(squareMetres / 10_000).toFixed(2)} ha`;
   return `${(squareMetres / 1_000_000).toFixed(2)} km²`;
 }

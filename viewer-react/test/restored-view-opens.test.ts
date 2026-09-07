@@ -46,7 +46,7 @@ const openingShot = (o: {
   /** The Cesium clock, in ms, at the moment the effect runs. */
   clockMs: number;
 }) => {
-  if (o.opened.camera && !o.openedDone) {
+  if ((o.opened.camera || o.opened.timeMs != null) && !o.openedDone) {
     const scrubTo = o.opened.timeMs != null
       ? Math.min(Math.max(o.opened.timeMs, o.timeline.startMs), o.timeline.stopMs)
       : null;
@@ -171,5 +171,36 @@ describe('the parameters the app actually reads', () => {
 
   it('is inert for a URL with neither', () => {
     expect(restoredView('?embed=1')).toEqual({ camera: null, timeMs: null });
+  });
+});
+
+/**
+ * A link that names a moment but no camera.
+ *
+ * The restore block was gated on `opened.camera`, so `?t=` alone was decoded
+ * and then discarded — the app opened at the first memory with the requested
+ * moment thrown away. Not a hypothetical URL: the share panel takes its camera
+ * from `draw.captureCamera()`, which returns null until the authoring
+ * controller mounts, while the time is essentially always set. Atlas could hand
+ * out a link its own reader ignored.
+ */
+describe('a link that carries only a moment', () => {
+  const entered = (o: { camera: unknown | null; timeMs: number | null }) =>
+    openingShot({ opened: o, openedDone: false, memories: MEMORIES, timeline: TIMELINE, clockMs: 1_000 });
+
+  it('is honoured rather than discarded', () => {
+    expect(entered({ camera: null, timeMs: 5_000 })).toMatchObject({ kind: 'restore', scrubTo: 5_000, paused: true });
+  });
+
+  it('is clamped like any other requested time', () => {
+    expect(entered({ camera: null, timeMs: 9_999_999 })).toMatchObject({ scrubTo: 9_000 });
+  });
+
+  it('still claims the memory under the playhead', () => {
+    expect(entered({ camera: null, timeMs: 9_000 })).toMatchObject({ claims: 'singapore' });
+  });
+
+  it('leaves a URL with neither parameter on the ordinary opening flight', () => {
+    expect(entered({ camera: null, timeMs: null })).toEqual({ kind: 'first-memory', id: 'reykjavik' });
   });
 });

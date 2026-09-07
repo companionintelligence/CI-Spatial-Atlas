@@ -65,11 +65,11 @@ export interface InteropPanelProps {
   /** Link to store on an exported story event. Already scrubbed of `?memory=`
    *  and `?token=` — a share URL is a public artifact. */
   shareUrl?: () => string | undefined;
-  /** Where an uploaded photo or video gets pinned — normally whatever the
-   *  globe is focused on. Media with no position is not renderable and not
-   *  expressible in KML, so the upload section says so rather than inventing
-   *  coordinates. */
-  uploadPosition?: { lat: number; lon: number } | null;
+  /** Where an uploaded photo or video gets pinned — read at the moment the file
+   *  is chosen, so it is the view the user is actually looking at. Media with no
+   *  position is not renderable and not expressible in KML, so the upload
+   *  section reports that rather than inventing coordinates. */
+  uploadPosition?: () => { lat: number; lon: number } | null;
 }
 
 export function InteropPanel({

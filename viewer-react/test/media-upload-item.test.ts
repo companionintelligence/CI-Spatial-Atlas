@@ -44,6 +44,18 @@ describe('an upload becomes a story item', () => {
     expect(itemFromUpload(VIDEO, 'clip.mp4', AT)).toMatchObject({ type: 'video' });
   });
 
+  it('writes only fields the schema has — no invented poster key', () => {
+    // An earlier cut wrote `media: { url, poster }` for a video. `poster` is not
+    // a field of `Media` (the schema spells it `posterUrl`), nothing in the repo
+    // reads that string, and the value was always undefined because no still is
+    // generated on upload. A key no reader knows makes an uploaded video look
+    // like it carries a poster while `sceneMediaPool` goes on counting it as
+    // having none — the picker then cannot explain itself honestly.
+    const media = (itemFromUpload(VIDEO, 'clip.mp4', AT) as unknown as { media: Record<string, unknown> }).media;
+    expect(Object.keys(media)).toEqual(['url']);
+    expect('poster' in media).toBe(false);
+  });
+
   it('carries an id derived from the stored key, so two uploads never collide', () => {
     const a = itemFromUpload(PHOTO, 'a.jpg', AT)!;
     const b = itemFromUpload({ ...PHOTO, key: 'u/2026/other.jpg' }, 'a.jpg', AT)!;

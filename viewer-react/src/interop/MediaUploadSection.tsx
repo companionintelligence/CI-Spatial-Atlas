@@ -23,10 +23,10 @@ import {
   acceptAttribute,
   formatBytes,
   isUploadBusy,
-  mediaItemFromUpload,
   useMediaUpload,
   validateFile,
   type AtlasApiConfig,
+  type UploadedMedia,
 } from '../upload/index.js';
 import type { ImportedFile } from './importFile.js';
 
@@ -35,8 +35,16 @@ export interface MediaUploadSectionProps {
   api: AtlasApiConfig | null;
   /** Where an uploaded file lands: the same list as a dropped KML. */
   onUploaded: (file: ImportedFile) => void;
-  /** Where to pin it. The camera's current target, from the caller. */
-  position?: { lat: number; lon: number } | null;
+  /**
+   * Where to pin it — read at the moment the file is chosen, not at render.
+   *
+   * A getter, because the camera moves between renders and an upload belongs
+   * where the globe was pointed when the user picked the file. Passing a value
+   * is how this went wrong the first time: it was the *focused memory*, which
+   * does not move with the camera and defaults to the last memory in the story
+   * while the opening flight frames the first.
+   */
+  position?: () => { lat: number; lon: number } | null;
 }
 
 /**
@@ -48,18 +56,25 @@ export interface MediaUploadSectionProps {
  * listed; it simply carries no coordinates, and the panel says as much.
  */
 export function itemFromUpload(
-  media: Parameters<typeof mediaItemFromUpload>[0],
+  media: UploadedMedia,
   fileName: string,
   position: { lat: number; lon: number } | null | undefined,
 ): Item | null {
   if (!position) return null;
-  const mediaItem = mediaItemFromUpload(media, { caption: fileName });
   return {
     id: `upload-${media.key.replace(/[^A-Za-z0-9._-]+/g, '-')}`,
     type: media.kind === 'video' ? 'video' : 'photo',
     title: fileName,
     position: { lat: position.lat, lon: position.lon },
-    media: { url: media.url, ...(media.kind === 'video' ? { poster: mediaItem.thumbnailUri } : {}) },
+    // `url` only. An earlier cut wrote `poster: mediaItem.thumbnailUri` for a
+    // video, which was wrong twice over: `poster` is not a field of `Media` —
+    // the schema spells it `posterUrl` — and the value was always `undefined`,
+    // because nothing generates a still when a video is uploaded. Writing a key
+    // no reader knows would have made an uploaded video *look* like it carried
+    // a poster while `sceneMediaPool` went on counting it as having none.
+    // Leaving it out is what lets the scene editor's picker say the true thing:
+    // "no poster frame".
+    media: { url: media.url },
   } as unknown as Item;
 }
 
@@ -91,7 +106,7 @@ export function MediaUploadSection({ api, onUploaded, position }: MediaUploadSec
         return;
       }
 
-      const item = itemFromUpload(outcome.media, file.name, position);
+      const item = itemFromUpload(outcome.media, file.name, position?.());
       onUploaded({
         fileName: file.name,
         format: 'media',
@@ -114,9 +129,11 @@ export function MediaUploadSection({ api, onUploaded, position }: MediaUploadSec
     <section className="io-section">
       <h3>Add a photo or video</h3>
       <p className="io-hint">
-        Uploaded to this Atlas server and pinned where the camera is looking, so it
-        travels with the story — into the scene editor&rsquo;s media, out through an
-        export, and onto the globe.
+        Uploaded to this Atlas server and pinned at the middle of the view, so it
+        travels with the story — onto the globe, out through an export, and, for a
+        photo, into the scene editor&rsquo;s backgrounds. An uploaded video has no
+        still frame, so it can be shown on the globe but not chosen as a scene
+        background.
       </p>
 
       {!upload.available && upload.reason && (
@@ -157,12 +174,7 @@ export function MediaUploadSection({ api, onUploaded, position }: MediaUploadSec
       {state.phase === 'failed' && (
         <p className="io-note" role="status">{state.failure.message}</p>
       )}
-      {!position && upload.available && (
-        <p className="io-note">
-          Nothing is focused on the globe, so there is nowhere to pin a file yet.
-          Fly to a place first.
-        </p>
-      )}
+
     </section>
   );
 }

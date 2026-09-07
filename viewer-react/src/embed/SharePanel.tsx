@@ -38,6 +38,17 @@ export interface SharePanelProps {
   privateSource?: boolean;
   /** Story title, for the frame's accessible name. */
   storyTitle?: string;
+  /**
+   * How many scenes the author has written locally but not saved.
+   *
+   * A shared link carries a camera and a moment, not a document: the authored
+   * deck lives in this browser's local storage until it is saved to Companion
+   * Memory or downloaded. Without this the panel would offer to "share this
+   * view" to someone who had just written a five-scene story, and the recipient
+   * would open the underlying document with none of it — the author's work
+   * silently absent from the thing they just handed over.
+   */
+  unsavedScenes?: number;
   /** Injected in tests; defaults to `navigator.clipboard` at call time. */
   clipboard?: ClipboardLike | null;
   /** Injected in tests; defaults to `navigator.platform`, for the ⌘C/Ctrl+C hint. */
@@ -63,7 +74,8 @@ const clamp = (n: number, min: number) => Math.max(min, Math.min(MAX_EMBED_DIMEN
  *    story to every reader.
  */
 export function SharePanel({
-  open, onClose, href, camera, timeMs, privateSource, storyTitle, clipboard, platform,
+  open, onClose, href, camera, timeMs, privateSource, storyTitle, unsavedScenes = 0,
+  clipboard, platform,
 }: SharePanelProps) {
   const [width, setWidth] = useState(DEFAULT_EMBED_WIDTH);
   const [height, setHeight] = useState(DEFAULT_EMBED_HEIGHT);
@@ -153,6 +165,14 @@ export function SharePanel({
           </button>
         </div>
         <p className="share-note">Opens at this camera and this moment. Your Companion Memory address and token are never included.</p>
+        {unsavedScenes > 0 && (
+          <p className="share-refusal" role="note">
+            A link carries a view, not a document. The {unsavedScenes} {unsavedScenes === 1 ? 'scene' : 'scenes'} you
+            have written {unsavedScenes === 1 ? 'is' : 'are'} still only in this browser — save the story to Companion
+            Memory, or download it, before sharing, or the person who opens this
+            will not see {unsavedScenes === 1 ? 'it' : 'them'}.
+          </p>
+        )}
       </section>
 
       <section className="share-section" aria-labelledby="share-embed-label">
