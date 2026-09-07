@@ -376,45 +376,35 @@ stores and API in containers, the viewer on the host for HMR.
 
 ## 8. Known gaps / deliberately out of scope today
 
-- **The viewer cannot be *built* in CI or in Docker — but it can now be
-  *typechecked*.** `@companionintelligence/tokens` is the one dependency
-  `package-lock.json` resolves to `link:../ci-common/packages/tokens`, a sibling
-  checkout of CI-Common outside this repository; it is the only such `link`
-  entry in the lockfile.
+- **The viewer builds from a clean checkout. CI needs a secret to.**
+  `@companionintelligence/tokens` used to be the one dependency
+  `package-lock.json` resolved to `link:../ci-common/packages/tokens` — a
+  sibling checkout outside this repository, and the reason neither
+  `vite build` nor the Docker image could ever complete from a clean clone.
 
-  Earlier editions of this list blamed `viewer-react/src/theme/index.ts`, which
-  imported the package for `primaryHex()`/`fontStack()`. That file has been
-  deleted: it had no importers at all, because the WebGL layers that were meant
-  to use it (`layers/cesium.ts`, `authoring/style.ts`, `authoring/entities.ts`)
-  each ended up carrying hex literals mirroring `theme/atlas.css` instead. With
-  it gone there is **no JavaScript or TypeScript import of the package left**,
-  so `tsc -p viewer-react/tsconfig.json --noEmit` succeeds in a single-repo
-  checkout and a typecheck step can be added to the `viewer` CI job today.
+  CI-Common is now a **pinned git submodule** at `third_party/ci-common`
+  (`.gitmodules`) and an npm **workspace**, so the lockfile resolves the package
+  to an in-repo path. Node resolution then finds it for both the JS graph and
+  the bare CSS specifier in `theme/theme.css`, which is why no Vite alias was
+  needed. Verified by moving the sibling checkout aside entirely and running
+  `npm ci` and `npm run build -w viewer-react` — both succeed. The palette is
+  not forked: the submodule is the canonical file, and refreshing it is
+  `git submodule update --remote third_party/ci-common` plus a committed SHA.
 
-  `vite build` is a separate resolution path and still fails.
-  `viewer-react/src/theme/theme.css` line 12 does
-  `@import '@companionintelligence/tokens/tokens.css'`, and vite resolves bare
-  CSS specifiers through node resolution just as it does JS ones — an
-  unresolvable one is a hard build error (`[vite:css] [postcss] ENOENT`), not a
-  passthrough. `theme.css` is loaded unconditionally by `src/main.tsx`, and the
-  tokens it pulls in are what `body { background: var(--background) }` and the
-  `--atlas-*` aliases in `atlas.css` are defined against, so it cannot simply be
-  dropped.
+  What remains is CI-only, and it is a policy question rather than a technical
+  one. CI-Common is **private**, and `actions/checkout`'s default
+  `GITHUB_TOKEN` is scoped to this repository, so a workflow cannot clone the
+  submodule without a PAT or deploy key in repository secrets. This build
+  workflow's stated scope is "no secrets, nothing here needs a token", so either
+  that promise changes or the package gets published to GitHub Packages
+  (`viewer-react/.npmrc` already points the scope there) instead. Nothing about
+  the local or Docker path depends on that decision.
 
-  Two ways to close it, and they are not equivalent:
-  - *Publish* `@companionintelligence/tokens` to GitHub Packages and give CI a
-    `NODE_AUTH_TOKEN`. `viewer-react/.npmrc` already points the scope there.
-    This keeps one canonical source of truth and is the right fix.
-  - *Vendor* `tokens.css` into `viewer-react/src/theme/`. Mechanically trivial —
-    the file is 208 lines with no nested `@import` and no `url()` references, so
-    a copy plus a one-line change to `theme.css` would do it, and the dependency
-    could then leave `viewer-react/package.json` entirely. But it forks the
-    canonical palette into a copy nothing keeps in sync, which is precisely what
-    `npm run lint:canon` exists to prevent. Treat it as a fallback if publishing
-    stays blocked, not as the preferred route.
-
-  Until one of them lands, [`hub/docker-compose.json`](../hub/docker-compose.json)
-  names an image that nothing in this repo produces.
+  A trap worth recording for whoever revisits this: aliasing the CSS specifier
+  to an empty stub, or configuring postcss-import to swallow it, makes the build
+  go green while shipping an app whose entire `--teal-*`/`--aqua` ramp and
+  `--background` are undefined. That converts an honest hard failure into a
+  silent one.
 - **No pixel-diff visual regression.** The old suite covered the removed
   vanilla-TS viewer's deterministic `?static=1` path. Cesium/Resium has none —
   making it deterministic (offline imagery, ion disabled, locked camera and

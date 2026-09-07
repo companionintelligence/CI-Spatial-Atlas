@@ -5,14 +5,12 @@
 # @companion-atlas/story via the npm workspace, so the root package.json and
 # packages/story-schema must be in the build context.
 #
-# KNOWN LIMITATION: this image cannot build to completion today.
-# viewer-react/src/theme/theme.css @imports @companionintelligence/tokens/tokens.css,
-# which package-lock.json resolves to `link:../ci-common/packages/tokens` — a
-# path outside this repository, unresolvable in a build context that is only
-# this repo. Everything up to (and validated by CI as of this change) the
-# `npm run build -w packages/story-schema` step below works; the final
-# `npm run build -w viewer-react` fails on that one import until the
-# dependency is published somewhere this build context can reach.
+# The @companionintelligence/tokens dependency used to make this image
+# impossible to build: package-lock.json resolved it to `link:../ci-common`, a
+# path outside the build context. It is now a pinned git submodule inside the
+# repo (third_party/ci-common) and an npm workspace, so a clean checkout with
+# `--recurse-submodules` builds with nothing else on the machine. Verified by
+# building with the sibling checkout removed entirely.
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -20,6 +18,13 @@ COPY package*.json ./
 COPY packages/story-schema/package.json packages/story-schema/tsconfig.json packages/story-schema/
 COPY packages/story-schema/src packages/story-schema/src
 COPY viewer-react/package.json viewer-react/
+# The tokens package is an npm *workspace* now, vendored as a pinned submodule
+# at third_party/ci-common (see .gitmodules). npm ci reads the lockfile before
+# `COPY . .` lands, and a workspace whose directory is absent fails the install
+# outright — so its manifest has to be here already. The whole package is copied
+# rather than just package.json because the build consumes its tokens.css
+# directly, and it is ~7KB.
+COPY third_party/ci-common/packages/tokens third_party/ci-common/packages/tokens
 RUN npm ci
 COPY . .
 # packages/story-schema ships from its own dist/, which nothing builds

@@ -6,15 +6,13 @@
 > this app is the only viewer, and the root `npm run dev` / `npm run build` /
 > `npm test` drive it.
 >
-> **Known limitation:** `@companionintelligence/tokens` (`@import`ed by
-> `src/theme/theme.css`) resolves through the lockfile to a sibling `../ci-common`
-> checkout, outside this repository, so `npm run build` and this app's Docker
-> image cannot complete in a single-repo checkout. Vitest suites and
-> `tsc --noEmit` don't touch that import and run fine — only `vite build` is
-> blocked, and only by the CSS `@import`. `npm install` is fine too: the
-> dependency is a `link:`, so npm creates the symlink from the lockfile (which
-> carries the linked package's manifest) and never dereferences it. See
-> `docs/architecture.md` §8.
+> **Builds from a clean checkout.** `@companionintelligence/tokens` is a pinned
+> git submodule at `third_party/ci-common` and an npm workspace, so
+> `git clone --recurse-submodules` then `npm ci` then `npm run build` works with
+> nothing else on the machine. It used to resolve to a sibling `../ci-common`
+> path outside the repo, which is why neither the build nor the image could ever
+> complete. Update the pin with
+> `git submodule update --remote third_party/ci-common` and commit the new SHA.
 
 ## Architecture
 
