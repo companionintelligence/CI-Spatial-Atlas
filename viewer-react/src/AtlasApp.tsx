@@ -481,6 +481,10 @@ export function AtlasApp() {
   // hides itself as the clock leaves its range.
   const layerControl = useLayers(memory?.url ?? null, { timeMs: currentMs || null });
 
+  // Authored scenes. Same account bucket as the layer stack and the drawing
+  // tools, so two accounts on one browser never inherit each other's narration.
+  const sceneControl = useScenes(memory?.url ?? null);
+
   // The document actually on screen — not just `loadedStory`, which is only the
   // `?story=` and bundled-demo path. On a Companion Memory session the story on
   // screen is `memoryToStory` output or an imported archive, so gating the merge
@@ -524,7 +528,11 @@ export function AtlasApp() {
 
   const draftStory = useCallback(
     (curated: boolean): Story | null => {
-      if (sbEntries.length === 0) return null;
+      // Authored scenes alone are enough to have something worth saving. This
+      // used to be `sbEntries.length === 0`, so a user who wrote a five-scene
+      // story and collected nothing got a disabled Save button — in the drawer
+      // that holds the only Save button they would look for.
+      if (sbEntries.length === 0 && sceneControl.count === 0) return null;
       const entries = sbEntries.map(toEntry);
       const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
       const base = curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
@@ -539,11 +547,18 @@ export function AtlasApp() {
       // story is shared with. If saving a journey silently dropped the
       // annotations the user drew on it, "Save to Memory" would be quietly
       // lossy in the one direction that is meant to be durable.
-      return layerControl.toStory(
-        draw.items.length ? mergeAuthoredItems(base, draw.items) : base,
-      );
+      // And the authored deck. Scenes were left out of this path at first, on
+      // the theory that a curated journey is a separate artifact from a written
+      // story. That was the wrong call and inconsistent with the line above:
+      // Save is the durable direction, and a deck that lives only in
+      // localStorage is one cleared setting away from gone.
+      const withItems = draw.items.length ? mergeAuthoredItems(base, draw.items) : base;
+      return sceneControl.toStory(layerControl.toStory(withItems));
     },
-    [sbEntries, sb.draft.visibility, sb.draft.title, layerControl.toStory, draw.items],
+    [
+      sbEntries, sb.draft.visibility, sb.draft.title,
+      layerControl.toStory, draw.items, sceneControl.toStory, sceneControl.count,
+    ],
   );
 
   const curate = useCallback(() => {
@@ -656,9 +671,6 @@ export function AtlasApp() {
   const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
 
 
-  // Authored scenes. Same account bucket as the layer stack and the drawing
-  // tools, so two accounts on one browser never inherit each other's narration.
-  const sceneControl = useScenes(memory?.url ?? null);
   const [scenesOpen, setScenesOpen] = useState(false);
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
   const selectedScene = sceneControl.scenes.find((sc) => sc.id === selectedSceneId) ?? null;
@@ -910,6 +922,7 @@ export function AtlasApp() {
         title={sb.draft.title}
         visibility={sb.draft.visibility}
         canSave={!!memory}
+        sceneCount={sceneControl.count}
         canClear={sb.count > 0}
         saveState={saveState}
         onClose={closeScrapbook}
