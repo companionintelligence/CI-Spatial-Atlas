@@ -266,7 +266,7 @@ describe('changing the attachment', () => {
 describe('the narration URL', () => {
   it('accepts what the presenter will play', () => {
     expect(checkAudioUrl('https://cdn.example.com/narration.mp3'))
-      .toEqual({ state: 'ok', url: 'https://cdn.example.com/narration.mp3' });
+      .toEqual({ state: 'ok', url: 'https://cdn.example.com/narration.mp3', tidied: false });
   });
 
   it('refuses what the presenter would silently drop', () => {
@@ -293,7 +293,7 @@ describe('the narration URL', () => {
     // assets, and `isLoadableMedia` already treats it as fetchable. Refusing it
     // would break a working case.
     expect(checkAudioUrl('/stories/demo/narration.mp3'))
-      .toEqual({ state: 'ok', url: '/stories/demo/narration.mp3' });
+      .toEqual({ state: 'ok', url: '/stories/demo/narration.mp3', tidied: false });
   });
 
   it('accepts a document-relative link but warns where it will and will not play', () => {
@@ -302,7 +302,7 @@ describe('the narration URL', () => {
     // story is opened from, so it is silence for everyone the story is shared
     // with, and that has to be said at entry rather than discovered.
     expect(checkAudioUrl('narration.mp3'))
-      .toEqual({ state: 'relative', url: 'narration.mp3', note: AUDIO_URL_RELATIVE });
+      .toEqual({ state: 'relative', url: 'narration.mp3', note: AUDIO_URL_RELATIVE, tidied: false });
     expect(playableAudioUrl('narration.mp3')).toBe('narration.mp3');
   });
 

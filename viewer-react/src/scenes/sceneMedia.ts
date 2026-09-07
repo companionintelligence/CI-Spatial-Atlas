@@ -404,8 +404,8 @@ export const AUDIO_URL_RELATIVE =
 export type AudioUrlCheck =
   /** Nothing typed — the field is being cleared, which is legitimate. */
   | { state: 'empty' }
-  | { state: 'ok'; url: string }
-  | { state: 'relative'; url: string; note: string }
+  | { state: 'ok'; url: string; tidied: boolean }
+  | { state: 'relative'; url: string; note: string; tidied: boolean }
   | { state: 'rejected'; reason: string };
 
 /**
@@ -433,9 +433,23 @@ export function checkAudioUrl(raw: string | null | undefined): AudioUrlCheck {
   if (!typed) return { state: 'empty' };
   const url = safeMediaUrl(typed);
   if (!url) return { state: 'rejected', reason: AUDIO_URL_REJECTED };
-  if (!isLoadableMedia(url)) return { state: 'relative', url, note: AUDIO_URL_RELATIVE };
-  return { state: 'ok', url };
+  // `tidied` is not cosmetic. The sanitiser strips C0 controls, spaces, NBSP
+  // and the BOM from ANYWHERE in the string, not just its ends — so a URL
+  // pasted out of a document or a chat window with a zero-width character in
+  // the middle, or one with an accidental internal space, is stored pointing at
+  // a *different host or path* than the one the field is showing. Silently
+  // holding an address the author never typed is the same class of dishonesty
+  // as storing a refused one; the caller uses this to reconcile the two.
+  const tidied = url !== typed;
+  if (!isLoadableMedia(url)) return { state: 'relative', url, note: AUDIO_URL_RELATIVE, tidied };
+  return { state: 'ok', url, tidied };
 }
+
+/** Said when the stored link differs from what was typed. Names the change
+ *  rather than just asserting one, because "we cleaned it up" is not something
+ *  an author can check. */
+export const AUDIO_URL_TIDIED =
+  'Invisible characters were removed from this link before it was stored — spaces, or something pasted in from a document. The field now shows exactly what the story holds.';
 
 /** The URL an author can press play on, or null when there is nothing to hear.
  *  Same sanitiser as the deck, so the preview cannot succeed where the

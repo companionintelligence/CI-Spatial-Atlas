@@ -20,7 +20,7 @@
  *    explanation this whole feature exists to avoid.
  */
 import { describe, expect, it } from 'vitest';
-import { sceneMediaPool, sceneMediaEmptyMessage } from '../src/scenes/sceneMedia.js';
+import { sceneMediaPool, sceneMediaEmptyMessage, checkAudioUrl } from '../src/scenes/sceneMedia.js';
 import type { Story } from '@companion-atlas/story';
 
 const story = (parts: Partial<Story>): Story =>
@@ -80,5 +80,35 @@ describe('the empty picker explains the real reason', () => {
     const pool = sceneMediaPool(s);
     expect(pool.candidates.map((c) => c.id)).toEqual(['p1']);
     expect(pool.unreachable).toBe(0);
+  });
+});
+
+describe('the narration field shows what is actually stored', () => {
+  // `safeMediaUrl` strips C0 controls, spaces, NBSP and the BOM from ANYWHERE
+  // in the string, so a link pasted out of a document can be stored pointing at
+  // a different host than the field displays. The editor reconciles the two on
+  // blur and says so; `tidied` is what tells it to.
+  it('flags a link that was rewritten before storage', () => {
+    const check = checkAudioUrl('https://cdn.example.com/a​.mp3'.replace('​', '﻿'));
+    expect(check.state).toBe('ok');
+    expect(check.state === 'ok' && check.tidied).toBe(true);
+    expect(check.state === 'ok' && check.url).toBe('https://cdn.example.com/a.mp3');
+  });
+
+  it('flags an internal space, which changes the host', () => {
+    const check = checkAudioUrl('https://cdn example.com/a.mp3');
+    expect(check.state === 'ok' && check.tidied).toBe(true);
+    // Not a cosmetic difference: this is a different address entirely.
+    expect(check.state === 'ok' && check.url).toBe('https://cdnexample.com/a.mp3');
+  });
+
+  it('does not flag a clean link', () => {
+    const check = checkAudioUrl('https://cdn.example.com/a.mp3');
+    expect(check.state === 'ok' && check.tidied).toBe(false);
+  });
+
+  it('does not flag surrounding whitespace, which the field trims anyway', () => {
+    const check = checkAudioUrl('  https://cdn.example.com/a.mp3  ');
+    expect(check.state === 'ok' && check.tidied).toBe(false);
   });
 });

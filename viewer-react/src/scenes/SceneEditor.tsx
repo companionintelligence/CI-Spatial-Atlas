@@ -65,6 +65,7 @@ import {
   SCENE_MEDIA_KIND_LABEL,
   backgroundCandidate,
   checkAudioUrl,
+  AUDIO_URL_TIDIED,
   playableAudioUrl,
   sceneAttachedIds,
   sceneMediaEmptyMessage,
@@ -512,7 +513,24 @@ export function SceneEditor({
             // holds have to agree, and the field is the author's intent.
             onPatch({ audioUrl: check.state === 'ok' || check.state === 'relative' ? check.url : null });
           }}
+          onBlur={() => {
+            // Show what is stored. The sanitiser removes invisible characters
+            // from anywhere in the string, so a pasted link can be stored
+            // pointing somewhere other than the text on screen — and an author
+            // cannot debug an address they are not being shown.
+            //
+            // On blur rather than on change: rewriting the field mid-keystroke
+            // moves the caret, and a URL is half-invalid for most of the time
+            // it is being typed.
+            const check = checkAudioUrl(audio);
+            if ((check.state === 'ok' || check.state === 'relative') && check.tidied) {
+              setDraft({ id: scene.id, title, narrative, audio: check.url });
+            }
+          }}
         />
+        {(audioCheck.state === 'ok' || audioCheck.state === 'relative') && audioCheck.tidied ? (
+          <p className="sc-note">{AUDIO_URL_TIDIED}</p>
+        ) : null}
         {audioPreview ? (
           <audio
             className="sc-audio"
