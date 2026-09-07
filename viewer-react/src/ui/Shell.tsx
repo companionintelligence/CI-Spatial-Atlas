@@ -11,6 +11,7 @@ import {
 export function Rail({
   onSearch, onFrameAll, onPeople, onCollections, scrapbookCount,
   onPresent, onInterop, canPresent, importedCount, onDraw, drawing,
+  onScenes, scenesOpen, sceneCount,
 }: {
   onSearch: () => void;
   onFrameAll: () => void;
@@ -25,6 +26,10 @@ export function Rail({
   canPresent: boolean;
   importedCount: number;
   onDraw: () => void;
+  onScenes: () => void;
+  scenesOpen: boolean;
+  /** Badge, and the honest signal that a story is being written. */
+  sceneCount: number;
   /** Armed state, so the rail shows a tool is active — a drawing mode that
    *  looks identical to browsing is how people lose a click. */
   drawing: boolean;
@@ -36,6 +41,9 @@ export function Rail({
     { key: 'collections', label: 'Scrapbook', Icon: LayersIcon, onClick: onCollections, badge: scrapbookCount },
     { key: 'search', label: 'Search', Icon: SparkIcon, onClick: onSearch },
     { key: 'draw', label: drawing ? 'Stop drawing' : 'Draw', Icon: PlusIcon, onClick: onDraw, active: drawing },
+    // Scenes sits beside Draw rather than beside Present: writing the story and
+    // drawing on it are both authoring, and Present is what you do afterwards.
+    { key: 'scenes', label: 'Scenes', Icon: FlagIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
     ...(canPresent ? [{ key: 'present', label: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
     { key: 'interop', label: 'Import & export', Icon: ExchangeIcon, onClick: onInterop, badge: importedCount },
   ];

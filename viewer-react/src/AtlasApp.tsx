@@ -32,6 +32,9 @@ import { applyMemoryPlaces, type MemoryImport } from './memory/import.js';
 import { isFramableBounds, type GeoPlace } from './memory/geocode.js';
 import { useFileDrop } from './interop/useFileDrop.js';
 import { useAuthoring } from './authoring/useAuthoring.js';
+import { useScenes } from './scenes/index.js';
+import { SceneList } from './scenes/SceneList.js';
+import { SceneEditor } from './scenes/SceneEditor.js';
 import { AuthoringToolbar, mergeAuthoredItems } from './authoring/index.js';
 import { importFiles } from './interop/importFile.js';
 import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
@@ -653,14 +656,60 @@ export function AtlasApp() {
   const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
 
 
-  /** What leaves the app: everything on the globe — drawn shapes and layers. */
+  // Authored scenes. Same account bucket as the layer stack and the drawing
+  // tools, so two accounts on one browser never inherit each other's narration.
+  const sceneControl = useScenes(memory?.url ?? null);
+  const [scenesOpen, setScenesOpen] = useState(false);
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  const selectedScene = sceneControl.scenes.find((sc) => sc.id === selectedSceneId) ?? null;
+  const selectedSceneIndex = sceneControl.scenes.findIndex((sc) => sc.id === selectedSceneId);
+
+  const addScene = useCallback(() => {
+    setSelectedSceneId(sceneControl.create().id);
+  }, [sceneControl.create]);
+
+  // "Capture this view" finally has somewhere to put the pose it has been
+  // producing and discarding. `createFromCamera` returns null for a pose that
+  // cannot be flown to — mid-flight, or the first frame — and adds nothing, so
+  // the deck never gains a slide that goes nowhere.
+  const addSceneFromView = useCallback(() => {
+    const scene = sceneControl.createFromCamera(draw.captureCamera());
+    if (scene) setSelectedSceneId(scene.id);
+  }, [sceneControl.createFromCamera, draw.captureCamera]);
+
+  const removeScene = useCallback((id: string) => {
+    sceneControl.remove(id);
+    setSelectedSceneId((cur) => (cur === id ? null : cur));
+  }, [sceneControl.remove]);
+
+  /**
+   * The deck Present steps through: the authored scenes reconciled with the
+   * open document by the same merge the export uses, so a preview and a
+   * download cannot disagree about what the story is.
+   *
+   * Only the scene *array* leaves this memo. The merged `Story` exists for the
+   * length of one expression and is never bound to anything the globe can
+   * reach: `deriveModel` maps scenes into memories whenever `story.scenes` is
+   * non-empty, so a rendered story carrying three authored scenes would
+   * collapse a 500-memory archive to three pins, silently and with no error.
+   */
+  const presentedScenes = useMemo(
+    () => sceneControl.toStory(story)?.scenes ?? [],
+    [sceneControl.toStory, story],
+  );
+
+  /** What leaves the app: everything on the globe — drawn shapes, layers and
+   *  the authored deck. The scrapbook's own Save is a different artifact with
+   *  its own scenes, so it deliberately does not absorb these (see draftStory). */
   const exportStory = useMemo(
     // `story` is still nullable here — the loading/error guards sit below.
     // `toStory` returns its argument unchanged when the stack is empty, so a
     // user with no layers keeps today's object identity and the viewer does not
     // rebuild its CZML data source for nothing.
-    () => layerControl.toStory(story && draw.items.length ? mergeAuthoredItems(story, draw.items) : story),
-    [story, draw.items, layerControl.toStory],
+    () => sceneControl.toStory(
+      layerControl.toStory(story && draw.items.length ? mergeAuthoredItems(story, draw.items) : story),
+    ),
+    [story, draw.items, layerControl.toStory, sceneControl.toStory],
   );
 
   // Stepping through authored scenes. The presenter owns the deck and the
@@ -753,6 +802,9 @@ export function AtlasApp() {
         onPresent={() => setPresenting(true)}
         onDraw={() => setDrawing((d) => !d)}
         drawing={drawing}
+        onScenes={() => setScenesOpen((v) => !v)}
+        scenesOpen={scenesOpen}
+        sceneCount={sceneControl.count}
         onInterop={() => setInteropOpen((o) => !o)}
         // `memoryToStory` returns `scenes: []`, so gating on scenes hid Present
         // from every real story and left it reachable only from the bundled
@@ -888,6 +940,34 @@ export function AtlasApp() {
       />
       <Lightbox memory={lightbox} onClose={closeLightbox} />
       <AuthoringToolbar {...draw.toolbarProps} />
+      {scenesOpen && (
+        <aside className="atlas-scenes" aria-label="Scene authoring">
+          <SceneList
+            scenes={sceneControl.scenes}
+            selectedId={selectedSceneId}
+            onSelect={setSelectedSceneId}
+            onCreate={addScene}
+            // Only offered once a controller is mounted on a live viewer:
+            // before that there is no pose to capture and the control would be
+            // a lie.
+            onCaptureScene={draw.ready ? addSceneFromView : undefined}
+            onRemove={removeScene}
+            onMove={sceneControl.move}
+            onMoveTo={sceneControl.moveTo}
+            problems={sceneControl.problems}
+            onClose={() => setScenesOpen(false)}
+          />
+          <SceneEditor
+            scene={selectedScene}
+            index={selectedSceneIndex < 0 ? 0 : selectedSceneIndex}
+            count={sceneControl.count}
+            onPatch={(patch) => { if (selectedSceneId) sceneControl.update(selectedSceneId, patch); }}
+            onRemove={() => { if (selectedSceneId) removeScene(selectedSceneId); }}
+            onCaptureCamera={draw.captureCamera}
+            problems={sceneControl.problems}
+          />
+        </aside>
+      )}
       <InteropPanel
         open={interopOpen}
         onClose={closeInterop}
@@ -906,6 +986,9 @@ export function AtlasApp() {
         open={presenting}
         onExit={exitPresent}
         onSceneEnter={presentScene}
+        // The authored deck, reconciled for export. Kept out of `story` on
+        // purpose — see `presentedScenes`.
+        authoredScenes={presentedScenes}
         // Without these the presenter opens empty on any Memory story: the deck
         // is built from scenes, and a Memory archive has none.
         memories={model.memories}

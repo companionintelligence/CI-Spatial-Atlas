@@ -18,18 +18,23 @@
  * re-used by the XR renderer, which has no Cesium viewer at all.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Story } from '@companion-atlas/story';
+import type { Scene, Story } from '@companion-atlas/story';
 import { PauseIcon, PlayIcon, PrevIcon, NextIcon } from './icons.js';
 import { SceneLayout } from './SceneLayout.js';
 import {
   buildDeck,
+  type DeckCursor,
   type DeckMemory,
   canStep,
   clampIndex,
-  indexOfScene,
+  deckCursor,
+  deckSignature,
   isTypingTarget,
   keyToCommand,
   positionLabel,
+  reconcileCursor,
+  sameCursor,
+  slideEnterKey,
   stepIndex,
   type DeckSlide,
 } from './sceneDeck.js';
@@ -42,6 +47,20 @@ export interface PresenterProps {
    *  presenter is reachable only from a story someone wrote by hand. */
   memories?: readonly DeckMemory[];
   story: Story;
+  /**
+   * The scenes the user is authoring, which take the deck over when there are
+   * any (see `deckScenes`).
+   *
+   * Passed as an array rather than as a story that already contains them, on
+   * purpose. `deriveModel` collapses the globe to one pin per scene the moment
+   * `story.scenes` is non-empty, so a merged story is a loaded gun sitting in
+   * the render tree next to the globe; keeping the merge inside the caller's
+   * memo and handing over only the array means there is nothing to misroute.
+   * The caller is expected to hand over the *reconciled* deck —
+   * `SceneControl.toStory(story)?.scenes` — so that Present previews exactly
+   * what saving or downloading would produce.
+   */
+  authoredScenes?: readonly Scene[] | null;
   /** Present mode on/off. Rendering nothing when closed keeps the caller's JSX
    *  free of a conditional and keeps this component's state alive across a
    *  close/open cycle only where it should be (it resets on open). */
@@ -129,14 +148,22 @@ export function Presenter({
   reduceMotion = false,
   createAudio,
   memories,
+  authoredScenes,
 }: PresenterProps) {
   const deck = useMemo(
-    () => buildDeck(story, { reduceMotion, memories }),
-    [story, reduceMotion, memories],
+    () => buildDeck(story, { reduceMotion, memories, authored: authoredScenes }),
+    [story, reduceMotion, memories, authoredScenes],
   );
   const count = deck.length;
+  /** Which scenes, in which order — the deck's identity for the reconciliation
+   *  below. Content rather than reference, so a caller that hands over a fresh
+   *  array every render costs a rebuild and not a render loop. */
+  const deckKey = useMemo(() => deckSignature(deck), [deck]);
 
-  const [index, setIndex] = useState(0);
+  /** Position plus identity — see `DeckCursor` for why an index alone stopped
+   *  being enough once the deck became editable. */
+  const [cursor, setCursor] = useState<DeckCursor>({ index: 0, id: null });
+  const index = cursor.index;
   const [contentsOpen, setContentsOpen] = useState(false);
   const [audioState, setAudioState] = useState<SceneAudioState>({ url: null, status: 'none' });
 
@@ -181,38 +208,53 @@ export function Presenter({
    * and re-run before any effect sees it.
    */
   const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    // State, not a ref, for the "was it open last render" flag: StrictMode
+  /**
+   * The deck this component last reconciled its cursor against.
+   *
+   * The follow below must run when the deck's *scenes* changed and at no other
+   * time. Run every render it would fight the reader: after a step, the
+   * cursor's id is still the previous scene's, and following it would drag the
+   * presentation straight back to the slide they just left.
+   */
+  const [seenKey, setSeenKey] = useState(deckKey);
+
+  if (open !== wasOpen || deckKey !== seenKey) {
+    // State, not refs, for the "what did the last render see" flags: StrictMode
     // double-invokes render, and a ref mutated on the first pass makes the
     // second pass take a different branch — the exact non-idempotence
     // StrictMode exists to surface.
-    setWasOpen(open);
-    if (open) {
-      const found = indexOfScene(deck, initialSceneId);
-      const start = found >= 0 ? found : 0;
-      if (start !== index) setIndex(start);
-      if (contentsOpen) setContentsOpen(false);
-    }
+    if (open !== wasOpen) setWasOpen(open);
+    if (deckKey !== seenKey) setSeenKey(deckKey);
+    // Opening resolves from `initialSceneId`; a deck edited under a live
+    // presentation keeps the reader on the scene they are reading rather than
+    // on the slot it used to occupy. `reconcileCursor` owns the interlock.
+    const next = reconcileCursor({ deck, deckKey, seenKey, open, wasOpen, cursor, initialSceneId });
+    if (!sameCursor(next, cursor)) setCursor(next);
+    if (open && !wasOpen && contentsOpen) setContentsOpen(false);
   }
 
   const current = count > 0 ? deck[clampIndex(index, count)]! : null;
 
   // ---- scene enter / leave -------------------------------------------------
 
-  /** The scene we last announced, keyed by position *and* id so that swapping
-   *  the story under a presentation re-enters rather than sitting on a stale
-   *  slide that happens to share an index. */
+  /** The scene we last announced, keyed by everything the caller acts on — see
+   *  `slideEnterKey` for why that is neither the slide object nor its index now
+   *  that the deck can be edited while it is being presented. */
   const entered = useRef<{ key: string; slide: DeckSlide } | null>(null);
 
   useEffect(() => {
     if (!open || !current) return;
-    const key = `${current.index}:${current.id}`;
+    const key = slideEnterKey(current);
     if (entered.current?.key === key) return;
     const previous = entered.current?.slide;
     entered.current = { key, slide: current };
     if (previous) leaveRef.current?.(previous);
     enterRef.current?.(current);
-    audio.enter(current.audioUrl);
+    // Only re-arm the narration when the track itself changed. Re-entering a
+    // scene because its camera was just re-captured has to move the globe, but
+    // restarting the voice-over the reader is halfway through would read as the
+    // edit having broken something.
+    if (previous?.audioUrl !== current.audioUrl) audio.enter(current.audioUrl);
   }, [open, current, audio]);
 
   useEffect(() => {
@@ -223,16 +265,46 @@ export function Presenter({
     audio.stop();
   }, [open, audio]);
 
+  /**
+   * The deck emptied while it was open — the author deleted the last scene from
+   * the editor behind the presentation.
+   *
+   * Without this the component renders null (there is no slide to show) while
+   * the caller still believes it is presenting: no way out, the last scene's
+   * narration still playing over an app that is no longer showing it, and
+   * `onSceneLeave` never fired for a slide that no longer exists. Exiting for
+   * real is the only state that matches what is on screen.
+   */
+  useEffect(() => {
+    if (!open || count > 0) return;
+    const previous = entered.current?.slide;
+    entered.current = null;
+    if (previous) leaveRef.current?.(previous);
+    audio.stop();
+    exitRef.current();
+  }, [open, count, audio]);
+
   // Unmounting mid-presentation must not leave a voice playing over an app that
   // is no longer showing the slide it belongs to.
   useEffect(() => () => audio.stop(), [audio]);
 
   // ---- stepping ------------------------------------------------------------
 
-  /** Jump straight to a scene (the contents list). Clamped, because the deck
-   *  can shrink under a presentation when the story is swapped. */
-  const go = useCallback((to: number) => setIndex(clampIndex(to, count)), [count]);
-  const step = useCallback((dir: -1 | 1) => setIndex((i) => stepIndex(i, dir, count)), [count]);
+  /**
+   * Jump straight to a scene (the contents list). Clamped, because the deck can
+   * shrink under a presentation — when the story is swapped, and now whenever
+   * the author deletes a scene from the editor behind it.
+   *
+   * Both of these record the scene at the position as well as the position, so
+   * that a deck edit arriving later can find the reader again. `deckCursor` is
+   * pure, which is what makes it safe inside an updater: StrictMode invokes
+   * updaters twice.
+   */
+  const go = useCallback((to: number) => setCursor(deckCursor(deck, to)), [deck]);
+  const step = useCallback(
+    (dir: -1 | 1) => setCursor((c) => deckCursor(deck, stepIndex(c.index, dir, count))),
+    [deck, count],
+  );
   const exit = useCallback(() => exitRef.current(), []);
 
   const toggleAudio = useCallback(() => {
@@ -265,8 +337,8 @@ export function Presenter({
       switch (cmd) {
         case 'next': step(1); break;
         case 'prev': step(-1); break;
-        case 'first': setIndex(0); break;
-        case 'last': setIndex(count - 1); break;
+        case 'first': go(0); break;
+        case 'last': go(count - 1); break;
         case 'contents': setContentsOpen((o) => !o); break;
         case 'audio': toggleAudio(); break;
         case 'exit':
@@ -282,7 +354,7 @@ export function Presenter({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, count, step, exit, toggleAudio]);
+  }, [open, count, go, step, exit, toggleAudio]);
 
   // ---- focus ---------------------------------------------------------------
 

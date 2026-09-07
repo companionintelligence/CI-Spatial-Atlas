@@ -1,0 +1,405 @@
+/* ————————————————————————————————————————————————————————————————
+   Scene authoring — the deck list and the editor for one scene.
+
+   Colocated with the feature and imported by `SceneList.tsx` /
+   `SceneEditor.tsx`, exactly as `theme/authoring.css` is imported by the
+   drawing toolbar; the shell's stylesheet stays the shell's.
+
+   It borrows the shell's grammar on purpose so this reads as part of Atlas
+   rather than as a form bolted onto it: `.atlas-scenes` is the scrapbook
+   drawer's glass and geometry, `.sc-action` is `.draw-action`, the active
+   pill is `.switch button.active`'s teal→aqua gradient over `--atlas-ink`,
+   and the focus ring is the one every other control in the app uses.
+
+   Every colour is a custom property from `theme/atlas.css`. Where a
+   translucent fill is wanted, `color-mix` dilutes a token and the solid token
+   is repeated as the preceding declaration, so a browser without `color-mix`
+   still gets a readable panel instead of a transparent one — the same
+   two-declaration idiom as `theme/authoring.css`.
+   ———————————————————————————————————————————————————————————————— */
+
+/* ---- the drawer ----------------------------------------------------------
+ * Rendered by the shell around <SceneList> + <SceneEditor> (see the two
+ * components' headers). Same right-hand column, width and inset as
+ * `.atlas-sbdrawer`, so opening the scene panel and opening the scrapbook do
+ * not move the reader's eye to two different places.
+ * ------------------------------------------------------------------------- */
+.atlas-scenes {
+  position: absolute;
+  grid-area: stage;
+  z-index: var(--z-drawer);
+  top: 14px;
+  right: 14px;
+  bottom: 118px; /* clear of the time machine */
+  width: 356px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--atlas-line-2);
+  background: var(--atlas-card);
+  background: var(--atlas-glass);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--atlas-shadow);
+  overflow: hidden; /* the two sections scroll, not the drawer */
+  /* The drawer may be mounted inside `.atlas-overlay`, which is
+     `pointer-events: none` so the globe stays draggable underneath it. */
+  pointer-events: auto;
+  color: var(--atlas-fg);
+  font-size: 12px;
+}
+
+/* ---- sections ------------------------------------------------------------ */
+/* The deck is capped and the editor takes the rest: with a long story the list
+   would otherwise push every field of the scene being written off-screen, and
+   the panel would be a list with an editor rumoured to be below it. */
+.sc-deck {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 44%;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+/* The cap exists to stop a long list crowding out the editor. With no list at
+   all there is nothing to crowd, and capping the empty state clips the one
+   paragraph in the app that has to teach. Browsers without `:has` keep the cap,
+   which is harmless at any realistic drawer height. */
+.sc-deck:not(:has(.sc-list)) { max-height: none; }
+.sc-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding-top: 12px;
+  border-top: 1px solid var(--atlas-line);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.sc-editor.sc-blank { justify-content: center; }
+.sc-deck::-webkit-scrollbar, .sc-editor::-webkit-scrollbar, .sc-list::-webkit-scrollbar { width: 8px; }
+.sc-deck::-webkit-scrollbar-thumb,
+.sc-editor::-webkit-scrollbar-thumb,
+.sc-list::-webkit-scrollbar-thumb { background: var(--atlas-line-2); border-radius: 8px; }
+
+/* ---- headers ------------------------------------------------------------- */
+.sc-head { display: flex; align-items: center; gap: 8px; flex: none; }
+.sc-head b { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--atlas-fg-hi); }
+.sc-head b svg { width: 16px; height: 16px; color: var(--atlas-teal); }
+.sc-of { color: var(--atlas-fg-dim); font-weight: 600; font-size: 12px; }
+.sc-count {
+  font: 700 10px/1 var(--atlas-mono);
+  color: var(--atlas-ink);
+  background: var(--atlas-teal);
+  border-radius: 8px;
+  padding: 3px 6px;
+}
+.sc-close {
+  margin-left: auto;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--atlas-fg-dim);
+  font: inherit;
+  cursor: pointer;
+}
+.sc-close:hover { color: var(--atlas-fg-hi); background: color-mix(in srgb, var(--atlas-teal) 12%, transparent); }
+.sc-head-action { margin-left: auto; flex: 0 0 auto; }
+
+/* ---- actions — the same control as `.draw-action` ------------------------ */
+.sc-row-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
+.sc-action {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--atlas-line-2);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  color: var(--atlas-fg);
+  font: 600 11.5px inherit;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.sc-action svg { width: 14px; height: 14px; }
+.sc-action:hover:not(:disabled) { border-color: var(--atlas-teal); color: var(--atlas-fg-hi); }
+.sc-action:disabled { opacity: .42; cursor: not-allowed; }
+.sc-action.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua));
+  color: var(--atlas-ink);
+  /* The glow is diluted from the token rather than from a copied hex, so it
+     tracks the ramp. A browser without `color-mix` drops the declaration and
+     loses only the glow. */
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--atlas-aqua) 26%, transparent);
+}
+.sc-action.ghost { flex: 0 0 auto; border-color: var(--atlas-line); color: var(--atlas-fg-dim); }
+.sc-action.ghost:hover { color: var(--atlas-fg); }
+.sc-action.danger { flex: 0 0 auto; color: var(--atlas-coral); border-color: var(--atlas-line); }
+.sc-action.danger:hover:not(:disabled) {
+  border-color: var(--atlas-coral);
+  background: color-mix(in srgb, var(--atlas-coral) 14%, transparent);
+  color: var(--atlas-coral);
+}
+
+/* ---- the deck list ------------------------------------------------------- */
+.sc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sc-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px 5px 4px 4px;
+  border-radius: 10px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 35%, transparent);
+  transition: border-color .15s, background .15s;
+}
+.sc-item:hover { border-color: var(--atlas-line-2); }
+/* The current scene: a teal left edge plus a lifted fill. Not colour alone —
+   the row's own `aria-current` carries it for anyone who cannot see either. */
+.sc-item.selected {
+  border-color: var(--atlas-teal);
+  background: color-mix(in srgb, var(--atlas-teal) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--atlas-teal);
+}
+.sc-item.dragging { opacity: .5; }
+
+.sc-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-no {
+  flex: none;
+  width: 20px; height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  border: 1px solid var(--atlas-line-2);
+  font: 700 10px/1 var(--atlas-mono);
+  color: var(--atlas-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.sc-item.selected .sc-no { color: var(--atlas-ink); background: var(--atlas-teal); border-color: transparent; }
+.sc-name { min-width: 0; flex: 1 1 auto; }
+.sc-name b {
+  display: block;
+  font-size: 12px;
+  color: var(--atlas-fg-hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sc-name small { display: block; margin-top: 2px; font: 500 9.5px/1.3 var(--atlas-mono); color: var(--atlas-fg-dim); }
+.sc-flag { flex: none; display: grid; place-items: center; color: var(--atlas-dusk); }
+.sc-flag svg { width: 14px; height: 14px; }
+
+.sc-move { display: flex; align-items: center; gap: 2px; flex: none; }
+.sc-mini {
+  width: 24px; height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--atlas-fg-dim);
+  cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.sc-mini svg { width: 15px; height: 15px; }
+.sc-mini:hover:not(:disabled) { color: var(--atlas-teal); background: color-mix(in srgb, var(--atlas-teal) 14%, transparent); }
+.sc-mini:disabled { opacity: .3; cursor: not-allowed; }
+.sc-mini.danger:hover:not(:disabled) { color: var(--atlas-coral); background: color-mix(in srgb, var(--atlas-coral) 14%, transparent); }
+
+/* ---- fields — the same grammar as `.draw-field` -------------------------- */
+.sc-field { display: flex; flex-direction: column; gap: 5px; }
+.sc-field > label,
+.sc-label {
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--atlas-fg-dim);
+  font-weight: 700;
+}
+.sc-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 55%, transparent);
+  color: var(--atlas-fg-hi);
+  font: 500 12.5px inherit;
+}
+.sc-input::placeholder { color: var(--atlas-fg-dim); }
+.sc-body {
+  /* Vertical only: a textarea a user can widen escapes a 356px drawer and
+     paints over the globe. */
+  resize: vertical;
+  min-height: 108px;
+  line-height: 1.55;
+  /* Monospace, because this is Markdown source: the two spaces that make a
+     line break, and the alignment of a list, are invisible in a proportional
+     face and the author cannot see what they typed. */
+  font: 500 12px/1.55 var(--atlas-mono);
+}
+.sc-note { margin: 0; font-size: 10.5px; line-height: 1.45; color: var(--atlas-fg-dim); }
+.sc-note b, .sc-note i { color: var(--atlas-teal); font-style: normal; font-weight: 600; }
+
+/* ---- layout picker ------------------------------------------------------- */
+.sc-layouts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.sc-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 2px 5px;
+  border: 1px solid var(--atlas-line);
+  border-radius: 9px;
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  color: var(--atlas-fg-dim);
+  font: 600 8.5px/1.15 inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.sc-layout svg { width: 26px; height: 20px; }
+.sc-layout:hover { color: var(--atlas-fg); border-color: var(--atlas-line-2); }
+.sc-layout.active {
+  color: var(--atlas-ink);
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--atlas-teal) 26%, transparent);
+}
+
+/* ---- camera pose --------------------------------------------------------- */
+.sc-pose {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+  border-radius: 11px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 42%, transparent);
+}
+.sc-posetext {
+  margin: 0;
+  font: 600 11px/1.4 var(--atlas-mono);
+  color: var(--atlas-teal);
+  font-variant-numeric: tabular-nums;
+}
+/* "No view stored" is a state, not a reading — so it is prose in the dim
+   colour rather than a monospace number that looks like data. */
+.sc-posetext.none { font: 500 11px/1.45 inherit; color: var(--atlas-fg-dim); }
+
+/* ---- warnings ------------------------------------------------------------ */
+.sc-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--atlas-dusk);
+}
+.sc-warning svg { width: 13px; height: 13px; flex: 0 0 13px; margin-top: 1px; }
+
+/* ---- empty states -------------------------------------------------------- */
+.sc-empty { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--atlas-fg-dim); }
+.sc-empty b { color: var(--atlas-teal); font-weight: 700; }
+
+/* The reorder announcement. Visually hidden — the list itself is the visible
+   feedback for anyone watching it — but always present in the DOM so assistive
+   tech has a region to observe. */
+.sc-live,
+.sc-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+
+/* ---- focus: the same ring the rest of the shell uses --------------------- */
+.sc-action:focus-visible,
+.sc-close:focus-visible,
+.sc-pick:focus-visible,
+.sc-mini:focus-visible,
+.sc-layout:focus-visible,
+.sc-input:focus-visible {
+  outline: 2px solid var(--atlas-aqua-light);
+  outline-offset: 2px;
+}
+
+/* ---- narrow --------------------------------------------------------------
+ * Below 760px the shell reflows (rail → bottom tab bar, inspector → bottom
+ * sheet) and a 356px drawer pinned right would cover the whole globe. It
+ * becomes a bottom sheet, which still leaves the top half of the map visible —
+ * and the map has to stay visible, because "capture this view" is the one
+ * control here that depends on what the globe is showing.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .atlas-scenes {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-height: 62vh;
+    padding: 12px;
+  }
+  .sc-deck { max-height: 38%; }
+}
+
+/* Coarse pointers need real tap targets — matching `atlas.css`'s own rule and
+   `authoring.css`'s. */
+@media (pointer: coarse) {
+  .sc-action { min-height: 40px; }
+  .sc-mini { width: 34px; height: 34px; }
+  .sc-layout { min-height: 52px; }
+  .sc-pick { min-height: 40px; }
+}
+
+/* The shell already blanket-disables animation under reduced motion for
+   `.atlas-app *`, but this drawer can be mounted outside that subtree (as a
+   sibling overlay), so it states the rule for itself rather than depending on
+   where the consumer happens to put it. */
+@media (prefers-reduced-motion: reduce) {
+  .atlas-scenes,
+  .atlas-scenes * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
