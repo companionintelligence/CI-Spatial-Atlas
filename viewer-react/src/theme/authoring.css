@@ -25,7 +25,10 @@
      with `.atlas-legend`, so the stage's left gutter reads as one column. */
   left: 18px;
   top: 92px;
-  width: 264px;
+  /* The same column as the stats ribbon above and the legend below — see
+     `--atlas-gutter` in atlas.css. Hard-coding 264px here left a visible step
+     in the gutter and, once the measure tool made six, clipped the last one. */
+  width: var(--atlas-gutter, 296px);
   max-height: calc(100% - 92px - 130px); /* clear of the time machine */
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -54,8 +57,8 @@
 /* Six tools now, not five: the measure tool joined the row because it is armed
    and disarmed exactly like the others, and putting it anywhere else would make
    "which tool is live" two questions instead of one. `1fr` columns keep the
-   pills equal, and the label font is already 9px — the constraint that gives is
-   the tap target, which the coarse-pointer rule below restores. */
+   pills equal; icon-only keeps six of them legible in the gutter's width, which
+   a 9px caption under each no longer was — "Measure" rendered clipped. */
 .draw-modes {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -66,22 +69,25 @@
   background: var(--atlas-card);
   background: color-mix(in srgb, var(--atlas-ink) 55%, transparent);
 }
+/* Square, centred, no caption: the name is on `title` and `aria-label`, which
+   is where a pointer and a screen reader look for it anyway. `aspect-ratio`
+   rather than a fixed height so the row stays square at whatever width the
+   gutter gives it — at 296px that lands near 42px, already a real tap target
+   before the coarse-pointer floor below. */
 .draw-mode {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 7px 2px 6px;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 0;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
   color: var(--atlas-fg-dim);
-  font: 600 9px/1 inherit;
-  letter-spacing: .02em;
   cursor: pointer;
   transition: color .15s, background .15s, border-color .15s;
 }
-.draw-mode svg { width: 17px; height: 17px; }
+.draw-mode svg { width: 18px; height: 18px; }
 /* The measure tool is not a drawing tool, and its active state says so: dusk
    rather than the teal→aqua gradient every shape tool lights up with. It is the
    same signal `entities.ts` uses on the globe, so the pill and the geometry it

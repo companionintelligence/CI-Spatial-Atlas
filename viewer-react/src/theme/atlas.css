@@ -47,6 +47,14 @@
   --z-popover: 5;    /* inside --z-chrome */
   --z-modal: 60;     /* command palette */
   --z-lightbox: 70;  /* full-screen media */
+
+  /* Width of the stage's left gutter column.
+     `.atlas-stats`, `.atlas-draw` and `.atlas-legend` all sit at left: 18px and
+     read as one column, so their width is one decision, not three. It was three:
+     the stats ribbon was content-sized (3 cards x 92px + 2 x 10px gap = 296px)
+     while the drawing panel hard-coded 264px, and the mismatch was visible as a
+     step in the gutter and, once a sixth tool arrived, as a clipped button. */
+  --atlas-gutter: 296px;
 }
 
 .atlas-app *, .atlas-overlay * { box-sizing: border-box; }
@@ -158,8 +166,11 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-scrap .cap b { display: block; font-size: 11.5px; color: var(--atlas-fg-hi); font-weight: 600; }
 .atlas-scrap .cap span { display: block; font: 500 9.5px/1.3 var(--atlas-mono); color: var(--atlas-fg-dim); margin-top: 3px; }
 
-.atlas-stats { position: absolute; left: 18px; top: 16px; display: flex; gap: 10px; }
-.atlas-stat { background: var(--atlas-glass); border: 1px solid var(--atlas-line); border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(10px); min-width: 92px; }
+.atlas-stats { position: absolute; left: 18px; top: 16px; display: flex; gap: 10px; width: var(--atlas-gutter); }
+/* `flex: 1` so the cards divide the gutter rather than defining it — the
+   ribbon's width is now stated once, above, and a fourth stat would share the
+   same column instead of widening it past the panel below. */
+.atlas-stat { flex: 1 1 0; background: var(--atlas-glass); border: 1px solid var(--atlas-line); border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(10px); min-width: 0; }
 .atlas-stat b { display: block; font-size: 20px; font-weight: 700; color: var(--atlas-fg-hi); letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
 .atlas-stat span { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--atlas-fg-dim); }
 

@@ -112,15 +112,6 @@ const MODE_LABEL: Record<AuthoringMode, string> = {
   measure: 'Measure distance and area — nothing is saved',
 };
 
-const MODE_SHORT: Record<AuthoringMode, string> = {
-  idle: 'Select',
-  marker: 'Marker',
-  line: 'Line',
-  polygon: 'Area',
-  note: 'Note',
-  measure: 'Measure',
-};
-
 export function AuthoringToolbar({
   mode, onMode,
   draft, onFinish, onCancel, onUndoVertex,
@@ -177,8 +168,13 @@ export function AuthoringToolbar({
             title={MODE_LABEL[m]}
             onClick={() => onMode(m)}
           >
+            {/* Icon alone. The name lived under it in a 9px font that was the
+                first thing to be squeezed as tools were added — six of them no
+                longer fitted, and "Measure" was rendering clipped. `title` and
+                `aria-label` already carried the full sentence, so dropping the
+                caption loses nothing a pointer or a screen reader could reach,
+                and the label they get is the longer, more useful one. */}
             <ModeIcon mode={m} aria-hidden="true" />
-            <span>{MODE_SHORT[m]}</span>
           </button>
         ))}
       </div>
