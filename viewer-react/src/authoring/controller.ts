@@ -8,6 +8,7 @@ import {
   editableVertices,
   finishDraft,
   isDrawingMode,
+  isMeasureMode,
   setHover,
   setMode as setDraftMode,
   snapshot,
@@ -17,16 +18,37 @@ import {
   type DraftState,
 } from './draft.js';
 import { cameraFromPose, poseFromCamera } from './camera.js';
-import { typingInFormField, withinDoubleClick } from './gesture.js';
+import { historyIntent, typingInFormField, withinDoubleClick } from './gesture.js';
 import {
   addDraftEntities,
   addItemEntities,
   addSelectionHandles,
   createAuthoringDataSource,
+  MEASURE_COLOR,
   removeByPrefix,
   updateDraftEntities,
+  updateMeasureEntities,
   type DraftEntities,
 } from './entities.js';
+import {
+  measurementOf,
+  type Measurement,
+  type MeasureUnits,
+} from './measure.js';
+import {
+  createHistory,
+  currentItems,
+  describeAction,
+  record,
+  redo as redoHistory,
+  resetHistory,
+  sameSummary,
+  summarize,
+  undo as undoHistory,
+  type HistoryActionKind,
+  type HistoryState,
+  type HistorySummary,
+} from './history.js';
 import { DRAFT_VERTEX_PREFIX, MOVE_HANDLE_ID, VERTEX_PREFIX, parsePickedId } from './ids.js';
 import { pickEntityId, pickGlobePoint } from './pick.js';
 import {
@@ -105,6 +127,15 @@ export interface AuthoringControllerOptions {
   onSelect?: (selection: AuthoringSelection | null) => void;
   /** Fired as the draft changes, for the toolbar's vertex count and warning. */
   onDraft?: (draft: DraftSnapshot) => void;
+  /** Fired when the retained measurement is taken, replaced or cleared. Never
+   *  carries an `Item` — a measurement is not one. See `measure.ts`. */
+  onMeasure?: (measurement: Measurement | null) => void;
+  /** Fired when undo/redo availability changes, so a toolbar can enable its
+   *  buttons. Only when the ANSWER changes, not on every recorded action. */
+  onHistory?: (summary: HistorySummary) => void;
+  /** Which units the on-globe measurement label is written in. One setting for
+   *  the whole feature — see `measure.ts`. */
+  units?: MeasureUnits;
   /** Seed style for the first shape. */
   style?: Partial<AuthoringStyle>;
   /** Id prefix for new items — `draw-polygon-1` by default. */
@@ -168,14 +199,40 @@ export interface AuthoringController {
 
   setMode(mode: AuthoringMode): void;
   getMode(): AuthoringMode;
-  /** Commit the shape in progress. Returns the item, or null with a warning
-   *  delivered through `onDraft`. */
+  /**
+   * Commit the shape in progress. Returns the item, or null with a warning
+   * delivered through `onDraft`.
+   *
+   * Returns null in `measure` mode **and takes the measurement instead** — the
+   * gesture that finishes a line and the gesture that finishes a measurement are
+   * the same double-click, so they share an entry point, and this is the one
+   * place the two diverge. Read `getMeasurement()` for the result.
+   */
   finish(opts?: { allowSelfIntersecting?: boolean }): Item | null;
   /** Escape: drop the shape in progress, keep the tool. */
   cancel(): void;
-  /** Backspace: take the last vertex back. */
+  /** Backspace: take the last vertex back of the shape IN PROGRESS. Unrelated
+   *  to `undo()` below — see the header of `history.ts`. */
   undoVertex(): void;
   getDraft(): DraftSnapshot;
+
+  /** The measurement retained from the last completed measure gesture, or null.
+   *  Never an `Item`, never in the story, never persisted. */
+  getMeasurement(): Measurement | null;
+  /** Drop the retained measurement and its geometry off the globe. */
+  clearMeasurement(): void;
+  setUnits(units: MeasureUnits): void;
+  getUnits(): MeasureUnits;
+
+  /**
+   * Step the committed item list back / forward one action.
+   *
+   * Returns whether anything actually moved, which is what lets the key handler
+   * leave Ctrl+Z to the browser when this controller has nothing to undo.
+   */
+  undo(): boolean;
+  redo(): boolean;
+  getHistory(): HistorySummary;
 
   setStyle(patch: Partial<AuthoringStyle>): void;
   getStyle(): AuthoringStyle;
@@ -218,7 +275,10 @@ export function createAuthoringController(
     throw new Error('createAuthoringController needs a live Cesium.Viewer');
   }
 
-  const { onChange, onSelect, onDraft, idPrefix = 'draw', renderItems = true } = options;
+  const {
+    onChange, onSelect, onDraft, onMeasure, onHistory,
+    idPrefix = 'draw', renderItems = true,
+  } = options;
 
   let destroyed = false;
   /** Input gate. `false` means every handler below returns early; it says
@@ -230,6 +290,15 @@ export function createAuthoringController(
   let items: Item[] = [];
   let selection: AuthoringSelection | null = null;
   let draftEntities: DraftEntities | null = null;
+  /** The last completed measurement. Session-lived, never an `Item`, never
+   *  written anywhere — see the header of `measure.ts` for why it survives a
+   *  tool change and why it dies with the session. */
+  let measurement: Measurement | null = null;
+  let units: MeasureUnits = options.units ?? 'metric';
+  /** Undo/redo over the committed items. Starts empty and is re-based by
+   *  `setItems` — see `resetHistory`. */
+  let history: HistoryState = createHistory([]);
+  let historySummary: HistorySummary = summarize(history);
 
   /** Where the last committed vertex was on screen — the double-click guard. */
   let lastVertexWindow: Cesium.Cartesian2 | null = null;
@@ -271,6 +340,45 @@ export function createAuthoringController(
   const emitDraft = (): void => onDraft?.(snapshot(draft));
 
   const emitChange = (change: AuthoringChange): void => onChange?.(items, change);
+
+  /** Fire `onHistory` only when the answer to "can I undo?" actually moved.
+   *  Recording an action while five are already stacked changes nothing the
+   *  toolbar renders, and firing anyway would re-render it on every vertex
+   *  drag release for no visible difference. */
+  const emitHistory = (): void => {
+    const next = summarize(history);
+    if (sameSummary(historySummary, next)) return;
+    historySummary = next;
+    onHistory?.(next);
+  };
+
+  /**
+   * Record one committed action.
+   *
+   * Called AFTER `items` has already moved, and reads the live value rather
+   * than taking it as an argument — a signature that let a caller record a
+   * different array from the one it just installed is a signature that will
+   * eventually be handed one.
+   */
+  const remember = (kind: HistoryActionKind, itemType?: string, coalesceKey?: string): void => {
+    history = record(history, items, { kind, label: describeAction(kind, itemType), coalesceKey });
+    emitHistory();
+  };
+
+  const syncMeasure = (): void => {
+    if (destroyed || viewer.isDestroyed()) return;
+    updateMeasureEntities(ds, measurement, units);
+    nudge(viewer);
+  };
+
+  const setMeasurement = (next: Measurement | null): void => {
+    // `null → null` happens on every Escape with nothing measured; firing for it
+    // would make a consumer re-render for a keystroke that did nothing.
+    if (measurement === null && next === null) return;
+    measurement = next;
+    syncMeasure();
+    onMeasure?.(next);
+  };
 
   const sameSelection = (a: AuthoringSelection | null, b: AuthoringSelection | null): boolean =>
     a === b || (!!a && !!b && a.kind === b.kind && a.id === b.id);
@@ -316,7 +424,13 @@ export function createAuthoringController(
 
   const ensureDraftEntities = (): void => {
     if (draftEntities || destroyed) return;
-    draftEntities = addDraftEntities(ds, style.color, style.fillOpacity);
+    // The measure tool's rubber band is drawn in the measure colour, not in the
+    // style the shape tools are set to. Otherwise a user who had picked teal
+    // would watch a teal dashed line appear under the measure tool and
+    // reasonably conclude they were drawing one.
+    draftEntities = isMeasureMode(draft.mode)
+      ? addDraftEntities(ds, MEASURE_COLOR, 0.12)
+      : addDraftEntities(ds, style.color, style.fillOpacity);
   };
 
   const clearDraftEntities = (): void => {
@@ -365,9 +479,44 @@ export function createAuthoringController(
     ...(options.reservedIds ? Array.from(options.reservedIds()) : []),
   ];
 
+  /**
+   * Finish a measurement.
+   *
+   * Deliberately a sibling of `commit`, not a branch inside it: the two share a
+   * gesture and share nothing else. This one allocates no id, stamps no
+   * `source`, never touches `items`, and therefore cannot reach `onChange`,
+   * `writeItems`, the history, or `mergeAuthoredItems`. Keeping the item path
+   * and the measurement path physically separate is what makes "a measurement
+   * never ends up in an export" a property of the code rather than a promise.
+   *
+   * The tool stays armed and the draft resets, because measuring is something
+   * people do in runs — check this distance, then that one — and having to
+   * re-arm between readings would be the same friction as re-drawing.
+   */
+  const commitMeasurement = (): Measurement | null => {
+    if (destroyed) return null;
+    const next = measurementOf(draft.vertices);
+    if (!next) {
+      draft = { ...draft, warning: 'A measurement needs at least two points.' };
+      emitDraft();
+      return null;
+    }
+    setMeasurement(next);
+    draft = createDraft('measure');
+    lastVertexWindow = null;
+    syncDraft();
+    return next;
+  };
+
   const commit = (opts?: { allowSelfIntersecting?: boolean }): Item | null => {
     if (destroyed) return null;
     const mode = draft.mode;
+    // Measuring finishes on the same double-click and the same Enter, and must
+    // not fall through to anything that allocates an id.
+    if (isMeasureMode(mode)) {
+      commitMeasurement();
+      return null;
+    }
     if (!canFinish(draft)) {
       // Not an error — the user pressed Enter early. Say what is missing.
       draft = { ...draft, warning: finishFailureMessage(draft) };
@@ -414,6 +563,10 @@ export function createAuthoringController(
     syncDraft();
     syncCursor();
     syncDoubleClickSuppression();
+    // History before `onChange`, so a consumer that reads `getHistory()` from
+    // inside its change handler (the React binding does exactly this) sees the
+    // step that produced the items it was just handed.
+    remember('create', result.item.type);
     emitChange({ kind: 'add', id: result.item.id });
     return result.item;
   };
@@ -421,6 +574,48 @@ export function createAuthoringController(
   const finishFailureMessage = (d: DraftState): string => {
     const need = d.mode === 'polygon' ? 3 : d.mode === 'line' ? 2 : 1;
     return `A ${d.mode} needs at least ${need} point${need === 1 ? '' : 's'} — ${d.vertices.length} placed.`;
+  };
+
+  /**
+   * Install the item list a history step points at.
+   *
+   * Returns false when the step did not move, which is how the key handler
+   * decides whether it may claim Ctrl+Z.
+   *
+   * The selection is reconciled rather than preserved blindly. An undo can make
+   * the selected item vanish (undoing its creation) or change shape (undoing a
+   * drag), and a stale `selection.item` is not a cosmetic problem: the vertex
+   * handles are drawn from it and are live drag targets, so handles left over a
+   * shape that no longer exists write to a ghost. A restored item is NOT
+   * auto-selected — the shape reappearing is the feedback, and selecting it
+   * would put drag handles under a pointer the user has not moved.
+   */
+  const applyHistory = (next: HistoryState): boolean => {
+    if (next === history) return false;
+    history = next;
+    items = currentItems(history);
+    if (selection?.kind === 'item') {
+      const item = findItem(items, selection.id);
+      selection = item ? { ...selection, item } : null;
+      // Re-arm the tool with the restored shape's style, exactly as clicking it
+      // would. Without this, undoing a restyle leaves the swatch lit on the
+      // colour that was just taken away — the shape is teal again and the panel
+      // still says orange, and the next shape drawn comes out orange.
+      if (item) style = mergeStyle(style, styleOf(item));
+      redrawItems();
+      // Emitted unconditionally, NOT through `setSelection`. Its identity guard
+      // compares kind and id only, so an undo that changed the selected item's
+      // geometry or style without changing its id would be suppressed — and the
+      // panel would stay bound to a version of the shape that no longer exists.
+      onSelect?.(selection);
+    } else {
+      redrawItems();
+    }
+    emitHistory();
+    // `replace`, not `update`: an undo can move any number of items at once, so
+    // there is no single id to name.
+    emitChange({ kind: 'replace' });
+    return true;
   };
 
   const setSelection = (next: AuthoringSelection | null, { emit }: { emit: boolean }): void => {
@@ -474,9 +669,20 @@ export function createAuthoringController(
           // A handle: the drag path owns it, and a click on it must not
           // deselect the shape it belongs to.
           break;
+        case 'measure':
+          // A retained measurement is scenery. Clicking through it must not
+          // deselect the shape being worked on — the measurement is very often
+          // drawn right across the thing it was taken about — and it must not
+          // become a selection of its own, because it is not an item and every
+          // control the selection panel offers (delete, restyle, drag) would be
+          // a control that does nothing.
+          break;
       }
       return;
     }
+
+    // A click while measuring places a measurement point and nothing else.
+    // `commit()` refuses measure mode above, so this cannot allocate an id.
 
     // The second click of a double-click lands here before LEFT_DOUBLE_CLICK
     // does. Drop it — see DOUBLE_CLICK_PIXELS.
@@ -565,11 +771,29 @@ export function createAuthoringController(
     cc.enableLook = false;
   }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
 
+  /**
+   * End a drag — and record it as exactly ONE history entry.
+   *
+   * This is where the granularity question is answered, and it is answered by
+   * *when* rather than by coalescing. `MOUSE_MOVE` above rewrites `items` on
+   * every pointer sample and deliberately records nothing; the entry is written
+   * here, once, on release. So the state one step back in history is the state
+   * before the drag began — which is what "undo that drag" has to mean, and
+   * which no amount of merging after the fact could reconstruct as reliably.
+   *
+   * It is also why `emitChange` has always fired here rather than per sample:
+   * the React binding writes `localStorage` on every change, and a drag that
+   * fired per sample would write it sixty times a second.
+   */
   const endDrag = (): void => {
     if (!drag) return;
+    const kind = drag.kind;
     drag = null;
     releaseCamera();
-    if (selection?.kind === 'item') emitChange({ kind: 'update', id: selection.id });
+    if (selection?.kind === 'item') {
+      remember(kind === 'vertex' ? 'vertex' : 'move', selection.item?.type);
+      emitChange({ kind: 'update', id: selection.id });
+    }
   };
 
   const releaseCamera = (): void => {
@@ -604,14 +828,36 @@ export function createAuthoringController(
   // -------------------------------------------------------------------------
 
   const onKeyDown = (event: KeyboardEvent): void => {
+    // `inert()` is the "only while the authoring surface is armed" gate: a
+    // disarmed controller must not eat the app's Ctrl+Z, and `typingInFormField`
+    // is the "never while focus is in a text field" one — the browser's own undo
+    // owns a text field. Both are checked before anything else, for every key.
     if (inert()) return;
     if (typingInFormField(event.target)) return;
+
+    // Undo/redo. `preventDefault` ONLY when something actually moved: with an
+    // empty history this controller has no claim on the keystroke, and
+    // swallowing it would leave the user pressing Ctrl+Z at a page where
+    // nothing at all responds.
+    const intent = historyIntent(event);
+    if (intent) {
+      const moved = intent === 'undo' ? api.undo() : api.redo();
+      if (moved) event.preventDefault();
+      return;
+    }
 
     if (event.key === 'Escape') {
       if (isDrawingMode(draft.mode) && draft.vertices.length > 0) {
         draft = cancelDraft(draft);
         lastVertexWindow = null;
         syncDraft();
+      } else if (measurement && isMeasureMode(draft.mode)) {
+        // Only while the measure tool is armed. Escape has to stay predictable
+        // for someone who measured half an hour ago, armed the polygon tool and
+        // is now pressing Escape to abandon a shape — that keystroke is about
+        // the shape, and clearing a measurement they had left up on purpose
+        // would be an unrelated loss.
+        setMeasurement(null);
       } else if (selection) {
         setSelection(null, { emit: true });
       } else {
@@ -667,6 +913,14 @@ export function createAuthoringController(
         // Handles are live drag targets, so a selected shape must give them up
         // even though the shape itself stays drawn.
         setSelection(null, { emit: true });
+        // A measurement goes with the tools, and this is the one thing it does
+        // NOT survive. Finished shapes stay because they are the user's work;
+        // a measurement is a reading taken while working, and leaving one
+        // floating over a globe with no toolbar to explain or clear it is
+        // exactly the stray-annotation confusion `measure.ts` is written to
+        // avoid. History is kept — disarming is not a reason to lose the ability
+        // to undo, and re-arming and pressing Ctrl+Z has to still work.
+        setMeasurement(null);
       }
       syncDraft();
       syncCursor();
@@ -681,6 +935,12 @@ export function createAuthoringController(
       if (!enabled && isDrawingMode(mode)) return;
       draft = setDraftMode(draft, mode);
       lastVertexWindow = null;
+      // Drop the preview entities so the next `ensureDraftEntities` builds them
+      // for the tool now armed. They are created once and reused, so without
+      // this a switch from the polygon tool to measure would keep drawing the
+      // rubber band in the polygon's colour — the shape would be right and the
+      // colour would be lying about which tool is live.
+      clearDraftEntities();
       // Arming a tool clears the selection: the handles would otherwise sit
       // under the first click of the new shape and swallow it.
       if (isDrawingMode(mode) && selection) setSelection(null, { emit: true });
@@ -709,6 +969,35 @@ export function createAuthoringController(
 
     getDraft: () => snapshot(draft),
 
+    getMeasurement: () => (measurement ? { ...measurement, points: [...measurement.points] } : null),
+
+    clearMeasurement() {
+      if (destroyed) return;
+      setMeasurement(null);
+    },
+
+    setUnits(next) {
+      if (destroyed || next === units) return;
+      units = next;
+      // Redraw the label immediately. A units toggle that changed the panel but
+      // left "1.24 km" written on the globe would be two answers to one
+      // question, and the one on the globe is the one being looked at.
+      syncMeasure();
+    },
+    getUnits: () => units,
+
+    undo() {
+      if (destroyed) return false;
+      return applyHistory(undoHistory(history));
+    },
+
+    redo() {
+      if (destroyed) return false;
+      return applyHistory(redoHistory(history));
+    },
+
+    getHistory: () => ({ ...historySummary }),
+
     setStyle(patch) {
       if (destroyed) return;
       style = mergeStyle(style, patch);
@@ -727,6 +1016,13 @@ export function createAuthoringController(
     setItems(next) {
       if (destroyed) return;
       items = [...next];
+      // A list the user did not author in this session — hydration from
+      // storage, a story load, a scope change on sign-in — is a new baseline,
+      // not an undoable step. Undoing back *through* a story load would restore
+      // a different document's shapes; back through a scope change, another
+      // account's. See the header of `history.ts`.
+      history = resetHistory(history, items);
+      emitHistory();
       // A selection whose item has gone (deleted elsewhere, or a story swap) is
       // dropped rather than left pointing at nothing — stale handles on a shape
       // that no longer exists are draggable and write to a ghost.
@@ -749,10 +1045,15 @@ export function createAuthoringController(
     deleteSelected() {
       if (destroyed || selection?.kind !== 'item') return false;
       const id = selection.id;
-      if (!findItem(items, id)) return false;
+      const item = findItem(items, id);
+      if (!item) return false;
       items = removeItem(items, id);
       setSelection(null, { emit: true });
       redrawItems();
+      // The reason this whole feature exists: before history, this line was the
+      // end of that shape. There was no undo of any kind over committed items,
+      // so a mis-aimed Delete key destroyed a minute's work permanently.
+      remember('delete', item.type);
       emitChange({ kind: 'remove', id });
       return true;
     },
@@ -767,6 +1068,13 @@ export function createAuthoringController(
       selection = { ...selection, item: next };
       style = mergeStyle(style, patch);
       redrawItems();
+      // Coalesced per item. The fill-opacity slider fires on every pixel of
+      // travel and there is no release event this controller can see, so
+      // without a key here one drag of that slider would fill the entire
+      // fifty-step history with a shape getting 5% more opaque — and the undo
+      // the user actually wanted would be off the end of it. The time window in
+      // `record` is what keeps "restyle, pause, restyle again" as two steps.
+      remember('restyle', next.type, `restyle:${next.id}`);
       emitChange({ kind: 'update', id: next.id });
       return true;
     },

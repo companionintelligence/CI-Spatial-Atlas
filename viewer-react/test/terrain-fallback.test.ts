@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Cesium from 'cesium';
 import { watchTerrainFailure } from '../src/renderers/CesiumStoryViewer.js';
+import { createTerrain, guardRootTileStalls } from '../src/renderers/terrain.js';
 
 /**
  * The terrain fallback, which exists because a failed terrain tile is not a
@@ -109,5 +110,93 @@ describe('terrain failure fallback', () => {
     const err = tileError(provider, 0, 0, 0);
     provider.errorEvent.raiseEvent(err);
     expect(err.retry).toBe(false);
+  });
+});
+
+/**
+ * The half of the black-globe problem the error event structurally cannot see.
+ *
+ * Everything above is driven by a `TileProviderError`, and Cesium only raises
+ * one from the `.catch` on the tile request promise. A host that accepts the
+ * connection and then answers nothing never rejects — Cesium's XHR sets no
+ * `timeout` and `RequestScheduler` adds none — so the root tile sits in
+ * `RECEIVING`, no error is reported, and the fallback above never runs while
+ * the globe shows exactly the black ball it exists to prevent.
+ * `guardRootTileStalls` supplies the missing rejection.
+ *
+ * The stub providers here return promises that never settle, which is the
+ * whole point: a test that resolves them would be testing the case that
+ * already worked.
+ */
+describe('stalled root tiles', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** A provider whose tile requests hang forever, like a blackholed tile host. */
+  const stalling = (): Cesium.TerrainProvider => {
+    const p = new Cesium.EllipsoidTerrainProvider();
+    p.requestTileGeometry = () => new Promise<Cesium.TerrainData>(() => {});
+    return p;
+  };
+
+  /** Did this promise settle by the time the microtask queue drained? */
+  const settledYet = async (p: Promise<unknown> | undefined): Promise<boolean> => {
+    let done = false;
+    void p?.then(() => { done = true; }, () => { done = true; });
+    await new Promise((r) => setTimeout(r, 60));
+    return done;
+  };
+
+  it('rejects a level-zero tile that never answers', async () => {
+    const provider = guardRootTileStalls(stalling(), 20);
+    // Rejecting is the entire contract: it is what reaches Cesium's
+    // `failure()` → `TileProviderError.reportError` → the listener above.
+    await expect(provider.requestTileGeometry(0, 0, 0)!).rejects.toThrow(/stalled/);
+  });
+
+  it('leaves deeper tiles hanging rather than failing them', async () => {
+    const provider = guardRootTileStalls(stalling(), 20);
+    // A FAILED deep tile is never re-requested; it upsamples from its parent
+    // for the rest of the session. Timing one out would trade an invisible
+    // delay for permanent local damage — and the globe still draws either way,
+    // so there is no black-globe risk here to trade against.
+    expect(await settledYet(provider.requestTileGeometry(3, 4, 5))).toBe(false);
+  });
+
+  it('passes a scheduler deferral through untouched', async () => {
+    const provider = new Cesium.EllipsoidTerrainProvider();
+    // `undefined` is Cesium's "the request was not sent, ask again next frame".
+    // Timing out a request that was never issued would fail tiles because the
+    // browser was busy, which is the opposite of the intent.
+    provider.requestTileGeometry = () => undefined;
+    expect(guardRootTileStalls(provider, 20).requestTileGeometry(0, 0, 0)).toBeUndefined();
+  });
+
+  it('does not disturb a tile that arrives in time', async () => {
+    const data = {} as Cesium.TerrainData;
+    const provider = new Cesium.EllipsoidTerrainProvider();
+    provider.requestTileGeometry = () => Promise.resolve(data);
+    // The guard is a deadline, not a proxy: the real terrain data must come
+    // back unchanged, and the pending timer must not reject behind it.
+    await expect(guardRootTileStalls(provider, 20).requestTileGeometry(0, 0, 0)!).resolves.toBe(
+      data,
+    );
+    await new Promise((r) => setTimeout(r, 40));
+  });
+
+  it('arms the guard on the provider createTerrain hands back', async () => {
+    // The guard is worthless if it is only ever applied in a test. Stub the
+    // handshake — which such a host completes perfectly well; that is why the
+    // 8 s budget around `fromUrl` does not catch this — and check that the
+    // provider the viewer would install is the guarded one.
+    const stub = stalling();
+    vi.spyOn(Cesium.CesiumTerrainProvider, 'fromUrl').mockResolvedValue(
+      stub as unknown as Cesium.CesiumTerrainProvider,
+    );
+    const choice = await createTerrain({
+      env: { VITE_TERRAIN_URL: 'https://dem.example.org/copernicus' },
+      rootTileTimeoutMs: 20,
+    });
+    expect(choice.source).toBe('self-hosted');
+    await expect(choice.provider.requestTileGeometry(0, 0, 0)!).rejects.toThrow(/stalled/);
   });
 });

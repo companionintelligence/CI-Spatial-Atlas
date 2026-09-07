@@ -12,12 +12,20 @@
  * behind the user's back.
  */
 import { useCallback, useMemo, useState } from 'react';
-import type { Item, Story } from '@companion-atlas/story';
+import type { Item, Layer, Story } from '@companion-atlas/story';
 import type { ImportedFile } from './importFile.js';
 
 export interface ImportedState {
   /** Every item currently merged into the view, in import order. */
   items: Item[];
+  /**
+   * Data sources the imported files carried (an Atlas story document has them;
+   * KML and GeoJSON do not). Kept separate from `items` because they do not
+   * belong in `story.items` at all — they go to the layer stack, which is the
+   * only thing that can draw, order and credit them. Without this the round trip
+   * through our own export format silently lost every layer.
+   */
+  layers: Layer[];
   /** One entry per file, for the "what did I just add" list. */
   files: ImportedFile[];
   add: (files: ImportedFile[]) => void;
@@ -41,8 +49,9 @@ export function useImported(): ImportedState {
   const clear = useCallback(() => setFiles([]), []);
 
   const items = useMemo(() => files.flatMap((f) => f.items), [files]);
+  const layers = useMemo(() => files.flatMap((f) => f.layers ?? []), [files]);
 
-  return { items, files, add, removeFile, clear };
+  return { items, layers, files, add, removeFile, clear };
 }
 
 /**

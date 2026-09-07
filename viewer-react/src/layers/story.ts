@@ -1,5 +1,6 @@
 import type { Layer, Story } from '@companion-atlas/story';
 import {
+  adoptStoryLayer,
   clampOpacity,
   DEFAULT_OPACITY,
   isLayerFormat,
@@ -141,35 +142,69 @@ export const toStoryLayers = (layers: readonly AtlasLayer[]): Layer[] => layers.
  * this, a user adds four layers, exports the story and gets a document with
  * none of them — silently, because an absent `layers` array is perfectly valid.
  *
- * Merged by id rather than assigned wholesale. `fromStoryLayers` deliberately
- * drops the kinds this manager does not own (`model`, `pin`, anything without a
- * `uri`), so a story that arrived carrying those would lose them for good if
- * saving replaced `story.layers` with only what the panel holds — a data-loss
- * bug that would look exactly like the one this function fixes, only pointed
- * the other way. Layers the panel does own keep their original array position
- * so a saved story's diff stays small; new ones append.
+ * Merged by id rather than assigned wholesale, because the stack is not the
+ * whole truth about `story.layers`. `fromStoryLayers` deliberately drops the
+ * kinds this manager does not own (`model`, `pin`, anything without a `uri`), so
+ * a story that arrived carrying those would lose them for good if saving
+ * replaced the array with only what the panel holds — a data-loss bug that would
+ * look exactly like the one this function fixes, only pointed the other way.
+ * Layers the panel does own keep their original array position so a saved
+ * story's diff stays small; new ones append.
  *
- * Returns the story unchanged (same object identity) when there is nothing to
- * merge — the renderer rebuilds its CZML data source when the story reference
- * changes, so handing back a fresh object every render would be visible.
+ * ## Absence has to mean deletion, and only the reader can say which absence
+ *
+ * The first version of this kept *every* unmatched entry, justifying it with the
+ * paragraph above — but it never tested for the case the paragraph describes. A
+ * layer the user explicitly removed in the panel is also unmatched (the ids are
+ * preserved verbatim on the way in, so a removed layer is exactly an id that is
+ * no longer in the stack), so Remove was silently absent from every save and
+ * every export: the row vanished from the panel and came straight back the next
+ * time the document was opened, with nothing logged and nothing to undo.
+ *
+ * `fromStoryLayer(existing) === null` is the honest test, because it is the same
+ * predicate that decided whether the layer ever reached the panel. Null means
+ * the manager could not own it and its absence proves nothing; non-null means
+ * the panel had it and the user took it away on purpose.
+ *
+ * Returns the story unchanged (same object identity) when the merge would not
+ * change the array — the renderer rebuilds its CZML data source when the story
+ * reference changes, so handing back a fresh object every render would be
+ * visible.
  */
 export function withStoryLayers(story: Story | null, layers: readonly AtlasLayer[]): Story | null {
-  if (!story || layers.length === 0) return story;
+  if (!story) return story;
+  const existingLayers = story.layers ?? [];
+  // Nothing on either side: not even a `layers: []` is written, so a document
+  // that never had the key keeps not having it.
+  if (existingLayers.length === 0 && layers.length === 0) return story;
 
   const mine = new Map(toStoryLayers(layers).map((l) => [l.id, l]));
   const merged: Layer[] = [];
-  for (const existing of story.layers ?? []) {
+  for (const existing of existingLayers) {
     const replacement = mine.get(existing.id);
     if (replacement) {
       merged.push(replacement);
       mine.delete(existing.id);
-    } else {
+    } else if (fromStoryLayer(existing) === null) {
+      // A kind the panel cannot hold (`model`, `pin`, no `uri`). It was never in
+      // the stack, so its absence is not a decision — carry it through.
       merged.push(existing);
     }
+    // Otherwise: the panel owned this layer and it is gone from the stack. That
+    // is a removal, and a save that quietly resurrected it would make Remove a
+    // button that does nothing durable.
   }
   merged.push(...mine.values());
 
+  if (sameLayers(existingLayers, merged)) return story;
   return { ...story, layers: merged };
+}
+
+/** Reference-equal, element for element. Enough to answer "did the merge change
+ *  anything?", because every layer this function keeps is either the caller's
+ *  own object or a freshly built one. */
+function sameLayers(a: readonly Layer[], b: readonly Layer[]): boolean {
+  return a.length === b.length && a.every((l, i) => l === b[i]);
 }
 
 /**
@@ -224,6 +259,49 @@ export function fromStoryLayer(layer: Layer, index = 0): AtlasLayer | null {
     ...(bag.options ? { options: { ...defaultOptionsFor(format).options, ...bag.options } } : defaultOptionsFor(format)),
     ...(typeof bag.catalogId === 'string' ? { catalogId: bag.catalogId } : {}),
   };
+}
+
+/** Everything the inbound merge needs to know beyond the layers themselves. */
+export interface AdoptOptions {
+  /**
+   * The id of the document these layers belong to, stamped on every row that is
+   * genuinely the document's. Omit for layers the user brought deliberately —
+   * a dropped `.story.json` — which are theirs to keep and to persist.
+   */
+  storyId?: string;
+  /**
+   * Source URLs the user has removed. A merge that ignored these would undo
+   * every removal on the next re-render that produced a new story object, which
+   * is what made Remove look like a button with no effect.
+   */
+  dismissed?: ReadonlySet<string>;
+}
+
+/**
+ * The inbound half of the bridge: fold a story's layers into the live stack.
+ *
+ * Pure, and here rather than inside `useLayers`, for the same reason the rest of
+ * this directory is: the decisions it makes — what is the user's, what is the
+ * document's, what stays gone — are exactly the ones a rendering bug would hide,
+ * so they have to be testable without a DOM.
+ *
+ * Adds rather than replaces. The user's stack is theirs, and a story opening
+ * should put its layers on top of it, not delete what they collected.
+ */
+export function adoptStoryLayers(
+  stack: readonly AtlasLayer[],
+  storyLayers: readonly Layer[] | undefined,
+  opts: AdoptOptions = {},
+): AtlasLayer[] {
+  const { storyId, dismissed } = opts;
+  const incoming = fromStoryLayers(storyLayers)
+    .filter((l) => !dismissed?.has(l.url))
+    .map((l) => (storyId ? { ...l, fromStoryId: storyId } : l));
+  // Identity when there is nothing to add: the caller feeds this to `setLayers`
+  // on every document change, and a fresh array each time would re-persist the
+  // stack and re-run every memo that depends on it for no reason.
+  if (!incoming.length) return stack as AtlasLayer[];
+  return incoming.reduce((acc, l) => adoptStoryLayer(acc, l), stack as AtlasLayer[]);
 }
 
 /** Read a story's whole layer array, dropping what this manager cannot own and

@@ -219,15 +219,18 @@ export function sceneBackground(story: Story, scene: Scene): string | undefined 
 }
 
 /**
- * Build the deck for a story.
+ * **Authored order, not chronological order** — the rule every source below is
+ * read under.
  *
- * **Authored order, not chronological order.** `deriveModel` sorts scenes by
- * time because the time machine is a clock and a clock has one direction. A
- * presentation is not a clock: a story that opens on the ending and then goes
- * back six years is a flashback, and sorting it silently rewrites the author's
- * story into a different one. So this reads `story.scenes` exactly as written —
- * which is also why the caller must drive the clock from `slide.timeMs` rather
- * than assume the playhead only moves forwards.
+ * `deriveModel` sorts scenes by time because the time machine is a clock and a
+ * clock has one direction. A presentation is not a clock: a story that opens on
+ * the ending and then goes back six years is a flashback, and sorting it
+ * silently rewrites the author's story into a different one. So both scene
+ * sources — the document's and the deck the user is writing — are read exactly
+ * as written, which is also why the caller must drive the clock from
+ * `slide.timeMs` rather than assume the playhead only moves forwards. Only
+ * projected memories are ordered, and only because they were never sequenced by
+ * anybody in the first place.
  */
 /**
  * A memory the app has already derived, offered as a deck when a story carries
@@ -281,15 +284,83 @@ function scenesFromMemories(memories: readonly DeckMemory[]): Scene[] {
     }));
 }
 
-export function buildDeck(
+export interface BuildDeckOptions {
+  reduceMotion?: boolean;
+  /** Derived memories, projected into slides only when nothing else claims the
+   *  deck. See `scenesFromMemories`. */
+  memories?: readonly DeckMemory[];
+  /**
+   * The scenes the user is authoring right now, already reconciled with the
+   * open document — see `deckScenes` for the precedence and for why this is a
+   * separate argument rather than scenes merged into `story`.
+   */
+  authored?: readonly Scene[] | null;
+}
+
+/** Which of the three sources a deck was built from. Returned so a caller (and
+ *  a test) can assert *why* a deck looks the way it does, rather than inferring
+ *  it from the slides. */
+export type DeckSource = 'authored' | 'story' | 'memories';
+
+/**
+ * Which list of scenes a deck is built from, and why in that order.
+ *
+ * Three sources can each claim to be "the story": the deck the user is
+ * authoring, the scenes the open document arrived with, and the memories the
+ * app projected when it had neither. They are not three alternatives of equal
+ * standing — they are the same question asked at three removes from the user,
+ * so the nearest one wins.
+ *
+ * 1. **Authored scenes win outright.** They are the only one of the three the
+ *    user is actively making, and Present is how they check the work; a preview
+ *    that showed anything else would be a preview of someone else's story. Note
+ *    what winning does *not* mean here: authored scenes are not concatenated
+ *    with the document's own. Someone editing a `?story=` document is editing
+ *    *those* scenes — the deck adopted them, ids and all — so appending would
+ *    show every scene twice, once as written and once as edited. Someone
+ *    authoring on a Memory archive is writing the first scenes that document
+ *    has ever had, and there is nothing to reconcile at all. The caller passes
+ *    an array that the export merge (`withAuthoredScenes` /
+ *    `SceneControl.toStory`) has already reconciled against the document, so
+ *    what Present shows and what a download contains cannot drift apart, and
+ *    that merge stays in the one module that owns it instead of being
+ *    re-derived — differently, eventually — here.
+ *    Projected memories lose to an authored deck for the same reason: a user
+ *    who has written one scene must not find 500 slides they did not write
+ *    stacked behind it.
+ * 2. **The document's own scenes**, for the reader who is not authoring at all.
+ *    That is the overwhelmingly common case and the behaviour every story in
+ *    the wild already depends on, so it must survive this feature untouched.
+ * 3. **Projected memories**, so Present is not a button that opens an empty
+ *    presentation on a Memory archive — the regression `presenter-memories`
+ *    exists for.
+ *
+ * ## Why `authored` is an argument and not scenes merged into `story`
+ *
+ * Because `deriveModel` reads `story.scenes` first: while that array is
+ * non-empty the globe's memories *are* the scenes, and everything else in the
+ * archive stops being drawn. An authored deck that reached the rendered story
+ * would therefore collapse a 500-memory globe to three pins with no error and
+ * nothing to click on to get it back. Taking the scenes as an argument means no
+ * merged `Story` object needs to exist in the render tree at all, so there is
+ * nothing for a later caller to hand to the globe by mistake — the structural
+ * version of the rule, not the remembered one. `scenes/story.ts` documents the
+ * same trap from the export side.
+ */
+export function deckScenes(
   story: Story,
-  opts: { reduceMotion?: boolean; memories?: readonly DeckMemory[] } = {},
-): DeckSlide[] {
-  // Authored scenes always win: an author who wrote an order meant it, and
-  // projecting memories over the top would silently replace their deck.
-  const scenes = story.scenes.length
-    ? story.scenes
-    : scenesFromMemories(opts.memories ?? []);
+  opts: BuildDeckOptions = {},
+): { scenes: readonly Scene[]; source: DeckSource } {
+  if (opts.authored?.length) return { scenes: opts.authored, source: 'authored' };
+  // `story.scenes` is required by the schema, but stories also arrive from
+  // `?story=<url>` through paths that only normalise — so an absent array is
+  // reachable and must not throw on `.length`.
+  if (story.scenes?.length) return { scenes: story.scenes, source: 'story' };
+  return { scenes: scenesFromMemories(opts.memories ?? []), source: 'memories' };
+}
+
+export function buildDeck(story: Story, opts: BuildDeckOptions = {}): DeckSlide[] {
+  const { scenes } = deckScenes(story, opts);
   return scenes.map((scene, index) => {
     const body = parseMarkdown(sceneNarrative(scene));
     const timeMs = sceneTimeMs(scene.time as TimeLike);
@@ -356,6 +427,176 @@ export function canStep(index: number, dir: -1 | 1, count: number): boolean {
 export function indexOfScene(deck: readonly DeckSlide[], sceneId: string | null | undefined): number {
   if (!sceneId) return -1;
   return deck.findIndex((s) => s.id === sceneId);
+}
+
+/**
+ * Where a presentation should sit after the deck changed underneath it.
+ *
+ * The deck used to be immutable while it was on screen: it came from a document
+ * that had already loaded, so the only way it changed was a whole new story. It
+ * is now editable *while it is being presented* — Present is how an author
+ * checks the scene they just wrote — and that turns a stored index into a lie.
+ * Drag scene 5 to the top while the reader is on scene 5 and a raw index keeps
+ * them on slot 5, which is now a different scene: the presentation appears to
+ * jump for no reason, and the camera flies somewhere the reader did not ask to
+ * go. So the position is re-derived from the scene's **identity**: the reader
+ * follows the scene they are reading, wherever it moved to.
+ *
+ * When the scene is gone — deleted from the editor, or never in this deck
+ * because the whole story was swapped — the old *position* is the best answer
+ * left, clamped into the new deck. The deck closes over the gap and the
+ * neighbour that took the slot is the next thing to read; snapping back to
+ * scene 1 would restart a presentation because someone deleted a scene at the
+ * end of it.
+ */
+export function followSceneIndex(
+  deck: readonly DeckSlide[],
+  sceneId: string | null | undefined,
+  index: number,
+): number {
+  if (deck.length === 0) return 0;
+  const found = indexOfScene(deck, sceneId);
+  return found >= 0 ? found : clampIndex(index, deck.length);
+}
+
+/**
+ * Where a presentation is: a position *and* the scene that was at it.
+ *
+ * The pair travels together because neither half is sufficient once the deck is
+ * editable. The index alone cannot survive a reorder (it addresses a slot, and
+ * slots now change hands); the id alone cannot survive a delete (there is no
+ * scene left to point at, and the position is the only clue about where the
+ * reader was). Holding both, in one value, is also what stops a render landing
+ * between two separate updates and following the wrong scene.
+ */
+export interface DeckCursor {
+  index: number;
+  id: string | null;
+}
+
+/** The cursor for a position in a deck, clamped. `id` is null only when the
+ *  deck is empty, which presents nothing. */
+export function deckCursor(deck: readonly DeckSlide[], index: number): DeckCursor {
+  const i = clampIndex(index, deck.length);
+  return { index: i, id: deck[i]?.id ?? null };
+}
+
+export const sameCursor = (a: DeckCursor, b: DeckCursor): boolean =>
+  a.index === b.index && a.id === b.id;
+
+/** Where a presentation starts: the scene the reader had selected when they
+ *  pressed Present, or the top of the deck when that scene is not in it. */
+export function openingCursor(
+  deck: readonly DeckSlide[],
+  initialSceneId?: string | null,
+): DeckCursor {
+  const found = indexOfScene(deck, initialSceneId);
+  return deckCursor(deck, found >= 0 ? found : 0);
+}
+
+/**
+ * Where a presentation is after the deck changed underneath it.
+ *
+ * Applied on exactly the renders where the deck reference changed, and on no
+ * others: run unconditionally it would fight the reader, because immediately
+ * after a step the cursor's id is still the scene they just left and following
+ * it would drag them straight back to it. It is a fixed point — applying it to
+ * its own result cannot move again — which is what makes it safe to run during
+ * render, where a value that kept changing would be an infinite loop.
+ */
+export function followCursor(deck: readonly DeckSlide[], cursor: DeckCursor): DeckCursor {
+  return deckCursor(deck, followSceneIndex(deck, cursor.id, cursor.index));
+}
+
+/**
+ * A deck's shape as one comparable value: which scenes, in which order.
+ *
+ * Object identity would be the obvious signal and is the wrong one. The
+ * presenter reconciles its cursor *during render* (see `reconcileCursor`), so
+ * whatever it compares also has to be what it stores — and storing a deck that
+ * is rebuilt on every render, which is what a caller passing a fresh
+ * `authoredScenes` array produces, would queue a state update from every render
+ * and hang the component in a re-render loop. Comparing content instead makes
+ * an unmemoised caller merely wasteful rather than fatal.
+ *
+ * Ids and order only: they are the entire input to following a cursor. Editing
+ * a scene's words, camera or audio cannot move the reader — that is
+ * `slideEnterKey`'s job, and it is asked a different question.
+ */
+export function deckSignature(deck: readonly DeckSlide[]): string {
+  return deck.map((s) => s.id).join('~');
+}
+
+export interface CursorReconcile {
+  /** The deck as of this render. */
+  deck: readonly DeckSlide[];
+  /** `deckSignature(deck)`, and the signature the cursor was last reconciled
+   *  against. Equal signatures mean there is nothing to follow. */
+  deckKey: string;
+  seenKey: string;
+  open: boolean;
+  wasOpen: boolean;
+  cursor: DeckCursor;
+  initialSceneId?: string | null;
+}
+
+/**
+ * The one place that decides where a presentation is pointing, for the two
+ * events that can move it without the reader touching anything.
+ *
+ * The interlock between them is the whole reason this is a function rather than
+ * two `if`s in a component: **opening beats following**. A reader who pressed
+ * Present on scene 5 asked for scene 5, and if the deck also changed on that
+ * render — it usually has, since opening the editor is what produced the deck —
+ * following the cursor left over from the *last* presentation would land them
+ * somewhere they did not ask for. Following only ever applies to a presentation
+ * that is already open.
+ *
+ * Equally important is what this does *not* react to: a render where the deck
+ * holds the same scenes in the same order. Immediately after a step, the cursor
+ * names the scene the reader just left; "following" it then would drag the
+ * presentation back one slide every time they pressed Right. Hence the two
+ * signatures — the caller remembers which deck the cursor already accounts for.
+ *
+ * Returns the given cursor unchanged when there is nothing to do, so the caller
+ * can compare and skip the state update.
+ */
+export function reconcileCursor(input: CursorReconcile): DeckCursor {
+  const { deck, deckKey, seenKey, open, wasOpen, cursor, initialSceneId } = input;
+  if (open && !wasOpen) return openingCursor(deck, initialSceneId);
+  // A closing presentation keeps its cursor: it is about to render nothing, and
+  // re-opening resolves from `initialSceneId` anyway.
+  if (!open) return cursor;
+  return deckKey === seenKey ? cursor : followCursor(deck, cursor);
+}
+
+/**
+ * The identity of "the scene the presenter has already announced", for deciding
+ * whether a rebuilt deck means anything the caller has to act on.
+ *
+ * `onSceneEnter` is not a notification, it is a command: it pauses the clock,
+ * scrubs the playhead and flies the camera, and the presenter re-arms the
+ * narration alongside it. Firing it again is therefore expensive and *visible*
+ * — a camera flight restarting, a voice starting over — so it must fire when
+ * something it acts on changed, and only then.
+ *
+ * Every edit to the deck rebuilds every slide, so slide object identity is
+ * useless here and the index is actively wrong: reordering scenes behind the
+ * reader shifts the current scene's position without changing one thing about
+ * the scene, and re-entering on that would restart a narration the reader is
+ * halfway through. What the caller actually consumes is the id, the camera
+ * pose, the instant and the audio track — so those, and nothing else, make the
+ * key. Retitling a slide or rewriting its body updates the rendered card
+ * (the slide is rebuilt regardless) without disturbing the globe; re-capturing
+ * its camera moves the globe, which is exactly the feedback an author expects
+ * from "capture this view".
+ */
+export function slideEnterKey(slide: DeckSlide): string {
+  const c = slide.camera;
+  const pose = c
+    ? [c.lon, c.lat, c.height, c.heading, c.pitch, c.roll, c.range].map((n) => n ?? '').join(',')
+    : '';
+  return [slide.id, pose, slide.timeMs ?? '', slide.audioUrl ?? ''].join('|');
 }
 
 /** "Scene 3 of 7" — the visible position indicator, and its aria text. */

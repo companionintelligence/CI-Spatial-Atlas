@@ -20,6 +20,7 @@ import {
   storyEntities,
   KmzUnsupportedError,
   type Item,
+  type Layer,
 } from '@companion-atlas/story';
 import { detectFormat, type InteropFormat } from './detectFormat.js';
 
@@ -27,6 +28,18 @@ export interface ImportedFile {
   fileName: string;
   format: InteropFormat;
   items: Item[];
+  /**
+   * Data sources the file carried, for the layer stack.
+   *
+   * Only an Atlas story document has any, and it is the document *this app
+   * exports*: without this the export/import round trip was lossy in one
+   * direction only. A user with four layers downloaded a story that correctly
+   * held all four, dropped it back on the globe, and got the entities alone —
+   * the layers, and the attributions a licence obliges them to carry, were
+   * discarded at parse time with nothing said. A file that came from here has to
+   * come back whole.
+   */
+  layers?: Layer[];
   /** Present when nothing could be read. `items` is empty when it is set. */
   error?: string;
 }
@@ -34,6 +47,9 @@ export interface ImportedFile {
 export interface ImportResult {
   files: ImportedFile[];
   items: Item[];
+  /** Every layer across the batch, in file order. Feed these to the layer
+   *  stack's `mergeStoryLayers`; nothing else reads a dropped story's layers. */
+  layers: Layer[];
   /** True when at least one file yielded no items and no error — a valid
    *  document that simply had nothing locatable in it. Worth saying out loud;
    *  otherwise the UI looks broken. */
@@ -66,7 +82,7 @@ export function importText(fileName: string, text: string, headBytes?: Uint8Arra
         // Atlas and CI-Earth-2 shapes too) and take its entities, so dropping a
         // story merges its content rather than replacing the whole view.
         const story = loadStory(JSON.parse(text));
-        return { fileName, format, items: storyEntities(story) };
+        return { fileName, format, items: storyEntities(story), layers: story.layers ?? [] };
       }
 
       case 'kmz':
@@ -117,7 +133,11 @@ export async function importFiles(files: readonly File[]): Promise<ImportResult>
   return {
     files: results,
     items: results.flatMap((r) => r.items),
-    hadEmpty: results.some((r) => !r.error && r.items.length === 0),
+    layers: results.flatMap((r) => r.layers ?? []),
+    // A story file can be all layers and no entities. That is a successful
+    // import, not an empty one, so it must not raise the "nothing locatable in
+    // it" notice — which would be the app calling its own working import broken.
+    hadEmpty: results.some((r) => !r.error && r.items.length === 0 && !r.layers?.length),
   };
 }
 

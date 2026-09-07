@@ -95,6 +95,11 @@ export function coerceLayer(raw: unknown, index: number): AtlasLayer | null {
       ? { options: { ...defaultOptionsFor(format).options, ...(p.options as LayerOptions) } }
       : defaultOptionsFor(format)),
     ...(typeof p.catalogId === 'string' ? { catalogId: p.catalogId } : {}),
+    // `fromStoryId` is deliberately not read back. Only the user's own layers
+    // are ever written here (see `useLayers`), so anything in this bucket is the
+    // user's by definition — and an older build, or a hand edit, that left a
+    // story tag behind would otherwise produce a row the write effect refuses to
+    // persist: it would disappear on the next change with nothing to explain it.
   };
 }
 

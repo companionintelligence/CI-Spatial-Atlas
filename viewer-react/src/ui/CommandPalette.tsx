@@ -198,6 +198,56 @@ export function applyPlaceResults(
   return { places: found.slice(), state: placeStateFor(found, answered, online), everAnswered: answered };
 }
 
+/** Where the camera is looking, as a bias for the geocoder. */
+export interface NearBias {
+  lat: number;
+  lon: number;
+}
+
+/**
+ * A reading of `near`, or `null` for "no reading taken".
+ *
+ * The wrapper is what separates "the palette is closed, nothing is held" from
+ * "the palette is open and the reading it took was *no bias*" — two states a
+ * bare `NearBias | null` cannot tell apart, and conflating them would let a
+ * session that opened with nothing focused pick a bias up halfway through, i.e.
+ * exactly the rebuild this freeze exists to prevent.
+ */
+export type HeldNear = { near?: NearBias } | null;
+
+/**
+ * The `near` bias one open palette searches with — taken when it opens, held
+ * until it closes.
+ *
+ * The bias cannot be allowed to follow the camera, and that is not a
+ * preference. `near` is the focused memory's position, and during playback the
+ * focus advances every time the clock crosses a memory — a whole story
+ * compressed into 45 seconds, so a few dozen memories means a new `near` about
+ * once a second. The searcher is built from it, so every change tore down the
+ * debounce and started it again; against Nominatim's 1.1 s request floor the
+ * timer never survived long enough to fire, and the palette sat on "Searching
+ * places…" for as long as the user kept it open. Freezing it here rather than
+ * pausing the clock keeps the palette free of side effects on the globe: it is
+ * a search box, and opening one should not stop the story.
+ *
+ * Idempotent while open, so the freeze is a property of the function and not of
+ * how carefully the caller wired its dependency array — the version of this bug
+ * that shipped was a dependency array.
+ *
+ * Pure, and separate from the component, because "the bias does not move while
+ * the palette is open" is the whole invariant and this workspace's tests have
+ * no DOM to observe it through.
+ */
+export function holdNear(held: HeldNear, open: boolean, live: NearBias | undefined): HeldNear {
+  // Released on close so the *next* open takes a fresh reading — a palette
+  // reopened after the story has flown elsewhere should bias toward there.
+  if (!open) return null;
+  if (held) return held;
+  // Copied, not aliased: the caller builds this object inline from the focused
+  // memory, and holding their reference would hold the memory too.
+  return { near: live ? { lat: live.lat, lon: live.lon } : undefined };
+}
+
 /** The one line under the list. `undefined` when the rows speak for themselves. */
 export function paletteStatus(items: readonly PaletteItem[], state: PlaceState): string | undefined {
   if (state === 'searching') return 'Searching places…';
@@ -228,8 +278,15 @@ export function CommandPalette({ open, memories, onClose, onSelect, onSelectPlac
    * `onSelect`: the owner decides whether a jump ends the search.
    */
   onSelectPlace?: (place: GeoPlace) => void;
-  /** Where the camera is looking, to bias short queries. Cheap, and it is the difference between "springfield" meaning the one nearby and the one in Illinois. */
-  near?: { lat: number; lon: number };
+  /**
+   * Where the camera is looking, to bias short queries. Cheap, and it is the
+   * difference between "springfield" meaning the one nearby and the one in
+   * Illinois.
+   *
+   * Read once per open and then held (see `holdNear`); a caller is free to let
+   * this move with the camera, and it moves constantly during playback.
+   */
+  near?: NearBias;
 }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
@@ -240,11 +297,19 @@ export function CommandPalette({ open, memories, onClose, onSelect, onSelectPlac
   const searchRef = useRef<PlaceSearch | null>(null);
   /** Has this geocoder ever returned a row? See `placeStateFor`. */
   const answeredRef = useRef(false);
+  /** The geocoder bias, frozen for the life of one open palette. See `holdNear`. */
+  const heldNearRef = useRef<HeldNear>(null);
 
   // Reset + focus on open (before paint, so no stale-results flash); restore
   // focus to the trigger on close. Places are reset too — they belong to a
   // query, and last session's "Berlin" under an empty box is a ghost.
   useLayoutEffect(() => {
+    // Take (or release) the bias here, and *only* here. `near` is deliberately
+    // not a dependency: not re-running when it changes is precisely what
+    // freezes it, and this effect runs before the passive effect below in the
+    // same commit, so the searcher is always built from the reading taken at
+    // the moment the palette opened.
+    heldNearRef.current = holdNear(heldNearRef.current, open, near);
     if (open) {
       restoreRef.current = document.activeElement as HTMLElement | null;
       setQuery('');
@@ -265,8 +330,6 @@ export function CommandPalette({ open, memories, onClose, onSelect, onSelectPlac
   }, [active, open]);
 
   const placesEnabled = Boolean(onSelectPlace);
-  const nearLat = near?.lat;
-  const nearLon = near?.lon;
 
   // One searcher for the life of the open palette. `createPlaceSearch` *is* the
   // debounce, the request-floor pacing and the abort-on-supersede, and all of
@@ -274,18 +337,21 @@ export function CommandPalette({ open, memories, onClose, onSelect, onSelectPlac
   // old one instead of superseding it, and would fire a request per letter at
   // an endpoint whose usage policy is somebody's goodwill.
   //
-  // The deps are all primitives on purpose. `onSelectPlace` itself is a prop
-  // that a parent may rebuild every render, and depending on it would tear down
-  // and recreate the searcher mid-flight — cancelling the search the user is
-  // waiting for, every time, forever.
+  // The deps are the two booleans and nothing else, which is the same argument
+  // one step further. `onSelectPlace` is a prop a parent may rebuild every
+  // render; `near` follows the focused memory and therefore changes about once
+  // a second while the story plays. Either as a dependency tears the searcher
+  // down mid-flight — cancelling the search the user is waiting for, restarting
+  // a debounce that (at Nominatim's 1.1 s floor) then never gets to fire, and
+  // leaving "Searching places…" on screen forever. The bias is read from the
+  // ref the layout effect froze instead.
   //
   // Declared *above* the query effect: effects run in source order within a
   // commit, so the searcher exists before the first query effect looks for it.
   useEffect(() => {
     if (!open || !placesEnabled) return;
-    const searcher = createPlaceSearch(
-      nearLat != null && nearLon != null ? { near: { lat: nearLat, lon: nearLon } } : {},
-    );
+    const bias = heldNearRef.current?.near;
+    const searcher = createPlaceSearch(bias ? { near: bias } : {});
     searchRef.current = searcher;
     return () => {
       // Retires the pending promise as well as the request in flight, so a
@@ -293,12 +359,21 @@ export function CommandPalette({ open, memories, onClose, onSelect, onSelectPlac
       searcher.cancel();
       searchRef.current = null;
     };
-  }, [open, placesEnabled, nearLat, nearLon]);
+  }, [open, placesEnabled]);
 
   useEffect(() => {
     const searcher = searchRef.current;
     if (!open || !searcher) return;
     if (query.trim().length < MIN_QUERY_LENGTH) {
+      // Retire whatever is outstanding *first*. Clearing the list without it
+      // only clears the list: the search started for the longer query is still
+      // running, and when it lands `applyPlaceResults` sees a non-null answer
+      // and repopulates the rows the user just backspaced away — "ber" wiped to
+      // "b" fills the box with Berlin a moment later, and it stays there until
+      // the next edit long enough to search. `cancel` resolves that pending
+      // promise with null, which is the module's word for "superseded", so the
+      // `.then` below returns without touching anything.
+      searcher.cancel();
       // The geocoder resolves a too-short query with `[]` and sends nothing;
       // mirror that here so an emptied box clears on the same keystroke rather
       // than after a debounce that never runs.
@@ -317,11 +392,12 @@ export function CommandPalette({ open, memories, onClose, onSelect, onSelectPlac
       setPlaces(next.places);
       setPlaceState(next.state);
     });
-    // The `near` values are deps even though they are only read by the effect
-    // above: recreating the searcher cancels whatever it had in flight, and
-    // without a re-search the status line would sit on "Searching places…"
-    // until the next keystroke.
-  }, [open, query, placesEnabled, nearLat, nearLon]);
+    // Only what a search actually depends on. `near` used to be listed here to
+    // re-issue the search the effect above had just cancelled by rebuilding the
+    // searcher; now that the bias is frozen for the open palette there is
+    // nothing to re-issue, and keeping it would restart the debounce on every
+    // step of the playback fly-through.
+  }, [open, query, placesEnabled]);
 
   const items = useMemo<PaletteItem[]>(
     () => paletteItems(memories, places, query),

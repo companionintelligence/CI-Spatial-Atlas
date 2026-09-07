@@ -100,11 +100,17 @@ URL params override all of them per load: `?memory=<url>&token=<jwt>` for live
 memory, `?story=<url>` for a published story, `?renderer=cesium|xr` to force a
 renderer.
 
-> **Note:** `npm install` and `npm run build` need
-> `@companionintelligence/tokens`, which the lockfile resolves to a sibling
-> `../ci-common` checkout of [CI-Common](https://github.com/companionintelligence/CI-Common).
-> Clone it next to this repo, or authenticate to GitHub Packages
-> (`viewer-react/.npmrc`). Tests run without it.
+> **Note:** clone with `--recurse-submodules`, or run
+> `git submodule update --init` afterwards. The design tokens come from
+> [CI-Common](https://github.com/companionintelligence/CI-Common), pinned as a
+> submodule at `third_party/ci-common` and wired in as an npm workspace, so
+> `npm ci` and `npm run build` both work with nothing else on the machine.
+> CI-Common is a private repository, so you need access to it.
+>
+> This used to resolve to a sibling `../ci-common` checkout outside the repo,
+> which is why the viewer build and its Docker image could never complete from a
+> clean clone. Refresh the pin with
+> `git submodule update --remote third_party/ci-common` and commit the new SHA.
 
 ## Quickstart — processing server + MCP API
 

@@ -22,7 +22,7 @@ const VIS_LABEL: { v: Visibility; label: string }[] = [
  * (which is what shares it with the household).
  */
 export function ScrapbookDrawer({
-  open, entries, title, visibility, canSave, canClear, saveState,
+  open, entries, title, visibility, canSave, canClear, saveState, sceneCount = 0,
   onClose, onTitle, onVisibility, onRemove, onClear, onCurate, onPlay, onSave, onDownload,
 }: {
   open: boolean;
@@ -30,6 +30,9 @@ export function ScrapbookDrawer({
   title: string;
   visibility: Visibility;
   canSave: boolean;
+  /** Authored scenes waiting to be saved alongside (or instead of) the
+   *  collected memories. They travel in the same document. */
+  sceneCount?: number;
   /** True when the raw draft holds anything — even ids this story can't resolve. */
   canClear: boolean;
   saveState: SaveState;
@@ -44,7 +47,13 @@ export function ScrapbookDrawer({
   onDownload: () => void;
 }) {
   if (!open) return null;
+  // Authored scenes are savable content in their own right, so Save and
+  // Download must not be dead just because nothing was collected. A user who
+  // writes a five-scene story and collects no memories has still written a
+  // story, and this drawer holds the only Save button they will look for.
+  // Curate and Play stay gated on entries: both operate on collected memories.
   const empty = entries.length === 0;
+  const nothingToSave = empty && sceneCount === 0;
   return (
     <aside className="atlas-sbdrawer" aria-label="Scrapbook">
       <header className="sb-head">
@@ -99,13 +108,13 @@ export function ScrapbookDrawer({
         <button className="atlas-btn" disabled={empty} onClick={onPlay}><PlayIcon />Play journey</button>
         <button
           className="atlas-btn"
-          disabled={empty || !canSave || saveState.s === 'saving'}
+          disabled={nothingToSave || !canSave || saveState.s === 'saving'}
           onClick={onSave}
           title={canSave ? 'Save into Companion Memory (shares per visibility)' : 'Connect Companion Memory (?memory=…) to save'}
         >
           {saveState.s === 'saving' ? 'Saving…' : 'Save to Memory'}
         </button>
-        <button className="atlas-btn" disabled={empty} onClick={onDownload}>Download .story.json</button>
+        <button className="atlas-btn" disabled={nothingToSave} onClick={onDownload}>Download .story.json</button>
         {/* Gate Clear on the raw draft, not on resolvable entries: a draft whose
             ids this story can't resolve renders zero rows, and disabling Clear
             there left the only reset affordance dead exactly when it was needed. */}

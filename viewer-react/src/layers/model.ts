@@ -217,6 +217,59 @@ export interface AtlasLayer {
   options?: LayerOptions;
   /** Set when the layer came from the built-in catalog, so it can be re-found. */
   catalogId?: string;
+  /**
+   * Provenance: the id of the story this layer was *adopted from*, rather than
+   * added by the user.
+   *
+   * Without this the stack cannot answer the one question everything downstream
+   * needs — "is this row the user's, or does it belong to the document that is
+   * open?" — and three things went wrong at once. A visited story's layers were
+   * written into the user's account-scoped localStorage bucket and stayed there
+   * for ever, so opening one shared story permanently grafted its sources onto
+   * a stack that is supposed to be the user's own working set. Removing one made
+   * it reappear, because the renderer's anti-double-mount filter treated "in the
+   * stack" as "the stack owns it" and un-claimed the tileset the moment the row
+   * went away. And nothing could tell an author's layer from a borrowed one when
+   * deciding what a save should carry.
+   *
+   * Absent means "the user added this" — by URL, from the catalog, or by
+   * dropping a file — and only those are persisted (`useLayers`). Adopted layers
+   * are re-read from the story every time it opens, which is where they live.
+   */
+  fromStoryId?: string;
+}
+
+/** True when the layer belongs to the open story rather than to the user. See
+ *  `AtlasLayer.fromStoryId` for why the distinction has to exist. */
+export const isStoryLayer = (l: Pick<AtlasLayer, 'fromStoryId'>): boolean => l.fromStoryId != null;
+
+/** The complement of `isStoryLayer`: the rows that are the user's to keep. */
+export const isUserLayer = (l: Pick<AtlasLayer, 'fromStoryId'>): boolean => l.fromStoryId == null;
+
+/**
+ * The source URLs the layer stack has taken responsibility for.
+ *
+ * The Cesium renderer draws a story's `3d-tiles`/`gaussian-splat` layers from
+ * the CZML path *and* the stack draws the same ones, so one side has to stand
+ * down or every such tileset is mounted twice — two coincident surfaces
+ * z-fighting, two sets of tile requests, two copies in memory. The stack wins,
+ * because it is the one the user can operate.
+ *
+ * "Responsibility" is deliberately wider than "currently in the stack", and that
+ * is the whole point of this function existing rather than the renderer doing
+ * `new Set(layers.map(l => l.url))`. A removed story layer is in neither set: the
+ * stack is not drawing it and the CZML path must not start. Deriving the claim
+ * from the live stack alone made Remove impossible for exactly those two kinds —
+ * the row vanished, the URL was un-claimed in the same commit, the tileset came
+ * straight back, and it was now on the globe with no panel row, no visibility
+ * toggle and no opacity control. Matched on URL rather than id because the layer
+ * model regenerates ids on the way in and the CZML side never sees them.
+ */
+export function claimedSourceUrls(
+  layers: readonly AtlasLayer[],
+  dismissed: Iterable<string> = [],
+): ReadonlySet<string> {
+  return new Set([...layers.map((l) => l.url), ...dismissed]);
 }
 
 export const DEFAULT_OPACITY = 1;
@@ -296,6 +349,43 @@ export function appendLayer(layers: readonly AtlasLayer[], layer: AtlasLayer): A
   if (existing) return raiseToTop(setLayerVisible(layers, existing.id, true), existing.id);
   const top = layers.reduce((m, l) => Math.max(m, l.order), -1);
   return normaliseOrder([...layers, { ...layer, order: top + 1 }]);
+}
+
+/**
+ * Add a layer a story brought with it.
+ *
+ * Same dedupe rule as `appendLayer` — the same source twice is two draws
+ * fighting over the same pixels, not twice the visibility — but with one extra
+ * step that `appendLayer` must not do for a hand-typed URL: **the matched row
+ * takes over the story's id.**
+ *
+ * That single line is what stops a story exporting the same `uri` twice. The
+ * outbound merge (`withStoryLayers`) pairs a stack row to a story layer by id.
+ * If the user had already added `https://…/tileset.json` by hand, dedupe keeps
+ * *their* row and the story's id is nowhere in the stack, so on save the story's
+ * own entry matches nothing, the user's copy appends after it, and the written
+ * document holds two layers pointing at one URL. `czml.ts` happens to
+ * deduplicate tilesets by URL so 3D content survives that, but a duplicated
+ * imagery or GeoJSON layer is drawn twice by Atlas's own reader and by any
+ * foreign tool. Adopting the id makes the pairing succeed and the story layer is
+ * replaced in place instead — its position in the array, and therefore the diff
+ * of a re-saved document, stays stable.
+ *
+ * The user's row keeps everything else it has, including the fact that it is
+ * *theirs*: a source the user added and a story later mentions is still the
+ * user's to keep, so no `fromStoryId` is stamped on it here.
+ */
+export function adoptStoryLayer(layers: readonly AtlasLayer[], incoming: AtlasLayer): AtlasLayer[] {
+  const existing = layers.find((l) => l.url === incoming.url && l.format === incoming.format);
+  if (!existing) return appendLayer(layers, incoming);
+
+  // Only take the id when it is genuinely free. Two rows sharing an id would
+  // collide as React keys and every edit would hit both — strictly worse than
+  // the duplicate-on-export this is trying to avoid.
+  const free = existing.id === incoming.id || !layers.some((l) => l.id === incoming.id);
+  const id = free ? incoming.id : existing.id;
+  const renamed = free ? layers.map((l) => (l.id === existing.id ? { ...l, id } : l)) : layers;
+  return raiseToTop(setLayerVisible(renamed, id, true), id);
 }
 
 export function removeLayer(layers: readonly AtlasLayer[], id: string): AtlasLayer[] {

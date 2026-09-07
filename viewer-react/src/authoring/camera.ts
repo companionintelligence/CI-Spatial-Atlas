@@ -1,4 +1,5 @@
 import type { Camera } from '@companion-atlas/story';
+import type { MeasureUnits } from './measure.js';
 
 /**
  * "Capture this view" — the pure half.
@@ -151,17 +152,44 @@ export function poseFromCamera(camera: Camera | null | undefined): CameraPose | 
  *  camera height does not put the viewer underground. */
 export const DEFAULT_HEIGHT_M = 1_800_000;
 
-/** A one-line human summary of a captured camera, for the toolbar's
- *  confirmation. Degrees with a compass letter, because "heading 287.4" tells
- *  nobody anything and "WNW" tells them where they were looking. */
-export function describeCamera(camera: Camera | null): string {
+/**
+ * A one-line human summary of a captured camera, for the toolbar's
+ * confirmation. Degrees with a compass letter, because "heading 287.4" tells
+ * nobody anything and "WNW" tells them where they were looking.
+ *
+ * `units` because this line shares a panel with the measurement readout and the
+ * metric/imperial toggle. It used to hard-code metres and kilometres, so an
+ * author who picked Imperial got "Measured 3280 ft" and, three rows above it,
+ * "Captured · … · 850 m" — two unit systems in one panel, with the switch they
+ * had just pressed visibly unable to reach the second one.
+ */
+export function describeCamera(camera: Camera | null, units: MeasureUnits = 'metric'): string {
   if (!camera) return 'No view to capture yet';
   const lon = camera.location?.lon ?? camera.lon ?? 0;
   const lat = camera.location?.lat ?? camera.lat ?? 0;
   const h = camera.location?.height ?? camera.height ?? 0;
-  const alt = h >= 10_000 ? `${Math.round(h / 1000)} km` : `${Math.round(h)} m`;
-  return `${lat.toFixed(4)}, ${lon.toFixed(4)} · ${alt} · ${compass(camera.heading ?? 0)}`;
+  return `${lat.toFixed(4)}, ${lon.toFixed(4)} · ${formatAltitude(h, units)} · ${compass(camera.heading ?? 0)}`;
 }
+
+/**
+ * Altitude, in the units the panel is set to.
+ *
+ * Deliberately NOT `formatLength`: that one is for a measured distance along the
+ * ground and switches to kilometres at 1 km, which would print a camera 1.8 km
+ * up as "1.80 km" where the existing readout says "1800 m". The rung here stays
+ * where it was (10 km) so an altitude a user recognises does not change format
+ * under them; only the *unit system* is new.
+ */
+function formatAltitude(metres: number, units: MeasureUnits): string {
+  if (units === 'imperial') {
+    const feet = Math.round(metres / METRES_PER_FOOT);
+    return feet >= 10_000 ? `${Math.round(feet / FEET_PER_MILE)} mi` : `${feet} ft`;
+  }
+  return metres >= 10_000 ? `${Math.round(metres / 1000)} km` : `${Math.round(metres)} m`;
+}
+
+const METRES_PER_FOOT = 0.3048;
+const FEET_PER_MILE = 5280;
 
 const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 

@@ -2,13 +2,14 @@
   "name": "companion-atlas",
   "private": true,
   "version": "0.1.0",
-  "description": "Companion Atlas — 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
+  "description": "Companion Atlas \u2014 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
   "license": "CI-Commercial-1.0",
   "type": "module",
   "workspaces": [
     "packages/*",
     "viewer-react",
-    "server"
+    "server",
+    "third_party/ci-common/packages/tokens"
   ],
   "scripts": {
     "dev": "npm run build -w packages/story-schema && npm run dev -w viewer-react",

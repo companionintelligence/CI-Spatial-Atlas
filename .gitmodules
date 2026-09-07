@@ -1,0 +1,4 @@
+[submodule "third_party/ci-common"]
+	path = third_party/ci-common
+	url = https://github.com/companionintelligence/CI-Common.git
+	branch = main

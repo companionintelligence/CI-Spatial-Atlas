@@ -20,8 +20,19 @@ import { summarise } from './useImported.js';
 import type { MemorySource } from '../memory/client.js';
 import type { MemoryImport } from '../memory/import.js';
 import { MemoryExportSection, MemoryImportSection } from './MemorySections.js';
+import { MediaUploadSection } from './MediaUploadSection.js';
+import { atlasApiFromEnv } from '../upload/index.js';
 import { useMemoryTransfer } from './useMemoryTransfer.js';
 import './interop.css';
+
+/** The Atlas API to upload to, or null when this build has none. Read once at
+ *  module scope: `import.meta.env` is frozen at build time, so re-reading it
+ *  per render would only hand `useMediaUpload` a new object every time. The
+ *  cast is the same one `AtlasApp` uses — this workspace's `tsconfig` does not
+ *  pull in `vite/client`. */
+const ATLAS_API = atlasApiFromEnv(
+  (import.meta as unknown as { env: Record<string, string | undefined> }).env,
+);
 
 export interface InteropPanelProps {
   open: boolean;
@@ -54,11 +65,16 @@ export interface InteropPanelProps {
   /** Link to store on an exported story event. Already scrubbed of `?memory=`
    *  and `?token=` — a share URL is a public artifact. */
   shareUrl?: () => string | undefined;
+  /** Where an uploaded photo or video gets pinned — read at the moment the file
+   *  is chosen, so it is the view the user is actually looking at. Media with no
+   *  position is not renderable and not expressible in KML, so the upload
+   *  section reports that rather than inventing coordinates. */
+  uploadPosition?: () => { lat: number; lon: number } | null;
 }
 
 export function InteropPanel({
   open, onClose, story, files, onImported, onRemoveFile, onClearImported, onFrameImported,
-  memory, onMemoryImported, shareUrl,
+  memory, onMemoryImported, shareUrl, uploadPosition,
 }: InteropPanelProps) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -81,6 +97,18 @@ export function InteropPanel({
         // because `change` never fires for an unchanged value.
         if (input.current) input.current.value = '';
       }
+    },
+    [onImported, onFrameImported],
+  );
+
+  // An upload arrives as one already-parsed file, so it joins the same list a
+  // dropped KML does — listed, removable, and merged into the story by the same
+  // code. Framing on success for the same reason an import does: a pin that
+  // lands off-screen looks like nothing happened.
+  const took = useCallback(
+    (file: ImportedFile) => {
+      onImported([file]);
+      if (file.items.length) onFrameImported?.();
     },
     [onImported, onFrameImported],
   );
@@ -116,6 +144,8 @@ export function InteropPanel({
           {busy ? 'Reading…' : 'Choose files'}
         </button>
       </section>
+
+      <MediaUploadSection api={ATLAS_API} onUploaded={took} position={uploadPosition} />
 
       <MemoryImportSection transfer={transfer} />
 

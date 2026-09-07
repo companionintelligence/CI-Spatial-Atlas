@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
-import { buildScrapbookStory, curateJourney, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
+import { buildScrapbookStory, curateJourney, type Camera, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
 import { useStory } from './story/useStory.js';
 import { usePlaces } from './story/usePlaces.js';
-import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
+import { CesiumStoryViewer, type SceneModeName } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
 import { Rail, TopBar } from './ui/Shell.js';
 import { MapLayers } from './ui/MapLayers.js';
@@ -29,9 +29,14 @@ import type { DeckSlide } from './ui/sceneDeck.js';
 import { InteropPanel, DropOverlay } from './interop/InteropPanel.js';
 import { useImported, withImported } from './interop/useImported.js';
 import { applyMemoryPlaces, type MemoryImport } from './memory/import.js';
-import type { GeoPlace } from './memory/geocode.js';
+import { isFramableBounds, type GeoPlace } from './memory/geocode.js';
 import { useFileDrop } from './interop/useFileDrop.js';
+import { atlasChrome, restoredView, SharePanel, EmbedBar } from './embed/index.js';
 import { useAuthoring } from './authoring/useAuthoring.js';
+import { poseFromCamera } from './authoring/camera.js';
+import { useScenes } from './scenes/index.js';
+import { SceneList } from './scenes/SceneList.js';
+import { SceneEditor } from './scenes/SceneEditor.js';
 import { AuthoringToolbar, mergeAuthoredItems } from './authoring/index.js';
 import { importFiles } from './interop/importFile.js';
 import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
@@ -87,6 +92,12 @@ const toEntry = (m: AtlasMemory): ScrapbookEntry => ({
  */
 export function AtlasApp() {
   const { story: loadedStory, error, loading, source, isSample, memory } = useStory();
+  // Reading mode. One decision for the whole shell rather than a `&&` per
+  // surface — the surface list is an exhaustive union, so adding a panel forces
+  // a decision about whether an embed shows it. See embed/embedMode.ts.
+  const chrome = useMemo(() => atlasChrome(window.location.search), []);
+  /** The camera and moment a shared or embedded link asked to open at. */
+  const opened = useMemo(() => restoredView(window.location.search), []);
   // A Companion Memory import REPLACES the loaded story rather than merging
   // into it. `deriveModel` reads its memory list from `story.scenes` whenever
   // there are any, so an archive merged into a scened story renders as nothing;
@@ -128,6 +139,9 @@ export function AtlasApp() {
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
+  // Projection. Starts on the globe because that is what Atlas is for; a story
+  // that is really a map is one click from being read as one.
+  const [sceneMode, setSceneMode] = useState<SceneModeName>('3d');
   const [sunLighting, setSunLighting] = useState(false);
   const [buildings, setBuildings] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -186,12 +200,19 @@ export function AtlasApp() {
   const [sbOpen, setSbOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [interopOpen, setInteropOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareCamera, setShareCamera] = useState<Camera | null>(null);
   const [presenting, setPresenting] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
   const lastSync = useRef(0);
   const flownToRef = useRef<string | null>(null);
   const introDone = useRef(false);
+  /** Whether the URL's `?view=` has been honoured. Deliberately separate from
+   *  `introDone`, which is reset every time a journey is played so the new
+   *  story gets its own opening flight: a restored view is a fact about *this
+   *  page load*, and re-applying it on every journey would fight the journey. */
+  const openedDone = useRef(false);
   const lightboxRef = useRef<AtlasMemory | null>(null);
   lightboxRef.current = lightbox;
   /** journey scene id → base memory id, for the currently playing journey. */
@@ -312,9 +333,15 @@ export function AtlasApp() {
   const flyToGeoPlace = useCallback((gp: GeoPlace) => {
     if (!viewer || viewer.isDestroyed()) return;
     const b = gp.bounds;
-    const framed = b && b.east > b.west && b.north > b.south;
+    // `isFramableBounds` rather than a truthiness check: a box being *present*
+    // says nothing about it being worth flying to. Nominatim attaches a
+    // boundingbox to every row including house numbers, so a street address
+    // arrives with a ~10m rectangle and framing it puts the camera inside the
+    // roof — the exact case this fallback exists for. The predicate lives with
+    // the parsers that produce the boxes, and covers degenerate and
+    // antimeridian-crossing ones too.
     void viewer.camera.flyTo({
-      destination: framed
+      destination: b && isFramableBounds(b)
         ? Cesium.Rectangle.fromDegrees(b.west, b.south, b.east, b.north)
         : Cesium.Cartesian3.fromDegrees(gp.lon, gp.lat, 1_800_000),
       duration: reduceMotion ? 0 : 1.6,
@@ -366,6 +393,33 @@ export function AtlasApp() {
   // A user-initiated jump: select + pause, so the camera settles on the memory
   // instead of the playback fly-through carrying on.
   const inspect = useCallback((m: AtlasMemory) => { select(m); pause(); }, [select, pause]);
+
+  /**
+   * Where the globe is pointed, in degrees, or null if it is pointed at space.
+   *
+   * `pickEllipsoid` on the centre of the canvas rather than the camera's own
+   * ground track: at an oblique pitch those are different places, and the one a
+   * person means by "here" is the one in the middle of their screen. Falls back
+   * to the camera's own position when the centre ray misses the globe entirely
+   * (a horizon-grazing view), and returns null only when even that is
+   * unreadable — which the caller reports rather than papering over with 0,0,
+   * a spot in the Gulf of Guinea.
+   */
+  const viewCentre = useCallback((): { lat: number; lon: number } | null => {
+    if (!viewer || viewer.isDestroyed()) return null;
+    const { scene, camera } = viewer;
+    const canvas = scene.canvas;
+    const centre = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
+    const hit = camera.pickEllipsoid(centre, scene.globe.ellipsoid);
+    const carto = hit
+      ? Cesium.Cartographic.fromCartesian(hit)
+      : camera.positionCartographic;
+    if (!carto || !Number.isFinite(carto.latitude) || !Number.isFinite(carto.longitude)) return null;
+    return {
+      lat: Cesium.Math.toDegrees(carto.latitude),
+      lon: Cesium.Math.toDegrees(carto.longitude),
+    };
+  }, [viewer]);
 
   // "Fit all places": frame the camera on every located memory at once.
   const frameAll = useCallback(() => {
@@ -422,11 +476,79 @@ export function AtlasApp() {
   // Open *on the memories*: once the viewer + model are both ready, frame the
   // first memory and set the clock to its moment (so its region is lit, not the
   // default empty night hemisphere), then let playback carry the journey.
+  //
+  // Unless the URL asked for somewhere else. A shared or embedded link carries
+  // `?view=` and `?t=`, and this effect is what they are up against: it runs a
+  // beat after the restore and flies to the first memory instead, so without
+  // the branch below the parameters are decoration — written by the share
+  // panel, parsed on open, and then overridden before anyone sees them. The
+  // clock needs the same treatment: `scrub` does not stop playback, so an
+  // autoplaying story would walk straight off the requested moment on the next
+  // tick.
   useEffect(() => {
     if (!viewer || !model || introDone.current) return;
+
+    // `camera` OR `timeMs` — the two parameters are decoded independently
+    // (`restoredView`), and gating the whole restore on the camera meant a
+    // `?t=`-only link was parsed and then thrown away. That is not a
+    // hypothetical URL: the share panel takes its camera from
+    // `draw.captureCamera()`, which is null until the authoring controller
+    // mounts, while `timeMs` is essentially always set — so Atlas could hand
+    // out a link to a moment that its own reader ignored, and open at the
+    // first memory instead.
+    if ((opened.camera || opened.timeMs != null) && !openedDone.current) {
+      openedDone.current = true;
+      introDone.current = true;
+
+      if (opened.timeMs != null) {
+        // Clamped into the story's own window. `?t=` is attacker-supplied in an
+        // embed and stale in a shared link — a story re-cut to a shorter span
+        // still has to open somewhere it can show. Without this the scrubber
+        // reads a date the globe is not displaying: `setCurrentMs` would take
+        // the out-of-range value while Cesium's CLAMPED clock quietly holds the
+        // playhead at the end.
+        const { startMs, stopMs } = model.timeline;
+        scrub(Math.min(Math.max(opened.timeMs, startMs), stopMs));
+        pause();
+      }
+
+      // Claim the memory the clock is already standing on. The playback
+      // fly-through fires on the very next tick and flies to `lastPassed`,
+      // which — on any link that opens mid-story — is a memory somewhere else
+      // entirely; it would take the camera off the view the link exists to
+      // show, a second after arriving. Claiming it leaves playback free to
+      // carry on to the *next* memory, which is what an autoplaying shared
+      // link should do.
+      const atMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+      flownToRef.current = lastPassed(model.memories, atMs)?.id ?? flownToRef.current;
+
+      // A time-only link still needs an opening shot, or the globe stays on
+      // whatever the default view is while the clock sits on the right moment.
+      // The first memory is the same answer the no-parameter path gives.
+      if (!opened.camera) {
+        const first = model.memories[0];
+        if (first) { setFocusedId(first.id); flyTo(first); }
+        return;
+      }
+
+      const pose = poseFromCamera(opened.camera);
+      // Flown here rather than through `draw.flyToCamera`, which needs the
+      // authoring controller — a thing an embed never mounts, and which arrives
+      // a render late even in the full app. The opening shot must not depend on
+      // the drawing layer existing.
+      if (pose) {
+        void viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromRadians(pose.longitude, pose.latitude, pose.height),
+          orientation: { heading: pose.heading, pitch: pose.pitch, roll: pose.roll },
+          duration: reduceMotion ? 0 : 1.6,
+        });
+      }
+      return;
+    }
+
     const first = model.memories[0];
     if (first) { introDone.current = true; select(first); }
-  }, [viewer, model, select]);
+  }, [viewer, model, select, scrub, pause, opened, reduceMotion, flyTo]);
 
   // ————— the scrapbook loop: collect → curate → play → save —————
 
@@ -472,29 +594,84 @@ export function AtlasApp() {
   // hides itself as the clock leaves its range.
   const layerControl = useLayers(memory?.url ?? null, { timeMs: currentMs || null });
 
+  // Authored scenes. Same account bucket as the layer stack and the drawing
+  // tools, so two accounts on one browser never inherit each other's narration.
+  const sceneControl = useScenes(memory?.url ?? null);
+
+  // The document actually on screen — not just `loadedStory`, which is only the
+  // `?story=` and bundled-demo path. On a Companion Memory session the story on
+  // screen is `memoryToStory` output or an imported archive, so gating the merge
+  // on `loadedStory` is why the layers `draftStory` correctly writes were
+  // write-only: saved, and never read back.
+  const openStory = journey ?? memImport?.story ?? loadedStory;
+
   // A story that arrives carrying layers must put them in the stack, or it
   // renders none of them and says nothing — a layer nobody draws logs nothing.
-  // `mergeStoryLayers` appends and deduplicates on (format, url), so the user's
-  // own stack survives and re-opening a story raises its layers rather than
-  // stacking a second identical copy.
+  // The story id travels with them: those rows belong to the document, so they
+  // stay out of the user's own account-scoped stack, and one the user removes
+  // stays removed instead of being re-adopted on the next render.
   useEffect(() => {
-    layerControl.mergeStoryLayers(loadedStory?.layers);
-  }, [loadedStory, layerControl.mergeStoryLayers]);
+    layerControl.mergeStoryLayers(openStory?.layers, openStory?.id);
+  }, [openStory, layerControl.mergeStoryLayers]);
+
+  // Layers from a dropped `.story.json`. No story id on purpose: the user
+  // brought the file deliberately, so these are theirs — persisted with the rest
+  // of their stack rather than borrowed from whatever document happens to be open.
+  useEffect(() => {
+    layerControl.mergeStoryLayers(imported.layers);
+  }, [imported.layers, layerControl.mergeStoryLayers]);
+
+  // Drawing. The controller owns rendering for what it draws (its own
+  // CustomDataSource), which is why `draw.items` are merged into the story for
+  // *export* only — feeding them through the story's CZML as well would draw
+  // every shape twice, z-fighting two coincident surfaces and giving each two
+  // pick targets.
+  const draw = useAuthoring(viewer, {
+    story: loadedStory,
+    enabled: drawing,
+    // Drawn shapes now survive a reload. Same bucket rule as the layer stack —
+    // per connected memory, so two accounts on one browser never inherit each
+    // other's annotations.
+    scope: memory?.url ?? null,
+    onSelect: (sel) => {
+      if (sel?.kind === 'memory') setFocusedId(sel.id);
+      else if (sel?.kind === 'place') setFocusedPlace(places.find((p) => p.id === sel.id) ?? null);
+    },
+  });
 
   const draftStory = useCallback(
     (curated: boolean): Story | null => {
-      if (sbEntries.length === 0) return null;
+      // Authored scenes alone are enough to have something worth saving. This
+      // used to be `sbEntries.length === 0`, so a user who wrote a five-scene
+      // story and collected nothing got a disabled Save button — in the drawer
+      // that holds the only Save button they would look for.
+      if (sbEntries.length === 0 && sceneControl.count === 0) return null;
       const entries = sbEntries.map(toEntry);
       const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
-      // Fold the layer stack into everything that leaves the app. Without it a
-      // user who added four layers saves and downloads a story with none of
-      // them — and every layer's attribution goes too, which is a licence
-      // condition rather than a nicety.
-      return layerControl.toStory(
-        curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts),
-      );
+      const base = curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
+      // Everything that leaves the app carries everything on the globe.
+      //
+      // Layers, because a user who added four of them would otherwise save a
+      // story with none — and each layer's attribution goes with it, which is a
+      // licence condition rather than a nicety.
+      //
+      // Drawn shapes, because localStorage is a convenience, not custody: it is
+      // per-browser, cleared by a privacy setting, and invisible to anyone the
+      // story is shared with. If saving a journey silently dropped the
+      // annotations the user drew on it, "Save to Memory" would be quietly
+      // lossy in the one direction that is meant to be durable.
+      // And the authored deck. Scenes were left out of this path at first, on
+      // the theory that a curated journey is a separate artifact from a written
+      // story. That was the wrong call and inconsistent with the line above:
+      // Save is the durable direction, and a deck that lives only in
+      // localStorage is one cleared setting away from gone.
+      const withItems = draw.items.length ? mergeAuthoredItems(base, draw.items) : base;
+      return sceneControl.toStory(layerControl.toStory(withItems));
     },
-    [sbEntries, sb.draft.visibility, sb.draft.title, layerControl.toStory],
+    [
+      sbEntries, sb.draft.visibility, sb.draft.title,
+      layerControl.toStory, draw.items, sceneControl.toStory, sceneControl.count,
+    ],
   );
 
   const curate = useCallback(() => {
@@ -539,7 +716,13 @@ export function AtlasApp() {
 
   // ⌘K / Ctrl-K toggles the command palette (never behind the lightbox, which
   // sits above it — an invisible focused palette would steal keystrokes).
+  //
+  // Not bound at all in embed mode, and `preventDefault` is why: an iframe that
+  // swallows ⌘K takes the shortcut away from the *host page* whenever the
+  // pointer happens to be over the map. Whether Atlas would then show a palette
+  // is beside the point — the key never reaches the page the reader is on.
   useEffect(() => {
+    if (!chrome.commandPalette) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -549,11 +732,18 @@ export function AtlasApp() {
     };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, []);
+  }, [chrome.commandPalette]);
 
+  // Opens the share panel rather than copying straight to the clipboard. The
+  // old handler copied `location.href`, which does not contain the view its
+  // label promised, and swallowed every clipboard failure — a button that
+  // silently does nothing. The pose is captured at the moment the panel opens,
+  // because the camera keeps moving while the panel is up.
   const share = useCallback(() => {
-    try { void navigator.clipboard?.writeText(safeShareUrl()); } catch { /* ignore */ }
-  }, []);
+    setShareCamera(draw.captureCamera());
+    setShareOpen(true);
+  }, [draw]);
+  const closeShare = useCallback(() => setShareOpen(false), []);
 
   // A "Saved" banner must not outlive the thing it described: editing the draft
   // (or clearing it) invalidates the confirmation.
@@ -571,6 +761,12 @@ export function AtlasApp() {
   const closeScrapbook = useCallback(() => setSbOpen(false), []);
   const closePeople = useCallback(() => setPeopleOpen(false), []);
   const closeInterop = useCallback(() => setInteropOpen(false), []);
+
+  // The way back out of an empty or unwanted import, without a page reload.
+  const clearImport = useCallback(() => {
+    setMemImport(null);
+    introDone.current = false;
+  }, []);
 
   const onMemoryImported = useCallback((r: MemoryImport) => {
     setMemImport(r);
@@ -595,37 +791,63 @@ export function AtlasApp() {
     },
     [imported, frameAll],
   );
-  const { dragging } = useFileDrop((files) => void takeFiles(files));
+  const { dragging } = useFileDrop((files) => void takeFiles(files), chrome.interop);
   // Imported items have no scene, so no memory pin represents them — the
   // renderer needs to know not to filter their CZML away.
   const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
 
-  // Drawing. The controller owns rendering for what it draws (its own
-  // CustomDataSource), which is why `draw.items` are merged into the story for
-  // *export* only — feeding them through the story's CZML as well would draw
-  // every shape twice, z-fighting two coincident surfaces and giving each two
-  // pick targets.
-  const draw = useAuthoring(viewer, {
-    story: loadedStory,
-    enabled: drawing,
-    // Drawn shapes now survive a reload. Same bucket rule as the layer stack —
-    // per connected memory, so two accounts on one browser never inherit each
-    // other's annotations.
-    scope: memory?.url ?? null,
-    onSelect: (sel) => {
-      if (sel?.kind === 'memory') setFocusedId(sel.id);
-      else if (sel?.kind === 'place') setFocusedPlace(places.find((p) => p.id === sel.id) ?? null);
-    },
-  });
 
-  /** What leaves the app: everything on the globe — drawn shapes and layers. */
+  const [scenesOpen, setScenesOpen] = useState(false);
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  const selectedScene = sceneControl.scenes.find((sc) => sc.id === selectedSceneId) ?? null;
+  const selectedSceneIndex = sceneControl.scenes.findIndex((sc) => sc.id === selectedSceneId);
+
+  const addScene = useCallback(() => {
+    setSelectedSceneId(sceneControl.create().id);
+  }, [sceneControl.create]);
+
+  // "Capture this view" finally has somewhere to put the pose it has been
+  // producing and discarding. `createFromCamera` returns null for a pose that
+  // cannot be flown to — mid-flight, or the first frame — and adds nothing, so
+  // the deck never gains a slide that goes nowhere.
+  const addSceneFromView = useCallback(() => {
+    const scene = sceneControl.createFromCamera(draw.captureCamera());
+    if (scene) setSelectedSceneId(scene.id);
+  }, [sceneControl.createFromCamera, draw.captureCamera]);
+
+  const removeScene = useCallback((id: string) => {
+    sceneControl.remove(id);
+    setSelectedSceneId((cur) => (cur === id ? null : cur));
+  }, [sceneControl.remove]);
+
+  /**
+   * The deck Present steps through: the authored scenes reconciled with the
+   * open document by the same merge the export uses, so a preview and a
+   * download cannot disagree about what the story is.
+   *
+   * Only the scene *array* leaves this memo. The merged `Story` exists for the
+   * length of one expression and is never bound to anything the globe can
+   * reach: `deriveModel` maps scenes into memories whenever `story.scenes` is
+   * non-empty, so a rendered story carrying three authored scenes would
+   * collapse a 500-memory archive to three pins, silently and with no error.
+   */
+  const presentedScenes = useMemo(
+    () => sceneControl.toStory(story)?.scenes ?? [],
+    [sceneControl.toStory, story],
+  );
+
+  /** What leaves the app: everything on the globe — drawn shapes, layers and
+   *  the authored deck. The scrapbook's own Save is a different artifact with
+   *  its own scenes, so it deliberately does not absorb these (see draftStory). */
   const exportStory = useMemo(
     // `story` is still nullable here — the loading/error guards sit below.
     // `toStory` returns its argument unchanged when the stack is empty, so a
     // user with no layers keeps today's object identity and the viewer does not
     // rebuild its CZML data source for nothing.
-    () => layerControl.toStory(story && draw.items.length ? mergeAuthoredItems(story, draw.items) : story),
-    [story, draw.items, layerControl.toStory],
+    () => sceneControl.toStory(
+      layerControl.toStory(story && draw.items.length ? mergeAuthoredItems(story, draw.items) : story),
+    ),
+    [story, draw.items, layerControl.toStory, sceneControl.toStory],
   );
 
   // Stepping through authored scenes. The presenter owns the deck and the
@@ -676,7 +898,18 @@ export function AtlasApp() {
   // A memory query that matches nothing returns a perfectly valid *empty* story,
   // so the error branch never fires — without this the user just gets a blank
   // globe and no idea whether it's broken, empty, or filtered.
-  if (source === 'memory' && model.memories.length === 0) {
+  // `!memImport` is load-bearing. This guard is a full-screen early return, and
+  // everything — Rail, InteropPanel, the running transfer state — is mounted
+  // below it. An import whose filter legitimately matched nothing (a wrong year,
+  // a box over open sea) sets `memImport` to an empty story, drives
+  // `model.memories.length` to 0, and `source` is 'memory' for the whole
+  // session regardless. So the guard fired and ejected the user out of the app
+  // and away from the panel they were operating, with no control on the card and
+  // no way back but a page reload — which discarded the filter and the import.
+  // Following the panel's own "narrow it first" advice was the fastest way to
+  // hit it. An empty *import* is now an in-app state (the chip below); this card
+  // is only for an empty initial connection, which is what it was written for.
+  if (source === 'memory' && !memImport && model.memories.length === 0) {
     return (
       <div className="atlas-boot">
         <div className="msg">
@@ -693,11 +926,14 @@ export function AtlasApp() {
 
 
   return (
-    <div className="atlas-app">
+    // `.atlas-app` reserves a 60px rail column and a 54px top-bar row in its
+    // grid template, so hiding those components without collapsing the tracks
+    // would inset an embedded globe inside an empty L-shaped band.
+    <div className={`atlas-app${chrome.embedded ? ' is-embed' : ''}`}>
       <Starfield />
       <div className="atlas-aurora" aria-hidden="true" />
+      {chrome.rail && (
       <Rail
-        onSearch={() => setPaletteOpen(true)}
         onFrameAll={frameAll}
         onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
         onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
@@ -705,8 +941,9 @@ export function AtlasApp() {
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
         onPresent={() => setPresenting(true)}
-        onDraw={() => setDrawing((d) => !d)}
-        drawing={drawing}
+        onScenes={() => setScenesOpen((v) => !v)}
+        scenesOpen={scenesOpen}
+        sceneCount={sceneControl.count}
         onInterop={() => setInteropOpen((o) => !o)}
         // `memoryToStory` returns `scenes: []`, so gating on scenes hid Present
         // from every real story and left it reachable only from the bundled
@@ -715,13 +952,21 @@ export function AtlasApp() {
         canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
         importedCount={imported.items.length}
       />
+      )}
+      {chrome.topBar && (
       <TopBar
         onSearch={() => setPaletteOpen(true)}
+        // Search and Draw moved off the rail: the rail is places to go, these
+        // are things to do, and they belong with the other view controls.
+        onDraw={() => setDrawing((d) => !d)}
+        drawing={drawing}
         onShare={share}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}
         onTogglePlaces={togglePlaces}
+        sceneMode={sceneMode}
+        onSceneMode={setSceneMode}
         layers={(
           <MapLayers
             open={layersOpen}
@@ -738,6 +983,7 @@ export function AtlasApp() {
           />
         )}
       />
+      )}
       <main className="atlas-stage">
         <CesiumStoryViewer
           story={story}
@@ -753,6 +999,9 @@ export function AtlasApp() {
           onHover={setHoveredId}
           onInteract={pause}
           layers={layerControl.layers}
+          claimedUrls={layerControl.claimedUrls}
+          sceneMode={sceneMode}
+          reduceMotion={reduceMotion}
           timeMs={currentMs || model.timeline.startMs}
           extraItemIds={importedIds}
         />
@@ -760,7 +1009,9 @@ export function AtlasApp() {
           <div className="atlas-overlay">
             <StatsRibbon stats={model.stats} />
             <PlaceChip memory={currentPlace} />
-            <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
+            {chrome.scrapbook && (
+              <ScrapbookFrames memories={scrapbook} hoveredId={hoveredId} onSelect={inspect} viewer={viewer} />
+            )}
             <Legend />
           </div>
         )}
@@ -768,6 +1019,12 @@ export function AtlasApp() {
           <div className="atlas-journey-chip" role="status">
             <span>Playing journey · <b>{journey.title}</b></span>
             <button onClick={exitJourney}>Back to all memories</button>
+          </div>
+        )}
+        {!journey && memImport && model.memories.length === 0 && (
+          <div className="atlas-journey-chip" role="status">
+            <span>That import matched nothing with coordinates. Widen the range or the area.</span>
+            <button onClick={clearImport}>Clear import</button>
           </div>
         )}
       </main>
@@ -785,7 +1042,7 @@ export function AtlasApp() {
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}
-            onCollect={() => focused && toggleCollect(focused)}
+            onCollect={chrome.collect ? () => { if (focused) toggleCollect(focused); } : undefined}
           />
         )
       )}
@@ -799,12 +1056,14 @@ export function AtlasApp() {
         onScrub={scrub}
         onStep={step}
       />
+      {chrome.scrapbook && (
       <ScrapbookDrawer
         open={sbOpen}
         entries={sbEntries}
         title={sb.draft.title}
         visibility={sb.draft.visibility}
         canSave={!!memory}
+        sceneCount={sceneControl.count}
         canClear={sb.count > 0}
         saveState={saveState}
         onClose={closeScrapbook}
@@ -817,7 +1076,11 @@ export function AtlasApp() {
         onSave={() => void saveScrapbook()}
         onDownload={downloadScrapbook}
       />
-      <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPersonJourney} />
+      )}
+      {chrome.people && (
+        <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPersonJourney} />
+      )}
+      {chrome.commandPalette && (
       <CommandPalette
         open={paletteOpen}
         memories={model.memories}
@@ -833,8 +1096,44 @@ export function AtlasApp() {
           ? { lat: focused.lat, lon: focused.lon }
           : undefined}
       />
+      )}
       <Lightbox memory={lightbox} onClose={closeLightbox} />
-      <AuthoringToolbar {...draw.toolbarProps} />
+      {chrome.drawing && <AuthoringToolbar {...draw.toolbarProps} />}
+      {chrome.sceneAuthoring && scenesOpen && (
+        <aside className="atlas-scenes" aria-label="Scene authoring">
+          <SceneList
+            scenes={sceneControl.scenes}
+            selectedId={selectedSceneId}
+            onSelect={setSelectedSceneId}
+            onCreate={addScene}
+            // Only offered once a controller is mounted on a live viewer:
+            // before that there is no pose to capture and the control would be
+            // a lie.
+            onCaptureScene={draw.ready ? addSceneFromView : undefined}
+            onRemove={removeScene}
+            onMove={sceneControl.move}
+            onMoveTo={sceneControl.moveTo}
+            problems={sceneControl.problems}
+            onClose={() => setScenesOpen(false)}
+          />
+          <SceneEditor
+            scene={selectedScene}
+            index={selectedSceneIndex < 0 ? 0 : selectedSceneIndex}
+            count={sceneControl.count}
+            onPatch={(patch) => { if (selectedSceneId) sceneControl.update(selectedSceneId, patch); }}
+            onRemove={() => { if (selectedSceneId) removeScene(selectedSceneId); }}
+            onCaptureCamera={draw.captureCamera}
+            problems={sceneControl.problems}
+            // The *rendered* story, deliberately — the same object Presenter
+            // builds its deck from. `sceneBackground` resolves an attached id
+            // against this document's `items`/`media`, so offering candidates
+            // from `exportStory` would let the author attach an entity the
+            // presenter cannot see, and the slide would come back blank.
+            story={story}
+          />
+        </aside>
+      )}
+      {chrome.interop && (
       <InteropPanel
         open={interopOpen}
         onClose={closeInterop}
@@ -847,19 +1146,70 @@ export function AtlasApp() {
         memory={memory}
         onMemoryImported={onMemoryImported}
         shareUrl={safeShareUrl}
+        // Where an upload gets pinned: the middle of the view, read at the
+        // moment the file is chosen.
+        //
+        // This was the focused memory, and the panel said "pinned where the
+        // camera is looking" beside it — which was not true and diverged on the
+        // very first load, with no user error required: the opening flight
+        // frames `memories[0]` while `model.focused` defaults to
+        // `memories[length - 1]`, so a photo added to a freshly opened story
+        // landed on a different memory than the one on screen. Flying somewhere
+        // else did not help, because a focused memory does not move with the
+        // camera. A getter rather than a value because the camera moves between
+        // renders and the answer must be the view at the moment of the pick.
+        uploadPosition={viewCentre}
       />
+      )}
       <Presenter
         story={story}
         open={presenting}
         onExit={exitPresent}
         onSceneEnter={presentScene}
+        // The authored deck, reconciled for export. Kept out of `story` on
+        // purpose — see `presentedScenes`.
+        authoredScenes={presentedScenes}
         // Without these the presenter opens empty on any Memory story: the deck
         // is built from scenes, and a Memory archive has none.
         memories={model.memories}
         initialSceneId={focused?.id ?? null}
         reduceMotion={reduceMotion}
       />
-      <DropOverlay visible={dragging} />
+      {chrome.interop && <DropOverlay visible={dragging} />}
+      {chrome.share && (
+        <SharePanel
+          open={shareOpen}
+          onClose={closeShare}
+          href={window.location.href}
+          camera={shareCamera}
+          // The moment on screen, not `model.timeline.startMs` — a link that
+          // reopened at the start of the archive would not be a link to "this
+          // view" in any sense the button's label claims.
+          timeMs={currentMs || null}
+          // A memory-backed view cannot honestly be embedded: the credentials
+          // are stripped on the way out (they have to be) and the reader would
+          // get the bundled sample instead. The panel says so rather than
+          // producing a snippet that renders somebody else's demo.
+          privateSource={source === 'memory'}
+          storyTitle={story.title}
+          // The deck lives in local storage until it is saved or downloaded, and
+          // a link carries neither. Saying so is the difference between sharing
+          // a view and appearing to share a story.
+          unsavedScenes={sceneControl.count}
+        />
+      )}
+      {chrome.embedBar && (
+        <EmbedBar
+          title={story.title}
+          // The same data question the rail asks — kept identical on purpose,
+          // because a Present button that opens an empty deck is the failure
+          // this bar exists to avoid.
+          canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
+          onPresent={() => setPresenting(true)}
+          presenting={presenting}
+          href={window.location.href}
+        />
+      )}
     </div>
   );
 }
