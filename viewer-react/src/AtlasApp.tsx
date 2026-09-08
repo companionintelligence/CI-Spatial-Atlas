@@ -943,6 +943,8 @@ export function AtlasApp() {
       {chrome.rail && (
       <Rail
         onFrameAll={frameAll}
+        onDraw={() => setDrawing((d) => !d)}
+        drawing={drawing}
         onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
         onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
         // Count what the drawer can actually show, so the badge can never claim
@@ -964,10 +966,10 @@ export function AtlasApp() {
       {chrome.topBar && (
       <TopBar
         onSearch={() => setPaletteOpen(true)}
-        // Search and Draw moved off the rail: the rail is places to go, these
-        // are things to do, and they belong with the other view controls.
-        onDraw={() => setDrawing((d) => !d)}
-        drawing={drawing}
+        // Framing sits with the projection control: both are about where you
+        // are looking from. Drawing went back to the rail with the other
+        // panel-openers.
+        onFrameAll={frameAll}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}
