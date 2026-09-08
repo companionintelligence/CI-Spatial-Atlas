@@ -4,6 +4,7 @@ import type { Camera, Item, Story } from '@companion-atlas/story';
 import { createAuthoringController, type AuthoringController } from './controller.js';
 import { createDraft, snapshot, type AuthoringMode, type DraftSnapshot } from './draft.js';
 import { describeCamera } from './camera.js';
+import { geocode, reverseGeocode, type GeoPlace } from '../memory/geocode.js';
 import { createHistory, summarize, type HistorySummary } from './history.js';
 import type { Measurement, MeasureUnits } from './measure.js';
 import { DEFAULT_STYLE, mergeStyle, type AuthoringStyle } from './style.js';
@@ -147,6 +148,8 @@ export interface AuthoringControl {
   undoLabel: string | null;
   redoLabel: string | null;
   /** Read the live camera. Returns the value AND stores it as `camera`. */
+  /** Stage the pin at a coordinate, with no click. */
+  placePoint: (point: { lat: number; lon: number }) => boolean;
   captureCamera: () => Camera | null;
   camera: Camera | null;
   flyToCamera: (camera: Camera) => void;
@@ -171,6 +174,13 @@ export function useAuthoring(
   const [measurement, setMeasurementState] = useState<Measurement | null>(null);
   const [units, setUnitsState] = useState<MeasureUnits>(options.units ?? 'metric');
   const [historyState, setHistoryState] = useState<HistorySummary>(() => summarize(createHistory([])));
+  /** The address of the staged pin, and what the lookup is doing. `idle` before
+   *  a point exists; `none` when the lookup came back with nothing, which is a
+   *  real answer (mid-ocean) and not an error. */
+  const [placeLabel, setPlaceLabelState] = useState('');
+  const [placeState, setPlaceState] = useState<'idle' | 'looking' | 'found' | 'none'>('idle');
+  const [addressResults, setAddressResults] = useState<GeoPlace[]>([]);
+  const [addressBusy, setAddressBusy] = useState(false);
 
   const controllerRef = useRef<AuthoringController | null>(null);
   /** The last array the controller emitted. Compared by identity so the sync
@@ -411,6 +421,41 @@ export function useAuthoring(
     setUnitsState(next);
   }, []);
 
+  /** Put the pin at a coordinate without a click — the address box's route in. */
+  const placePoint = useCallback((point: { lat: number; lon: number }): boolean =>
+    controllerRef.current?.placePoint(point) ?? false, []);
+
+  /**
+   * Name the staged pin. Mirrored into the controller so the value is on the
+   * item the *next* commit produces, rather than being React state the commit
+   * path would have to reach back into.
+   */
+  const setPlaceLabel = useCallback((label: string) => {
+    setPlaceLabelState(label);
+    controllerRef.current?.setPlaceLabel(label);
+  }, []);
+
+  /** Look an address up. Results are offered, never auto-placed: picking the
+   *  wrong Springfield should cost a click, not a mystery pin. */
+  const searchAddress = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (q.length < 2) { setAddressResults([]); return; }
+    setAddressBusy(true);
+    try {
+      setAddressResults(await geocode(q, { limit: 5 }));
+    } finally {
+      setAddressBusy(false);
+    }
+  }, []);
+
+  /** Place one of those results and adopt its label as the pin's name. */
+  const useAddress = useCallback((place: GeoPlace) => {
+    if (!placePoint({ lat: place.lat, lon: place.lon })) return;
+    setPlaceLabel(place.label);
+    setPlaceState('found');
+    setAddressResults([]);
+  }, [placePoint, setPlaceLabel]);
+
   const captureCamera = useCallback((): Camera | null => {
     const next = controllerRef.current?.captureCamera() ?? null;
     if (next) setCamera(next);
@@ -423,6 +468,49 @@ export function useAuthoring(
   // drops back to `idle` — so mirror it whenever the draft snapshot moves.
   useEffect(() => { setModeState(draft.mode); }, [draft.mode]);
 
+  /**
+   * Ask what is at the staged pin, whenever the pin moves.
+   *
+   * Keyed on the rounded coordinate rather than on the draft object: the draft
+   * is a fresh object on every hover frame, and a lookup per frame would be a
+   * request per frame at a public geocoder. Five decimal places is about a
+   * metre — finer than anyone can click and finer than any address is.
+   *
+   * A label the author has already accepted from the address box is not
+   * overwritten: they picked that row on purpose, and the reverse lookup for
+   * the same coordinate often answers with something blunter.
+   */
+  const staged = draft.point;
+  const stagedKey = staged ? `${staged.lat.toFixed(5)},${staged.lon.toFixed(5)}` : null;
+  const adoptedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!stagedKey || !staged || mode !== 'marker') {
+      // The pin is gone — so is anything we knew about it.
+      if (!stagedKey) { setPlaceState('idle'); setPlaceLabelState(''); adoptedRef.current = null; }
+      return;
+    }
+    if (adoptedRef.current === stagedKey) return;
+    adoptedRef.current = stagedKey;
+
+    const ac = new AbortController();
+    setPlaceState('looking');
+    void reverseGeocode(staged.lat, staged.lon, { signal: ac.signal }).then((place) => {
+      if (ac.signal.aborted) return;
+      if (place) {
+        setPlaceLabelState(place.label);
+        controllerRef.current?.setPlaceLabel(place.label);
+        setPlaceState('found');
+      } else {
+        setPlaceLabelState('');
+        controllerRef.current?.setPlaceLabel('');
+        setPlaceState('none');
+      }
+    });
+    return () => ac.abort();
+    // `staged` is read through the key, which is what changes meaningfully.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedKey, mode]);
+
   const toolbarProps = useMemo<AuthoringToolbarProps>(() => ({
     mode,
     onMode: setMode,
@@ -434,6 +522,13 @@ export function useAuthoring(
     onStyle: setStyle,
     noteText,
     onNoteText: setNoteText,
+    placeLabel,
+    placeState,
+    onPlaceLabel: setPlaceLabel,
+    addressResults,
+    addressBusy,
+    onSearchAddress: (q: string) => { void searchAddress(q); },
+    onUseAddress: useAddress,
     selection,
     onDelete: deleteSelected,
     onCaptureCamera: () => { captureCamera(); },
@@ -453,10 +548,12 @@ export function useAuthoring(
     mode, setMode, draft, finish, cancel, undoVertex, style, setStyle,
     noteText, setNoteText, selection, deleteSelected, captureCamera, camera, enabled,
     measurement, clearMeasurement, units, setUnits, historyState, undo, redo,
+    placeLabel, placeState, setPlaceLabel, addressResults, addressBusy, searchAddress, useAddress,
   ]);
 
   return {
     ready,
+    placePoint,
     mode, setMode,
     draft,
     style, setStyle,

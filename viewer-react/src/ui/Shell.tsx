@@ -1,7 +1,7 @@
 import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import {
-  BrandMark, GlobeIcon, PinIcon, PeopleIcon, LayersIcon,
-  SearchIcon, ShareIcon, FlagIcon, ExchangeIcon, SlidesIcon, PlusIcon,
+  BrandMark, GlobeIcon, PeopleIcon, LayersIcon,
+  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon,
 } from './icons.js';
 
 
@@ -10,15 +10,15 @@ import {
  *  Scenes opens the deck editor; Present steps through the story's authored
  *  scenes; Import opens the KML/GeoJSON panel.
  *
- *  Search and Draw are NOT here — they live in the top bar beside the other
- *  toggles. The rail is places to go; those two are things to do, and having
- *  them on both sides of the shell meant the same action had two homes. */
+ *  Search is NOT here — it lives in the top bar. Neither is "Fit all places",
+ *  which sits beside the projection control: framing the camera on everything
+ *  is the same kind of decision as choosing 3D or 2D — where you are looking
+ *  from — rather than which panel is open. */
 export function Rail({
   onFrameAll, onPeople, onCollections, scrapbookCount,
-  onPresent, onInterop, canPresent, importedCount,
+  onPresent, onInterop, canPresent, importedCount, onDraw, drawing,
   onScenes, scenesOpen, sceneCount,
 }: {
-  onFrameAll: () => void;
   onPeople: () => void;
   onCollections: () => void;
   scrapbookCount: number;
@@ -29,14 +29,23 @@ export function Rail({
    *  (coming soon)" button was removed below. */
   canPresent: boolean;
   importedCount: number;
+  onDraw: () => void;
+  /** Armed state, so the rail shows a tool is live — a drawing mode that looks
+   *  identical to browsing is how people lose a click. */
+  drawing: boolean;
+  onFrameAll: () => void;
   onScenes: () => void;
   scenesOpen: boolean;
   /** Badge, and the honest signal that a story is being written. */
   sceneCount: number;
 }) {
   const items = [
-    { key: 'globe', label: 'Globe', Icon: GlobeIcon, onClick: onFrameAll, active: true },
-    { key: 'places', label: 'Fit all places', Icon: PinIcon, onClick: onFrameAll },
+    // The globe is home: it frames everything. "Fit all places" was a second
+    // button doing exactly this a row below it, and it is the one that moved to
+    // the top bar — where framing sits beside the projection control, because
+    // both are decisions about where you are looking from.
+    { key: 'globe', label: 'Globe — frame everything', Icon: GlobeIcon, onClick: onFrameAll, active: true },
+    { key: 'draw', label: drawing ? 'Stop drawing' : 'Draw', Icon: PencilIcon, onClick: onDraw, active: drawing },
     { key: 'people', label: 'People', Icon: PeopleIcon, onClick: onPeople },
     { key: 'collections', label: 'Scrapbook', Icon: LayersIcon, onClick: onCollections, badge: scrapbookCount },
     { key: 'scenes', label: 'Scenes', Icon: FlagIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
@@ -68,19 +77,24 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
 ];
 
 /** Top bar — wordmark, connection state, and the right-hand cluster of things
- *  you can do to the view: search, draw, named places, layers, projection,
- *  share. All icons, all the same size, in one row. */
+ *  you can do to the view: search, named places, layers, fit-all, projection.
+ *  All icons, all the same size, in one row.
+ *
+ *  Drawing is NOT here — it went back to the rail, with the other controls that
+ *  open a panel. What is left changes where you look or what is drawn over the
+ *  world; drawing changes the world itself.
+ *
+ *  Sharing is NOT here: a link and an `<iframe>` snippet are ways of getting a
+ *  view out of Atlas, which is what the Import & export panel is for, and that
+ *  panel is where the other three exits already live. */
 export function TopBar({
-  onSearch, onDraw, drawing, onShare, live, sample, showPlaces, onTogglePlaces, layers,
+  onSearch, onFrameAll, live, sample, showPlaces, onTogglePlaces, layers,
   sceneMode = '3d', onSceneMode,
 }: {
   onSearch: () => void;
-  /** Arm or disarm the drawing tools. */
-  onDraw?: () => void;
-  /** Armed state, so the bar shows a tool is live — a drawing mode that looks
-   *  identical to browsing is how people lose a click. */
-  drawing?: boolean;
-  onShare: () => void;
+  /** Frame the camera on every located memory. Beside the projection control
+   *  because both answer "where am I looking from", not "what is on the map". */
+  onFrameAll?: () => void;
   live?: boolean;
   /** Showing the bundled demo story because no Companion Memory is connected. */
   sample?: boolean;
@@ -121,17 +135,6 @@ export function TopBar({
       >
         <SearchIcon />
       </button>
-      {onDraw && (
-        <button
-          className="atlas-icon-btn"
-          title={drawing ? 'Stop drawing' : 'Draw on the map'}
-          aria-label={drawing ? 'Stop drawing' : 'Draw on the map'}
-          aria-pressed={!!drawing}
-          onClick={onDraw}
-        >
-          <PlusIcon />
-        </button>
-      )}
       {onTogglePlaces && (
         <button
           className="atlas-icon-btn"
@@ -144,6 +147,16 @@ export function TopBar({
         </button>
       )}
       {layers}
+      {onFrameAll && (
+        <button
+          className="atlas-icon-btn"
+          title="Fit all places — frame every located memory"
+          aria-label="Fit all places"
+          onClick={onFrameAll}
+        >
+          <FitIcon />
+        </button>
+      )}
       {onSceneMode && (
         // A three-way segmented control rather than a 2D/3D toggle: Columbus is
         // a real third answer — a flat map that still has height, which is
@@ -183,7 +196,6 @@ export function TopBar({
           {sceneMode === '3d' ? '2D' : '3D'}
         </button>
       )}
-      <button className="atlas-icon-btn" title="Copy link to this view" aria-label="Copy link to this view" onClick={onShare}><ShareIcon /></button>
     </header>
   );
 }

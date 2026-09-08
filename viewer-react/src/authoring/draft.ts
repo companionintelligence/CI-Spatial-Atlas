@@ -64,8 +64,27 @@ export const MIN_VERTICES: Record<AuthoringMode, number> = {
   measure: 2,
 };
 
-/** Modes that finish on the first click — there is nothing to rubber-band. */
-export const SINGLE_CLICK_MODES: readonly AuthoringMode[] = ['marker', 'note'];
+/**
+ * Modes that hold exactly one vertex: a second click MOVES the point rather
+ * than adding to a path. This is what "one pin at a time" is made of.
+ *
+ * Renamed from SINGLE_CLICK_MODES, which had come to mean two different things
+ * — "holds one vertex" and "commits the moment you click" — and those parted
+ * company when the marker grew a confirmation step. See COMMIT_ON_CLICK_MODES.
+ */
+export const SINGLE_VERTEX_MODES: readonly AuthoringMode[] = ['marker', 'note'];
+
+/**
+ * Modes where the click itself commits, with nothing to confirm.
+ *
+ * A note carries text typed before the click, so the click is the last act.
+ * A marker is no longer here: it stages a pin the author can look at, read the
+ * address of, move, and then Finish — which is also what makes the Finish
+ * button mean something. While marker committed on click, the draft was reset
+ * to zero vertices in the same tick, so `canFinish` was never once true and the
+ * button sat permanently disabled.
+ */
+export const COMMIT_ON_CLICK_MODES: readonly AuthoringMode[] = ['note'];
 
 export interface DraftState {
   mode: AuthoringMode;
@@ -90,6 +109,12 @@ export interface DraftSnapshot {
   lengthMeters: number;
   /** Square metres, for a polygon. Zero otherwise. */
   areaMeters: number;
+  /**
+   * The single staged point, for a mode that holds exactly one — so the panel
+   * can show *where the pin is* beside the button that commits it. Null for a
+   * path mode, and null before the first click.
+   */
+  point: { lat: number; lon: number } | null;
 }
 
 export const isDrawingMode = (mode: AuthoringMode): boolean => mode !== 'idle';
@@ -143,7 +168,7 @@ export function addVertex(draft: DraftState, point: GeoPoint): DraftState {
   if (last && samePoint(last, point)) return draft;
   // A single-click mode holds exactly one vertex: clicking again MOVES the
   // marker rather than accumulating a list the item type cannot represent.
-  const vertices = SINGLE_CLICK_MODES.includes(draft.mode) ? [point] : [...draft.vertices, point];
+  const vertices = SINGLE_VERTEX_MODES.includes(draft.mode) ? [point] : [...draft.vertices, point];
   return { ...draft, vertices, warning: warningFor(draft.mode, vertices) };
 }
 
@@ -226,6 +251,7 @@ export function snapshot(draft: DraftState): DraftSnapshot {
     warning: draft.warning,
     lengthMeters: closed ? pathLengthMeters([...v, ...(v[0] ? [v[0]] : [])]) : pathLengthMeters(v),
     areaMeters: ringMode && v.length >= 3 && !ringSelfIntersects(v) ? ringAreaMeters(v) : 0,
+    point: SINGLE_VERTEX_MODES.includes(draft.mode) && v[0] ? { lat: v[0].lat, lon: v[0].lon } : null,
   };
 }
 

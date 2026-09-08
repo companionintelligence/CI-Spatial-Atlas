@@ -409,6 +409,10 @@ describe('undo and redo, end to end', () => {
   it('drops a selection whose item an undo removed, so no handles are left over a ghost', async () => {
     controller.setMode('marker');
     click(4, 4);
+    // A marker stages on the click and commits on Finish — the click alone used
+    // to produce the item, and the button that was supposed to commit it could
+    // therefore never be pressed. See `marker-staging.test.ts`.
+    controller.finish();
     const id = controller.getItems()[0]!.id;
     // Back to the select tool: handles are suppressed while a drawing tool is
     // armed, so that they cannot swallow the first click of the next shape.

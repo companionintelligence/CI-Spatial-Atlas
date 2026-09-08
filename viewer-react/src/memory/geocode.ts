@@ -167,6 +167,16 @@ const DEFAULT_ENDPOINTS: Record<GeocoderProvider, string> = {
   pelias: 'https://api.geocode.earth/v1/search',
 };
 
+/** The reverse path each provider serves. Derived from the *search* endpoint
+ *  rather than configured separately: an operator who points `VITE_GEOCODER_URL`
+ *  at their instance should not have to point at it twice, and every one of the
+ *  three serves both from the same base. */
+const REVERSE_PATHS: Record<GeocoderProvider, string> = {
+  photon: '/reverse',
+  nominatim: '/reverse',
+  pelias: '/v1/reverse',
+};
+
 /** The search path each provider serves, appended when the configured URL is a bare origin. */
 const DEFAULT_PATHS: Record<GeocoderProvider, string> = {
   photon: '/api',
@@ -236,6 +246,26 @@ function endpointFor(raw: string, provider: GeocoderProvider): string {
     // Not parseable as absolute (a relative path behind the app's own origin,
     // say). Nothing sensible to add, so leave it exactly as configured.
     return trimmed;
+  }
+}
+
+/**
+ * The search endpoint's reverse twin.
+ *
+ * Swaps the provider's search path for its reverse path when the endpoint ends
+ * in the one we know about, and otherwise appends the reverse path to the
+ * origin. A configured endpoint we do not recognise is left to the fallback
+ * rather than being rewritten by guesswork — a wrong URL here would 404 quietly
+ * and the pin would simply never learn its address.
+ */
+function reverseEndpointFor(endpoint: string, provider: GeocoderProvider): string {
+  const search = DEFAULT_PATHS[provider];
+  const reverse = REVERSE_PATHS[provider];
+  if (endpoint.endsWith(search)) return `${endpoint.slice(0, -search.length)}${reverse}`;
+  try {
+    return `${new URL(endpoint).origin}${reverse}`;
+  } catch {
+    return endpoint;
   }
 }
 
@@ -601,6 +631,72 @@ export async function geocode(query: string, opts: GeocodeOptions = {}): Promise
     // caller that aborted is not waiting on this answer anyway — see
     // `createPlaceSearch`, which distinguishes the two for the UI.
     return [];
+  }
+}
+
+/**
+ * What is at this coordinate — the inverse of `geocode`.
+ *
+ * Returns null rather than throwing for every failure, including an unconfigured
+ * or unreachable geocoder: a dropped pin that does not learn its address is
+ * still a perfectly good pin at a known latitude and longitude, and the caller
+ * shows the coordinates either way.
+ *
+ * Not cached. Forward search is typed a character at a time and repeats
+ * constantly; a reverse lookup happens once per placed pin, at a coordinate
+ * that is never bit-for-bit the same twice, so a cache would only ever grow.
+ */
+export async function reverseGeocode(
+  lat: number,
+  lon: number,
+  opts: Pick<GeocodeOptions, 'provider' | 'endpoint' | 'lang' | 'signal'> = {},
+): Promise<GeoPlace | null> {
+  if (!validLatLon(lat, lon)) return null;
+
+  const base = geocoderConfig();
+  const provider = opts.provider ?? base.provider;
+  const searchEndpoint =
+    opts.endpoint ??
+    (provider === base.provider ? base.endpoint : DEFAULT_ENDPOINTS[provider]);
+  const endpoint = reverseEndpointFor(searchEndpoint, provider);
+  const lang = opts.lang ?? browserLang();
+
+  const url = new URL(endpoint, globalThis.location?.href ?? 'http://localhost');
+  const p = url.searchParams;
+  if (provider === 'pelias') {
+    p.set('point.lat', String(lat));
+    p.set('point.lon', String(lon));
+    p.set('size', '1');
+    if (lang) p.set('lang', lang);
+  } else {
+    // Photon and Nominatim share the plain lat/lon spelling.
+    p.set('lat', String(lat));
+    p.set('lon', String(lon));
+    if (provider === 'nominatim') {
+      p.set('format', 'jsonv2');
+      p.set('addressdetails', '0');
+      if (lang) p.set('accept-language', lang);
+      if (provider === base.provider && base.email) p.set('email', base.email);
+    } else if (lang) {
+      p.set('lang', lang);
+    }
+  }
+
+  try {
+    const res = await fetch(url.toString(), {
+      signal: opts.signal,
+      headers: { accept: 'application/json' },
+      credentials: 'omit',
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    // Nominatim's reverse answers with a bare object where its search answers
+    // with an array; the other two return a FeatureCollection either way. Wrap
+    // it so the one parser handles all three.
+    const payload = provider === 'nominatim' && !Array.isArray(body) ? [body] : body;
+    return parse(provider, payload, 1)[0] ?? null;
+  } catch {
+    return null;
   }
 }
 

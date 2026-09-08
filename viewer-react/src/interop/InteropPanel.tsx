@@ -19,6 +19,7 @@ import { downloadKml, downloadStoryJson } from './exportFile.js';
 import { summarise } from './useImported.js';
 import type { MemorySource } from '../memory/client.js';
 import type { MemoryImport } from '../memory/import.js';
+import { ShareIcon } from '../ui/icons.js';
 import { MemoryExportSection, MemoryImportSection } from './MemorySections.js';
 import { MediaUploadSection } from './MediaUploadSection.js';
 import { atlasApiFromEnv } from '../upload/index.js';
@@ -70,11 +71,17 @@ export interface InteropPanelProps {
    *  position is not renderable and not expressible in KML, so the upload
    *  section reports that rather than inventing coordinates. */
   uploadPosition?: () => { lat: number; lon: number } | null;
+  /**
+   * Open the share panel. Omitted when sharing is off for this session, which
+   * is what keeps the button from opening a panel that will not render — the
+   * two are separate chrome decisions and only the caller knows both.
+   */
+  onShare?: () => void;
 }
 
 export function InteropPanel({
   open, onClose, story, files, onImported, onRemoveFile, onClearImported, onFrameImported,
-  memory, onMemoryImported, shareUrl, uploadPosition,
+  memory, onMemoryImported, shareUrl, uploadPosition, onShare,
 }: InteropPanelProps) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -124,6 +131,37 @@ export function InteropPanel({
         <h2>Import &amp; export</h2>
         <button className="io-close" aria-label="Close import and export" onClick={onClose}>✕</button>
       </header>
+
+      {onShare && (
+        // First, because it is the exit most people want and the only one that
+        // costs nothing: no file, no account, no server. The three below all
+        // produce something you then have to put somewhere.
+        <section className="io-section">
+          <h3>Share this view</h3>
+          {/* The embed half is promised only when it can be delivered. A
+              memory-backed view cannot be embedded — the credentials are
+              stripped on the way out, so a reader would get the bundled sample
+              — and `shareLink` refuses before it even parses the URL. Saying
+              "or an <iframe>" here regardless would have made that promise in
+              exactly the state this panel is most used in, and the control it
+              replaced ("Copy link to this view") never did. */}
+          <p className="io-hint">
+            {memory
+              ? 'A link that reopens the globe at this camera and this moment. Your Companion Memory address and token are never included — which is also why a private archive cannot be embedded in a page.'
+              : (
+                <>
+                  A link that reopens the globe at this camera and this moment, or an{' '}
+                  <code>&lt;iframe&gt;</code> to paste into a page.
+                </>
+              )}
+          </p>
+          <div className="io-actions">
+            <button className="atlas-btn primary" onClick={onShare}>
+              <ShareIcon />{memory ? 'Copy a link to this view' : 'Copy a link or embed code'}
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="io-section">
         <h3>Bring data in</h3>
