@@ -4,6 +4,7 @@ import {
   addVertex,
   cancelDraft,
   canFinish,
+  COMMIT_ON_CLICK_MODES,
   createDraft,
   editableVertices,
   finishDraft,
@@ -209,6 +210,15 @@ export interface AuthoringController {
    * place the two diverge. Read `getMeasurement()` for the result.
    */
   finish(opts?: { allowSelfIntersecting?: boolean }): Item | null;
+  /**
+   * Stage a vertex without a click — how the address box places a pin.
+   *
+   * Goes through the same `addVertex` the pointer does, so a single-vertex mode
+   * still holds exactly one point and every rule about what a draft may contain
+   * is stated once. Returns false when the mode is not drawing or the
+   * coordinate is not finite.
+   */
+  placePoint(point: { lat: number; lon: number }): boolean;
   /** Escape: drop the shape in progress, keep the tool. */
   cancel(): void;
   /** Backspace: take the last vertex back of the shape IN PROGRESS. Unrelated
@@ -239,6 +249,16 @@ export interface AuthoringController {
   /** `note` text for the next placed note. */
   setNoteText(text: string): void;
   getNoteText(): string;
+  /**
+   * The name the next committed marker carries — in practice the address a
+   * reverse lookup found for the staged point.
+   *
+   * Separate from `noteText` because they are different fields on different
+   * item types, and because an empty one is fatal for a note and merely means
+   * "unnamed" for a marker.
+   */
+  setPlaceLabel(label: string): void;
+  getPlaceLabel(): string;
 
   /** Adopt an external item list. Idempotent, and never fires `onChange`. */
   setItems(items: Item[]): void;
@@ -287,6 +307,10 @@ export function createAuthoringController(
   let draft: DraftState = createDraft('idle');
   let style: AuthoringStyle = mergeStyle(DEFAULT_STYLE, options.style ?? {});
   let noteText = '';
+  /** The address the staged marker will be named after. Cleared whenever the
+   *  point it described goes away, so a pin can never inherit the previous
+   *  pin's street. */
+  let placeLabel = '';
   let items: Item[] = [];
   let selection: AuthoringSelection | null = null;
   let draftEntities: DraftEntities | null = null;
@@ -528,6 +552,7 @@ export function createAuthoringController(
       id: nextItemId(type as Item['type'], reservedIds(), idPrefix),
       style,
       text: noteText,
+      title: placeLabel.trim() || undefined,
       time: options.timeFor?.(),
       allowSelfIntersecting: opts?.allowSelfIntersecting,
     });
@@ -545,6 +570,9 @@ export function createAuthoringController(
     }
 
     items = upsertItem(items, result.item);
+    // The name belonged to the point that has just become an item. Leaving it
+    // set would name the next pin after the last pin's street.
+    placeLabel = '';
 
     // Asymmetric on purpose. A marker or a note is a single click and people
     // place them in runs, so the tool stays armed and nothing is selected —
@@ -697,8 +725,11 @@ export function createAuthoringController(
     lastVertexWindow = Cesium.Cartesian2.clone(e.position);
     draft = addVertex(draft, hit.point);
 
-    // Marker and note are done in one click.
-    if (draft.mode === 'marker' || draft.mode === 'note') {
+    // A note is done in one click — its text was typed before the click, so
+    // there is nothing left to confirm. A marker is not: it stages, so the
+    // author can read back where it landed (and what address that is) and press
+    // Finish, or click again to move it.
+    if (COMMIT_ON_CLICK_MODES.includes(draft.mode)) {
       commit();
       return;
     }
@@ -953,9 +984,27 @@ export function createAuthoringController(
 
     finish: (opts) => commit(opts),
 
+    setPlaceLabel(label) { placeLabel = label; },
+    getPlaceLabel: () => placeLabel,
+
+    placePoint(point) {
+      if (destroyed || !isDrawingMode(draft.mode)) return false;
+      if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return false;
+      const before = draft.vertices.length;
+      draft = addVertex(draft, { lat: point.lat, lon: point.lon });
+      // `addVertex` rejects a non-finite point by returning the same draft, and
+      // for a single-vertex mode a replacement leaves the count unchanged — so
+      // identity, not length, is what says whether anything happened.
+      if (draft.vertices.length === before && before > 0 && draft.vertices[0]?.lat !== point.lat) return false;
+      lastVertexWindow = null;
+      syncDraft();
+      return true;
+    },
+
     cancel() {
       if (destroyed) return;
       draft = cancelDraft(draft);
+      placeLabel = '';
       lastVertexWindow = null;
       syncDraft();
     },

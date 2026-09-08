@@ -1,4 +1,4 @@
-import { useId, useState, type SVGProps } from 'react';
+import { useId, useState, type FormEvent, type SVGProps } from 'react';
 import { TOOL_MODES, type AuthoringMode, type DraftSnapshot } from './draft.js';
 import { MARKER_ICONS, isUsableCustomIcon } from './icons.js';
 import {
@@ -18,6 +18,7 @@ import {
   type AuthoringStyle,
 } from './style.js';
 import type { AuthoringSelection } from './store.js';
+import type { GeoPlace } from '../memory/geocode.js';
 import '../theme/authoring.css';
 
 /**
@@ -69,6 +70,16 @@ export interface AuthoringToolbarProps {
   noteText: string;
   onNoteText: (text: string) => void;
 
+  /** The address of the staged pin, and what the lookup is doing. */
+  placeLabel?: string;
+  placeState?: 'idle' | 'looking' | 'found' | 'none';
+  onPlaceLabel?: (label: string) => void;
+  /** Address search: rows to offer, and whether a query is in flight. */
+  addressResults?: GeoPlace[];
+  addressBusy?: boolean;
+  onSearchAddress?: (query: string) => void;
+  onUseAddress?: (place: GeoPlace) => void;
+
   selection: AuthoringSelection | null;
   onDelete: () => void;
 
@@ -101,6 +112,74 @@ export interface AuthoringToolbarProps {
   open?: boolean;
 }
 
+/**
+ * Degrees with a hemisphere letter, which is how a coordinate is read aloud and
+ * how every other readout in this app spells one (`PlaceChip`, the inspector).
+ * Four decimals is about 11 m — finer than a pin is placed and shorter than the
+ * six that would imply survey precision the click never had.
+ */
+export function formatLatLon(lat: number, lon: number): string {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '—';
+  const ns = lat >= 0 ? 'N' : 'S';
+  const ew = lon >= 0 ? 'E' : 'W';
+  return `${Math.abs(lat).toFixed(4)}°${ns} ${Math.abs(lon).toFixed(4)}°${ew}`;
+}
+
+/**
+ * Type an address, get somewhere to put the pin.
+ *
+ * A form rather than search-as-you-type: this is a public geocoder being asked
+ * a question, and a request per keystroke is both slow and rude. Results are
+ * offered rather than placed — picking the wrong Springfield should cost a
+ * click, not a mystery pin — and the list clears once one is taken.
+ */
+function AddressBox({
+  busy, results, onSearch, onUse,
+}: {
+  busy: boolean;
+  results: GeoPlace[];
+  onSearch?: (query: string) => void;
+  onUse?: (place: GeoPlace) => void;
+}) {
+  const [query, setQuery] = useState('');
+  if (!onSearch || !onUse) return null;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    onSearch(query);
+  };
+
+  return (
+    <div className="draw-address">
+      <form className="draw-address-row" onSubmit={submit}>
+        <input
+          className="draw-input"
+          type="search"
+          value={query}
+          placeholder="Type an address, or click the globe"
+          aria-label="Find an address"
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <button type="submit" className="draw-action" disabled={busy || query.trim().length < 2}>
+          {busy ? 'Finding…' : 'Find'}
+        </button>
+      </form>
+      {results.length > 0 && (
+        <ul className="draw-address-results">
+          {results.map((r) => (
+            <li key={r.id}>
+              <button type="button" className="draw-address-hit" onClick={() => { onUse(r); setQuery(''); }}>
+                <b>{r.name}</b>
+                {r.detail ? <span>{r.detail}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const MODE_LABEL: Record<AuthoringMode, string> = {
   idle: 'Select',
   marker: 'Place a marker',
@@ -115,6 +194,8 @@ const MODE_LABEL: Record<AuthoringMode, string> = {
 export function AuthoringToolbar({
   mode, onMode,
   draft, onFinish, onCancel, onUndoVertex,
+  placeLabel = '', placeState = 'idle', onPlaceLabel,
+  addressResults = [], addressBusy = false, onSearchAddress, onUseAddress,
   style, onStyle,
   noteText, onNoteText,
   selection, onDelete,
@@ -324,11 +405,44 @@ export function AuthoringToolbar({
 
       {drawing ? (
         <div className="draw-status">
+          {mode === 'marker' && (
+            <AddressBox
+              busy={addressBusy}
+              results={addressResults}
+              onSearch={onSearchAddress}
+              onUse={onUseAddress}
+            />
+          )}
           <p className="draw-count" aria-live="polite">
             {draft.vertexCount === 0
               ? `Click the globe to start${mode === 'polygon' ? ' the outline' : ''}.`
               : `${draft.vertexCount} point${draft.vertexCount === 1 ? '' : 's'}${draftMeasure(draft, units)}`}
           </p>
+
+          {/* Where the pin actually is, next to the button that commits it —
+              so "Finish" is a decision about something the author can see,
+              rather than a leap. Coordinates always; the address when the
+              lookup found one, and an honest word when it did not. */}
+          {draft.point && (
+            <div className="draw-place">
+              <p className="draw-coords">
+                {formatLatLon(draft.point.lat, draft.point.lon)}
+              </p>
+              {placeState === 'looking' && <p className="draw-place-name dim">Looking up the address…</p>}
+              {placeState === 'found' && placeLabel && (
+                <input
+                  className="draw-input"
+                  value={placeLabel}
+                  aria-label="Name for this pin"
+                  onChange={(e) => onPlaceLabel?.(e.target.value)}
+                />
+              )}
+              {placeState === 'none' && (
+                <p className="draw-place-name dim">No address here — the pin keeps its coordinates.</p>
+              )}
+            </div>
+          )}
+
           <div className="draw-row">
             <button
               type="button"
@@ -337,7 +451,6 @@ export function AuthoringToolbar({
               disabled={!draft.canFinish}
             >
               Finish
-              <kbd>Enter</kbd>
             </button>
             <button
               type="button"
@@ -345,12 +458,10 @@ export function AuthoringToolbar({
               onClick={onUndoVertex}
               disabled={draft.vertexCount === 0}
             >
-              Undo point
-              <kbd>Backspace</kbd>
+              {mode === 'marker' ? 'Remove pin' : 'Undo point'}
             </button>
             <button type="button" className="draw-action" onClick={onCancel}>
               Cancel
-              <kbd>Esc</kbd>
             </button>
           </div>
           {draft.warning ? (

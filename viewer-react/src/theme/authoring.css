@@ -138,6 +138,11 @@
   background: color-mix(in srgb, var(--atlas-coral) 14%, transparent);
   color: var(--atlas-coral);
 }
+/* Undo/Redo still carry their shortcut, because those two are the ones people
+   reach for by keyboard and the hint is the only place the binding is written
+   down. The draft row's hints are gone: Enter/Backspace/Esc while a shape is in
+   progress are guessable, and three chips across three buttons wrapped the row
+   onto two lines and pushed Finish out on its own. */
 .draw-action kbd {
   font: 600 9px/1 var(--atlas-mono);
   color: var(--atlas-fg-dim);
@@ -145,11 +150,12 @@
   border-radius: 4px;
   padding: 2px 4px;
 }
-.draw-action.primary kbd { color: var(--atlas-ink); border-color: color-mix(in srgb, var(--atlas-ink) 40%, transparent); }
 
-/* The two history buttons share a row and neither should grow into the other's
-   space when one has a `kbd` hint and the other does not. */
-.draw-history .draw-action { flex: 1 1 0; min-width: 0; }
+/* Buttons in a row are equals: `1 1 0` rather than `1 1 auto`, so all three
+   take a third each regardless of label length, and Finish sits in line with
+   the other two instead of claiming a row of its own. */
+.draw-history .draw-action,
+.draw-status .draw-row .draw-action { flex: 1 1 0; min-width: 0; }
 
 /* ---- measurement --------------------------------------------------------- */
 /* Bordered in dusk so the block that holds a reading is visibly not the block
@@ -226,6 +232,54 @@
   font: 500 12px inherit;
 }
 .draw-input::placeholder { color: var(--atlas-fg-dim); }
+
+/* ---- marker: find an address, and read back where the pin landed --------- */
+.draw-address { display: flex; flex-direction: column; gap: 6px; }
+.draw-address-row { display: flex; gap: 6px; }
+.draw-address-row .draw-input { flex: 1 1 auto; min-width: 0; }
+.draw-address-row .draw-action { flex: 0 0 auto; }
+.draw-address-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Five rows at most, and the sixth is reachable by scroll rather than by
+     pushing the Finish button off the panel. */
+  max-height: 148px;
+  overflow-y: auto;
+  border: 1px solid var(--atlas-line);
+  border-radius: 9px;
+  padding: 3px;
+}
+.draw-address-hit {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--atlas-fg);
+  cursor: pointer;
+  font: inherit;
+}
+.draw-address-hit:hover { background: color-mix(in srgb, var(--atlas-teal) 14%, transparent); }
+.draw-address-hit b { font: 600 11.5px inherit; color: var(--atlas-fg-hi); }
+.draw-address-hit span { font-size: 10.5px; color: var(--atlas-fg-dim); }
+
+.draw-place { display: flex; flex-direction: column; gap: 5px; }
+.draw-coords {
+  margin: 0;
+  font: 600 11.5px var(--atlas-mono);
+  color: var(--atlas-teal);
+  font-variant-numeric: tabular-nums;
+}
+.draw-place-name { margin: 0; font-size: 10.5px; line-height: 1.4; }
+.draw-place-name.dim { color: var(--atlas-fg-dim); }
 
 /* ---- swatches ------------------------------------------------------------ */
 .draw-swatches { display: flex; flex-wrap: wrap; gap: 5px; }
