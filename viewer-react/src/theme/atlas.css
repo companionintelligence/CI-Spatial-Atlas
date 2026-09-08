@@ -375,7 +375,19 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-journey-chip button:hover { border-color: var(--atlas-mint); color: var(--atlas-mint); }
 
 @media (prefers-reduced-motion: reduce) { .atlas-app *, .atlas-overlay * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
-@media (max-width: 980px) { .atlas-inspector, .atlas-stats, .atlas-legend, .atlas-scrap { display: none; } }
+/* Decluttering for a narrow stage — but NOT the inspector.
+ *
+ * It used to be in this list, and the 760px block below turns it back on as a
+ * bottom sheet, so between 761px and 980px it got neither: no side panel, no
+ * sheet, nothing. Clicking a pin worked the whole time — the pick resolves, the
+ * focus changes, the globe re-highlights — and the card that is supposed to
+ * appear was `display: none`, so the click looked like it had missed. That band
+ * is not exotic: it is a landscape tablet, a split-screen window, and the
+ * in-app browser pane this project is developed in.
+ *
+ * The panel is 320px. At 761px that still leaves ~380px of globe beside the
+ * rail, which is narrow but honest; below 760px the sheet takes over. */
+@media (max-width: 980px) { .atlas-stats, .atlas-legend, .atlas-scrap { display: none; } }
 
 /* ---- Map layers popover (basemap + sun) ---------------------------------- */
 .atlas-layers { position: relative; display: inline-flex; }
