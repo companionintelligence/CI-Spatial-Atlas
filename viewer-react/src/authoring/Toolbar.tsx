@@ -293,10 +293,11 @@ export function AuthoringToolbar({
         </button>
       </div>
 
-      {/* Capture is not a drawing mode — it reads the camera and belongs to
-          whatever the app wants to attach it to (an item, a scene). It sits
-          here because this is the panel a person is in when they are building
-          a story, and it costs one click. */}
+      {/* Capture is not a drawing mode — it reads the camera and creates a
+          scene from it (`AtlasApp.captureSceneFromDraw`), the same act as the
+          Scenes panel's own "Scene from this view" button. It sits here
+          because this is the panel a person is in when they are building a
+          story, and it costs one click without switching panels. */}
       <div className="draw-row">
         <button type="button" className="draw-action" onClick={onCaptureCamera}>
           <CameraViewIcon aria-hidden="true" />

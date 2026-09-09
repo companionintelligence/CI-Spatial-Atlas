@@ -12,6 +12,12 @@ import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 const googleMapsAvailable = Boolean(
   (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GOOGLE_MAPS_API_KEY,
 );
+// Same derivation `InteropPanel` uses for its own upload section, module-scope
+// for the same reason: `import.meta.env` is frozen at build time, so reading it
+// per render would hand `useMediaUpload` a new (but equal) object every time.
+const ATLAS_API = atlasApiFromEnv(
+  (import.meta as unknown as { env: Record<string, string | undefined> }).env,
+);
 import { Starfield } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { nameUnplacedMemories, placeSummaries } from './model/atlasModel.js';
@@ -27,6 +33,8 @@ import { useLayers } from './layers/index.js';
 import { Presenter } from './ui/Presenter.js';
 import type { DeckSlide } from './ui/sceneDeck.js';
 import { InteropPanel, DropOverlay } from './interop/InteropPanel.js';
+import { atlasApiFromEnv } from './upload/index.js';
+import type { ImportedFile } from './interop/importFile.js';
 import { useImported, withImported } from './interop/useImported.js';
 import { applyMemoryPlaces, type MemoryImport } from './memory/import.js';
 import { isFramableBounds, type GeoPlace } from './memory/geocode.js';
@@ -34,9 +42,9 @@ import { useFileDrop } from './interop/useFileDrop.js';
 import { atlasChrome, restoredView, SharePanel, EmbedBar } from './embed/index.js';
 import { useAuthoring } from './authoring/useAuthoring.js';
 import { poseFromCamera } from './authoring/camera.js';
-import { useScenes } from './scenes/index.js';
+import { useScenes, withAuthoredScenes } from './scenes/index.js';
 import { SceneList } from './scenes/SceneList.js';
-import { SceneEditor } from './scenes/SceneEditor.js';
+import { SceneEditor, CAPTURE_UNSETTLED } from './scenes/SceneEditor.js';
 import { AuthoringToolbar, mergeAuthoredItems } from './authoring/index.js';
 import { importFiles } from './interop/importFile.js';
 import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
@@ -197,9 +205,37 @@ export function AtlasApp() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<AtlasMemory | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [sbOpen, setSbOpen] = useState(false);
-  const [peopleOpen, setPeopleOpen] = useState(false);
-  const [interopOpen, setInteropOpen] = useState(false);
+  /**
+   * Which of the four right-anchored drawers is open, or none.
+   *
+   * One state rather than four independent booleans, because all four render
+   * at the identical spot (`top:14px; right:14px`, same z-index) — that is
+   * what "the left nav buttons do not work cleanly" was: People and Collections
+   * closed each other by hand-written pairs of setters, but Scenes and Import &
+   * export did not, so opening Scenes over an open Import panel left the import
+   * panel state-open and invisible underneath it, and closing Scenes again
+   * brought it back looking like it had appeared from nowhere. A single value
+   * makes "more than one open" impossible to represent, so that class of bug
+   * cannot come back by someone forgetting to add a `setXOpen(false)` at a new
+   * call site.
+   */
+  const [openDrawer, setOpenDrawer] = useState<'scrapbook' | 'people' | 'scenes' | 'interop' | null>(null);
+  const sbOpen = openDrawer === 'scrapbook';
+  const peopleOpen = openDrawer === 'people';
+  const scenesOpen = openDrawer === 'scenes';
+  const interopOpen = openDrawer === 'interop';
+  /** Toggle: clicking the button for the open drawer closes it; clicking any
+   *  other one switches to it. */
+  const toggleDrawer = useCallback(
+    (id: 'scrapbook' | 'people' | 'scenes' | 'interop') => setOpenDrawer((cur) => (cur === id ? null : id)),
+    [],
+  );
+  /** Close one specific drawer — a no-op if a different one is open (or none),
+   *  so an X button never reopens something else by accident. */
+  const closeDrawer = useCallback(
+    (id: 'scrapbook' | 'people' | 'scenes' | 'interop') => setOpenDrawer((cur) => (cur === id ? null : cur)),
+    [],
+  );
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCamera, setShareCamera] = useState<Camera | null>(null);
   const [presenting, setPresenting] = useState(false);
@@ -247,6 +283,24 @@ export function AtlasApp() {
   }, [baseModel, sb.draft.memoryIds]);
 
   const peopleGroups = useMemo(() => (baseModel ? groupByPerson(baseModel.memories) : []), [baseModel]);
+
+  /**
+   * Which authored scenes are included as journey stops, alongside collected
+   * memories. A working choice like `selectedSceneId`, not a durable draft
+   * like the scrapbook's `memoryIds` — it does not survive a reload. Deliberate:
+   * unlike collecting a memory (one click, from anywhere, meant to stick), this
+   * is made from inside the drawer you are about to act from, and re-checking a
+   * few boxes costs less than the schema migration extending the persisted
+   * `ScrapbookDraft` shape would have needed.
+   */
+  const [journeySceneIds, setJourneySceneIds] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleJourneyScene = useCallback((id: string) => {
+    setJourneySceneIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   // Overlays that follow the clock: the scrapbook shows the memories nearest the
   // playhead and the place chip names the current place, so scrubbing/playing
@@ -558,10 +612,25 @@ export function AtlasApp() {
   // journey re-opened as the base story would have had its own ids mangled.
   const toBaseId = useCallback((id: string) => journeyMapRef.current.get(id) ?? id, []);
   const collected = useCallback((m: AtlasMemory) => sb.has(toBaseId(m.id)), [sb, toBaseId]);
+  /** Whether a journey stop can be collected at all — it can only if its base
+   *  id names something the scrapbook could ever resolve back to. A stop built
+   *  from a scene checked into the journey (see `journeySceneMemories`) maps
+   *  back to that SCENE's own id, which the base story need not contain — the
+   *  scene lives in the editable deck, not necessarily in any saved document.
+   *  Without this, collecting one would write an id `sbEntries` can never
+   *  resolve into the persisted draft: not a crash, just a dead entry that
+   *  accumulates in local storage forever with nothing on screen to explain
+   *  it. */
+  const canCollect = useCallback(
+    (m: AtlasMemory) => !!baseModel?.memories.some((bm) => bm.id === toBaseId(m.id)),
+    [baseModel, toBaseId],
+  );
   const toggleCollect = useCallback((m: AtlasMemory) => {
     const id = toBaseId(m.id);
-    if (sb.has(id)) sb.remove(id); else sb.add(id);
-  }, [sb, toBaseId]);
+    if (sb.has(id)) { sb.remove(id); return; }
+    if (!baseModel?.memories.some((bm) => bm.id === id)) return;
+    sb.add(id);
+  }, [sb, toBaseId, baseModel]);
 
   /** Hand the globe a story to fly through, and re-run the intro on it. Resumes
    *  the clock: every route to collecting a memory pauses it (inspect = select +
@@ -574,8 +643,9 @@ export function AtlasApp() {
     flownToRef.current = null;
     setFocusedId(null);
     setJourney(s);
-    setSbOpen(false);
-    setPeopleOpen(false);
+    // Only one drawer can be open at once now, so "close whichever of these
+    // sent us here" is just "close whatever is open".
+    setOpenDrawer(null);
     play();
   }, [play]);
 
@@ -597,6 +667,58 @@ export function AtlasApp() {
   // Authored scenes. Same account bucket as the layer stack and the drawing
   // tools, so two accounts on one browser never inherit each other's narration.
   const sceneControl = useScenes(memory?.url ?? null);
+
+  /**
+   * The selected scenes, converted to the same `AtlasMemory` shape a collected
+   * memory already has — by actually running them through `deriveModel`,
+   * rather than a second, hand-rolled version of its scene→memory mapping
+   * (dates, local solar time, gradient, and the by-location join against real
+   * media all live there once). Spreading the *base* story rather than
+   * building a bare stand-in keeps that join meaningful — a scene camera that
+   * happens to sit at a real photo's coordinates picks it up the same way a
+   * memory-derived scene already does elsewhere.
+   */
+  const journeySceneMemories = useMemo(() => {
+    if (journeySceneIds.size === 0 || !baseModel) return [];
+    // `withImported`, not the bare base story: a photo uploaded straight into
+    // a scene (`onScenePhotoUploaded`) lands in `imported.items`, exactly like
+    // one uploaded from Import & export, and `deriveModel`'s media join below
+    // is by location against `entities` — it has to see that item or an
+    // uploaded photo silently would not survive a scene becoming a journey
+    // stop, while the same photo shows up everywhere else the story is
+    // rendered. Not `story` itself: that also layers the currently-PLAYING
+    // journey on top when one is active, and deriving this scene's OWN journey
+    // membership from the journey already in progress would be circular.
+    const base = withImported(memImport?.story ?? loadedStory, imported.items);
+    if (!base) return [];
+    const selected = sceneControl.scenes.filter((sc) => journeySceneIds.has(sc.id));
+    if (selected.length === 0) return [];
+    return deriveModel({ ...base, scenes: selected }).memories;
+  }, [journeySceneIds, sceneControl.scenes, baseModel, memImport, loadedStory, imported.items]);
+
+  /**
+   * Everything a journey is built from, in the one order that has to match
+   * `curateJourney`/`buildScrapbookStory`'s own internal sort — see
+   * `playStory`, which builds `journeyMapRef` by pairing `s.scenes[i]` with
+   * `journeySources[i]` and silently mispairs the two the moment they disagree
+   * about order.
+   */
+  const journeySources = useMemo(() => {
+    // A collected memory and a checked-in scene can name the SAME id: when a
+    // story already has scenes, `deriveModel` renders each one as an ordinary
+    // pin (this is the primary "scenes become memories" path, unrelated to
+    // this feature), so an author can Collect one of those pins from the
+    // globe like any other memory — and, separately, check that identical
+    // scene into the journey here. Neither route knows about the other, and
+    // without de-duplication `curateJourney`/`buildScrapbookStory` would
+    // receive the same id twice and write two scenes sharing one id in the
+    // saved document. The checked-in scene wins: it is the more deliberate of
+    // the two signals, carrying the scene's OWN narrative and camera rather
+    // than whatever the pin happened to resolve to.
+    const checkedIn = new Set(journeySceneMemories.map((m) => m.id));
+    const memories = sbEntries.filter((m) => !checkedIn.has(m.id));
+    return [...memories, ...journeySceneMemories].sort((a, b) => a.timeMs - b.timeMs);
+  }, [sbEntries, journeySceneMemories]);
 
   // The document actually on screen — not just `loadedStory`, which is only the
   // `?story=` and bundled-demo path. On a Companion Memory session the story on
@@ -639,53 +761,83 @@ export function AtlasApp() {
     },
   });
 
+  /**
+   * The document built from `journeySources` alone: collected memories and
+   * checked-in scenes, chronologically — with layers and drawn shapes folded
+   * in exactly as `draftStory` below always has. This is what gets PLAYED.
+   *
+   * It is deliberately narrower than `draftStory`, which also appends every
+   * OTHER authored scene — right for Save, since nothing an author wrote
+   * should be silently left out of what gets kept, and wrong for Play: this
+   * function used to be the same one `draftStory` is now, so "Play journey"
+   * played every authored scene whether it was checked into the journey or
+   * not, which is what made checking a box accomplish nothing visible.
+   */
+  const journeyBase = useCallback(
+    (curated: boolean): Story => {
+      const entries = journeySources.map(toEntry);
+      const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
+      const base = curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
+      const withItems = draw.items.length ? mergeAuthoredItems(base, draw.items) : base;
+      // Non-null: `withStoryLayers` (what this wraps) returns null only for a
+      // null input, and `base`/`withItems` are never null here.
+      return layerControl.toStory(withItems)!;
+    },
+    [journeySources, sb.draft.visibility, sb.draft.title, draw.items, layerControl.toStory],
+  );
+
   const draftStory = useCallback(
     (curated: boolean): Story | null => {
       // Authored scenes alone are enough to have something worth saving. This
       // used to be `sbEntries.length === 0`, so a user who wrote a five-scene
       // story and collected nothing got a disabled Save button — in the drawer
-      // that holds the only Save button they would look for.
+      // that holds the only Save button they would look for. A scene picked
+      // into the journey is still one of `sceneControl.scenes`, so this already
+      // covers "nothing collected, but some scenes are journey stops" too.
       if (sbEntries.length === 0 && sceneControl.count === 0) return null;
-      const entries = sbEntries.map(toEntry);
-      const opts = { visibility: sb.draft.visibility, title: sb.draft.title || undefined };
-      const base = curated ? curateJourney(entries, opts) : buildScrapbookStory(entries, opts);
       // Everything that leaves the app carries everything on the globe.
       //
-      // Layers, because a user who added four of them would otherwise save a
-      // story with none — and each layer's attribution goes with it, which is a
-      // licence condition rather than a nicety.
+      // Layers and drawn shapes: see `journeyBase` above, which already folds
+      // both in — because "localStorage is a convenience, not custody" applies
+      // to a save exactly as much as to a play.
       //
-      // Drawn shapes, because localStorage is a convenience, not custody: it is
-      // per-browser, cleared by a privacy setting, and invisible to anyone the
-      // story is shared with. If saving a journey silently dropped the
-      // annotations the user drew on it, "Save to Memory" would be quietly
-      // lossy in the one direction that is meant to be durable.
-      // And the authored deck. Scenes were left out of this path at first, on
-      // the theory that a curated journey is a separate artifact from a written
-      // story. That was the wrong call and inconsistent with the line above:
-      // Save is the durable direction, and a deck that lives only in
-      // localStorage is one cleared setting away from gone.
-      const withItems = draw.items.length ? mergeAuthoredItems(base, draw.items) : base;
-      return sceneControl.toStory(layerControl.toStory(withItems));
+      // And the authored deck — the scenes NOT already woven into the journey
+      // as one of `journeySources`. Every scene used to be appended here
+      // unconditionally, which is what a scene chosen for the journey would
+      // still need if this stayed unfiltered: `buildScrapbookStory` re-ids a
+      // journey entry as `sb-<id>`, so the same scene would then appear twice
+      // — once in its rightful chronological place, once more tacked on the
+      // end under its own id. Filtering by `journeySceneIds` is what keeps
+      // each scene appearing exactly once, in the position the author
+      // actually chose for it — and is the one place Save still legitimately
+      // differs from Play: an unchecked scene is not a journey stop, but it
+      // is still the author's work, and Save must not drop it.
+      const remainingScenes = sceneControl.scenes.filter((sc) => !journeySceneIds.has(sc.id));
+      return withAuthoredScenes(journeyBase(curated), remainingScenes, {
+        adoptedFrom: sceneControl.adoptedFrom,
+      });
     },
     [
-      sbEntries, sb.draft.visibility, sb.draft.title,
-      layerControl.toStory, draw.items, sceneControl.toStory, sceneControl.count,
+      journeyBase, sbEntries.length, sceneControl.scenes, sceneControl.count,
+      sceneControl.adoptedFrom, journeySceneIds,
     ],
   );
 
   const curate = useCallback(() => {
-    const s = draftStory(true);
-    if (!s) return;
+    // Nothing chosen for the journey — no collected memory, no scene checked
+    // in — is nothing to curate, even if there are OTHER authored scenes that
+    // would still make `draftStory` (Save) return something.
+    if (journeySources.length === 0) return;
+    const s = journeyBase(true);
     sb.setTitle(s.title);   // the Companion names the journey
     sb.setCurated(true);    // …and save/download must keep its work
-    playStory(s, sbEntries);
-  }, [draftStory, sb, playStory, sbEntries]);
+    playStory(s, journeySources);
+  }, [journeyBase, journeySources, sb, playStory]);
 
   const playScrapbook = useCallback(() => {
-    const s = draftStory(sb.draft.curated);
-    if (s) playStory(s, sbEntries);
-  }, [draftStory, playStory, sb.draft.curated, sbEntries]);
+    if (journeySources.length === 0) return;
+    playStory(journeyBase(sb.draft.curated), journeySources);
+  }, [journeyBase, journeySources, sb.draft.curated, playStory]);
 
   const saveScrapbook = useCallback(async () => {
     // Honour the curation: saving after "Curate with Companion" used to rebuild
@@ -746,11 +898,11 @@ export function AtlasApp() {
     // top-right corner and the sheet is the wider of the pair — so it hid that
     // panel whole, including the button just pressed, while every control
     // underneath stayed in the tab order and reachable by keyboard. Same
-    // one-drawer-at-a-time rule the rail already follows for People and
-    // Collections.
-    setInteropOpen(false);
+    // one-drawer-at-a-time rule the rail follows for all four right-anchored
+    // drawers — see `openDrawer`.
+    closeDrawer('interop');
     setShareOpen(true);
-  }, [draw]);
+  }, [draw, closeDrawer]);
   const closeShare = useCallback(() => setShareOpen(false), []);
 
   // A "Saved" banner must not outlive the thing it described: editing the draft
@@ -766,9 +918,9 @@ export function AtlasApp() {
   // don't re-subscribe on every ~240ms clock-driven re-render.
   const closeLightbox = useCallback(() => setLightbox(null), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
-  const closeScrapbook = useCallback(() => setSbOpen(false), []);
-  const closePeople = useCallback(() => setPeopleOpen(false), []);
-  const closeInterop = useCallback(() => setInteropOpen(false), []);
+  const closeScrapbook = useCallback(() => closeDrawer('scrapbook'), [closeDrawer]);
+  const closePeople = useCallback(() => closeDrawer('people'), [closeDrawer]);
+  const closeInterop = useCallback(() => closeDrawer('interop'), [closeDrawer]);
 
   // The way back out of an empty or unwanted import, without a page reload.
   const clearImport = useCallback(() => {
@@ -794,7 +946,7 @@ export function AtlasApp() {
     async (files: File[]) => {
       const result = await importFiles(files);
       imported.add(result.files);
-      setInteropOpen(true);
+      setOpenDrawer('interop');
       if (result.items.length) frameAll();
     },
     [imported, frameAll],
@@ -805,10 +957,37 @@ export function AtlasApp() {
   const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
 
 
-  const [scenesOpen, setScenesOpen] = useState(false);
+  // `scenesOpen` lives in `openDrawer`, declared with its three siblings above.
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  /** Feedback for the draw toolbar's own capture button — the created scene's
+   *  title, or why nothing was created. Replaces the raw camera-pose readout
+   *  that button used to print, which described a value nothing else read. */
+  const [sceneCaptureNote, setSceneCaptureNote] = useState<string | null>(null);
   const selectedScene = sceneControl.scenes.find((sc) => sc.id === selectedSceneId) ?? null;
   const selectedSceneIndex = sceneControl.scenes.findIndex((sc) => sc.id === selectedSceneId);
+
+  /**
+   * A photo uploaded from inside the Scene editor still has to travel the same
+   * road as any other upload — into `imported.items`, merged into the rendered
+   * story — or `sceneMediaPool` (built from that story) would have nothing to
+   * resolve the new attachment against. Unlike the Import & export panel's own
+   * upload, this one does not `frameAll()` afterward: the point of uploading
+   * from a scene is to keep working on that scene, not to be flown away from
+   * it to survey everything on the globe.
+   */
+  const onScenePhotoUploaded = useCallback((file: ImportedFile) => { imported.add([file]); }, [imported]);
+
+  /** Where a scene-context upload gets pinned: the scene's own declared view
+   *  when it has one — a photo uploaded while writing a scene belongs to that
+   *  scene's place even if the live camera has drifted elsewhere — and the
+   *  live view centre otherwise, the same fallback the Import panel uses. */
+  const sceneUploadPosition = useCallback((): { lat: number; lon: number } | null => {
+    const loc = selectedScene?.camera;
+    const lat = loc?.location?.lat ?? loc?.lat;
+    const lon = loc?.location?.lon ?? loc?.lon;
+    if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat: lat as number, lon: lon as number };
+    return viewCentre();
+  }, [selectedScene, viewCentre]);
 
   const addScene = useCallback(() => {
     setSelectedSceneId(sceneControl.create().id);
@@ -821,7 +1000,38 @@ export function AtlasApp() {
   const addSceneFromView = useCallback(() => {
     const scene = sceneControl.createFromCamera(draw.captureCamera());
     if (scene) setSelectedSceneId(scene.id);
+    return scene;
   }, [sceneControl.createFromCamera, draw.captureCamera]);
+
+  /**
+   * The draw toolbar's OWN "Capture this view" button — a second entry point
+   * to the same act, for someone who is drawing rather than sitting in the
+   * Scenes panel already.
+   *
+   * This used to call `useAuthoring`'s internal `captureCamera`, which stored
+   * the pose in local state and printed it back as a read-only line nobody
+   * consumed — `createFromCamera`'s own doc comment already named the intended
+   * destination ("'Capture this view' → a new scene at the end of the deck")
+   * for the *other* caller; this button just never reached it. Wired to the
+   * same `addSceneFromView` the Scenes panel uses, so a captured view is a
+   * scene whichever panel it was captured from, and the Scenes drawer opens
+   * (rather than merely toggling) so the result is somewhere to look, not a
+   * change that happened off-screen.
+   */
+  const captureSceneFromDraw = useCallback(() => {
+    const scene = addSceneFromView();
+    if (scene) {
+      // Not reachable today — the two chrome profiles turn `drawing` and
+      // `sceneAuthoring` on and off together — but this button is gated only
+      // on the former, so it stays correct if a future profile ever lets them
+      // diverge: opening a surface the chrome policy hides would wedge it
+      // partway visible with no rail button left to close it.
+      if (chrome.sceneAuthoring) setOpenDrawer('scenes');
+      setSceneCaptureNote(`"${scene.title || 'Untitled scene'}" added to the deck.`);
+    } else {
+      setSceneCaptureNote(CAPTURE_UNSETTLED);
+    }
+  }, [addSceneFromView, chrome.sceneAuthoring]);
 
   const removeScene = useCallback((id: string) => {
     sceneControl.remove(id);
@@ -945,16 +1155,19 @@ export function AtlasApp() {
         onFrameAll={frameAll}
         onDraw={() => setDrawing((d) => !d)}
         drawing={drawing}
-        onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
-        onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
+        onPeople={() => toggleDrawer('people')}
+        peopleOpen={peopleOpen}
+        onCollections={() => toggleDrawer('scrapbook')}
+        collectionsOpen={sbOpen}
         // Count what the drawer can actually show, so the badge can never claim
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
         onPresent={() => setPresenting(true)}
-        onScenes={() => setScenesOpen((v) => !v)}
+        onScenes={() => toggleDrawer('scenes')}
         scenesOpen={scenesOpen}
         sceneCount={sceneControl.count}
-        onInterop={() => setInteropOpen((o) => !o)}
+        onInterop={() => toggleDrawer('interop')}
+        interopOpen={interopOpen}
         // `memoryToStory` returns `scenes: []`, so gating on scenes hid Present
         // from every real story and left it reachable only from the bundled
         // demo. `buildDeck` now projects memories when a story has no authored
@@ -1051,7 +1264,16 @@ export function AtlasApp() {
             onFly={inspect}
             onExpand={() => focused && setLightbox(focused)}
             collected={focused ? collected(focused) : false}
-            onCollect={chrome.collect ? () => { if (focused) toggleCollect(focused); } : undefined}
+            // Offered when the embed policy allows collecting at all, AND
+            // (it is already collected — so un-collecting always works — or
+            // it could newly become collectible). A stop that resolves to
+            // neither gets no button rather than one that silently does
+            // nothing when pressed.
+            onCollect={
+              chrome.collect && focused && (collected(focused) || canCollect(focused))
+                ? () => toggleCollect(focused)
+                : undefined
+            }
           />
         )
       )}
@@ -1072,14 +1294,19 @@ export function AtlasApp() {
         title={sb.draft.title}
         visibility={sb.draft.visibility}
         canSave={!!memory}
-        sceneCount={sceneControl.count}
+        scenes={sceneControl.scenes}
+        selectedSceneIds={journeySceneIds}
+        onToggleScene={toggleJourneyScene}
         canClear={sb.count > 0}
         saveState={saveState}
         onClose={closeScrapbook}
         onTitle={sb.setTitle}
         onVisibility={sb.setVisibility}
         onRemove={sb.remove}
-        onClear={sb.clear}
+        // Clearing the scrapbook draft while leaving scenes checked into a
+        // journey that no longer has a scrapbook draft to go with it would
+        // leave the drawer half-reset. Clear resets both.
+        onClear={() => { sb.clear(); setJourneySceneIds(new Set()); }}
         onCurate={curate}
         onPlay={playScrapbook}
         onSave={() => void saveScrapbook()}
@@ -1107,7 +1334,15 @@ export function AtlasApp() {
       />
       )}
       <Lightbox memory={lightbox} onClose={closeLightbox} />
-      {chrome.drawing && <AuthoringToolbar {...draw.toolbarProps} />}
+      {chrome.drawing && (
+        <AuthoringToolbar
+          {...draw.toolbarProps}
+          // Overrides the pass-through pair from `useAuthoring`: see
+          // `captureSceneFromDraw`.
+          onCaptureCamera={captureSceneFromDraw}
+          capturedCamera={sceneCaptureNote}
+        />
+      )}
       {chrome.sceneAuthoring && scenesOpen && (
         <aside className="atlas-scenes" aria-label="Scene authoring">
           <SceneList
@@ -1123,7 +1358,7 @@ export function AtlasApp() {
             onMove={sceneControl.move}
             onMoveTo={sceneControl.moveTo}
             problems={sceneControl.problems}
-            onClose={() => setScenesOpen(false)}
+            onClose={() => closeDrawer('scenes')}
           />
           <SceneEditor
             scene={selectedScene}
@@ -1139,6 +1374,9 @@ export function AtlasApp() {
             // from `exportStory` would let the author attach an entity the
             // presenter cannot see, and the slide would come back blank.
             story={story}
+            uploadApi={ATLAS_API}
+            onUploadPhoto={onScenePhotoUploaded}
+            uploadPosition={sceneUploadPosition}
           />
         </aside>
       )}

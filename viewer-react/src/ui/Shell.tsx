@@ -5,25 +5,36 @@ import {
 } from './icons.js';
 
 
-/** Left icon rail. Globe navigates home; Places fits the camera to every memory;
- *  People opens the participants facet; Collections opens the scrapbook drawer;
- *  Scenes opens the deck editor; Present steps through the story's authored
- *  scenes; Import opens the KML/GeoJSON panel.
+/** Left icon rail. Globe navigates home; Draw arms the drawing tools; People
+ *  opens the participants facet; Collections opens the scrapbook drawer; Scenes
+ *  opens the deck editor; Present steps through the story's authored scenes;
+ *  Import opens the KML/GeoJSON panel.
+ *
+ *  People, Collections, Scenes and Import are mutually exclusive — the caller
+ *  guarantees at most one of their `*Open` props is true at a time (see
+ *  `openDrawer` in `AtlasApp`), because all four panels render at the same
+ *  anchored spot on screen. Each button's `active` state reflects that flag
+ *  directly, rather than the earlier version, which showed no open/closed
+ *  state at all for three of the four and showed the Globe button as
+ *  permanently "current" regardless of what was actually open.
  *
  *  Search is NOT here — it lives in the top bar. Neither is "Fit all places",
  *  which sits beside the projection control: framing the camera on everything
  *  is the same kind of decision as choosing 3D or 2D — where you are looking
  *  from — rather than which panel is open. */
 export function Rail({
-  onFrameAll, onPeople, onCollections, scrapbookCount,
-  onPresent, onInterop, canPresent, importedCount, onDraw, drawing,
+  onFrameAll, onPeople, peopleOpen, onCollections, collectionsOpen, scrapbookCount,
+  onPresent, onInterop, interopOpen, canPresent, importedCount, onDraw, drawing,
   onScenes, scenesOpen, sceneCount,
 }: {
   onPeople: () => void;
+  peopleOpen: boolean;
   onCollections: () => void;
+  collectionsOpen: boolean;
   scrapbookCount: number;
   onPresent: () => void;
   onInterop: () => void;
+  interopOpen: boolean;
   /** A story with no authored scenes has nothing to present — the control is
    *  hidden rather than shown disabled, for the same reason the old "Settings
    *  (coming soon)" button was removed below. */
@@ -43,14 +54,17 @@ export function Rail({
     // The globe is home: it frames everything. "Fit all places" was a second
     // button doing exactly this a row below it, and it is the one that moved to
     // the top bar — where framing sits beside the projection control, because
-    // both are decisions about where you are looking from.
-    { key: 'globe', label: 'Globe — frame everything', Icon: GlobeIcon, onClick: onFrameAll, active: true },
+    // both are decisions about where you are looking from. It is an action,
+    // not a toggle, so it never shows `active` — it used to, unconditionally,
+    // which meant Globe stayed lit the whole session no matter what was
+    // actually open, the first thing that made this rail read as unreliable.
+    { key: 'globe', label: 'Globe — frame everything', Icon: GlobeIcon, onClick: onFrameAll },
     { key: 'draw', label: drawing ? 'Stop drawing' : 'Draw', Icon: PencilIcon, onClick: onDraw, active: drawing },
-    { key: 'people', label: 'People', Icon: PeopleIcon, onClick: onPeople },
-    { key: 'collections', label: 'Scrapbook', Icon: LayersIcon, onClick: onCollections, badge: scrapbookCount },
+    { key: 'people', label: 'People', Icon: PeopleIcon, onClick: onPeople, active: peopleOpen },
+    { key: 'collections', label: 'Scrapbook', Icon: LayersIcon, onClick: onCollections, active: collectionsOpen, badge: scrapbookCount },
     { key: 'scenes', label: 'Scenes', Icon: FlagIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
     ...(canPresent ? [{ key: 'present', label: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
-    { key: 'interop', label: 'Import & export', Icon: ExchangeIcon, onClick: onInterop, badge: importedCount },
+    { key: 'interop', label: 'Import & export', Icon: ExchangeIcon, onClick: onInterop, active: interopOpen, badge: importedCount },
   ];
   return (
     <nav className="atlas-rail" aria-label="Primary">

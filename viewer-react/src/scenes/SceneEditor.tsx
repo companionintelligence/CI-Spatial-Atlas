@@ -61,6 +61,9 @@ import { useId, useMemo, useState, type SVGProps } from 'react';
 import type { Camera, Scene, Story } from '@companion-atlas/story';
 import { SCENE_LAYOUTS, sceneLayout, type SceneLayout } from '../ui/sceneDeck.js';
 import { hasUsableLocation, type SceneProblem, type ScenePatch } from './index.js';
+import { MediaUploadSection } from '../interop/MediaUploadSection.js';
+import type { ImportedFile } from '../interop/importFile.js';
+import type { AtlasApiConfig } from '../upload/index.js';
 import {
   SCENE_MEDIA_KIND_LABEL,
   backgroundCandidate,
@@ -108,6 +111,25 @@ export interface SceneEditorProps {
   /** From `SceneControl.problems`; only this scene's are shown, beside the
    *  field that caused each one. */
   problems?: readonly SceneProblem[];
+  /**
+   * Upload a new photo or video straight into this scene's background,
+   * instead of only offering what is already in the story.
+   *
+   * Two collaborating optional props, both omitted together: `uploadApi` null
+   * or absent renders nothing (matching `MediaUploadSection`'s own behaviour
+   * everywhere else it appears), which keeps this panel mountable with no
+   * Atlas API configured, exactly as it is mountable with no story loaded.
+   */
+  uploadApi?: AtlasApiConfig | null;
+  /** Merge the uploaded file into the *rendered* story — the same route a
+   *  dropped KML or an Import & export upload takes — so it exists to attach
+   *  in the first place. Attaching it to *this* scene happens locally, right
+   *  after, using `onPatch` above. */
+  onUploadPhoto?: (file: ImportedFile) => void;
+  /** Where to pin an uploaded photo. Read at the moment of upload, not at
+   *  render — the caller decides (this scene's own camera when it has one,
+   *  the live globe view otherwise). */
+  uploadPosition?: () => { lat: number; lon: number } | null;
 }
 
 /** What the app says when the globe cannot give a pose worth storing. */
@@ -127,6 +149,27 @@ export function captureOutcome(camera: Camera | null | undefined):
   | { ok: false; message: string } {
   if (!hasUsableLocation(camera)) return { ok: false, message: CAPTURE_UNSETTLED };
   return { ok: true, camera: camera as Camera };
+}
+
+/**
+ * What handling an upload made from inside this scene means for the scene
+ * itself: nothing, or the `itemIds` patch that attaches the one item it
+ * produced.
+ *
+ * An upload made here means "use this," not "add this to the story and maybe
+ * pick it later from the grid below" — so success attaches immediately. Null
+ * for an upload the section itself already reported as failed (`file.error`)
+ * and for the "uploaded but not placed" case (`itemFromUpload` in
+ * `MediaUploadSection` returns no item when there is nowhere to pin it): both
+ * already have their own message on screen, in the upload section itself,
+ * and a scene should not additionally claim an attachment that does not
+ * exist. Exported and pure so this decision is testable without a DOM —
+ * `renderToStaticMarkup`, which is how this component's suite runs, cannot
+ * exercise a click.
+ */
+export function scenePhotoPatch(file: ImportedFile, attached: readonly string[]): ScenePatch | null {
+  if (file.error || file.items.length !== 1) return null;
+  return { itemIds: toggleAttachment(attached, file.items[0]!.id) };
 }
 
 /**
@@ -271,6 +314,7 @@ export function unresolvedNote(ids: readonly string[]): string | null {
 
 export function SceneEditor({
   scene, index, count, onPatch, onRemove, onCaptureCamera, story = null, problems = [],
+  uploadApi = null, onUploadPhoto, uploadPosition,
 }: SceneEditorProps) {
   const ids = useId();
   // Local draft for the three free-text fields — see the header. Reset by
@@ -320,6 +364,12 @@ export function SceneEditor({
   const attached = sceneAttachedIds(scene);
   const showing = backgroundCandidate(pool.candidates, attached);
   const orphanNote = unresolvedNote(unresolvedAttachedIds(pool.candidates, attached));
+
+  const handleScenePhoto = (file: ImportedFile) => {
+    onUploadPhoto?.(file);
+    const patch = scenePhotoPatch(file, attached);
+    if (patch) onPatch(patch);
+  };
 
   const audio = draft.id === scene.id ? draft.audio : (scene.audioUrl ?? '');
   const audioCheck = checkAudioUrl(audio);
@@ -408,6 +458,22 @@ export function SceneEditor({
           `sceneMedia.ts` — so a picked tile always changes the slide. */}
       <div className="sc-field">
         <span className="sc-label" id={`${ids}-media`}>Background</span>
+        {onUploadPhoto && (
+          <MediaUploadSection
+            api={uploadApi}
+            onUploaded={handleScenePhoto}
+            position={uploadPosition}
+            heading="Add a new photo"
+            hint={
+              <>
+                Uploaded to this Atlas server and attached to this scene the moment
+                it lands — pinned at the scene&rsquo;s own view when it has one, the
+                live globe view otherwise. A video has no still frame, so it can be
+                shown on the globe but not used as a scene background.
+              </>
+            }
+          />
+        )}
         {pool.candidates.length === 0 ? (
           <p className="sc-empty">{sceneMediaEmptyMessage(pool)}</p>
         ) : null}

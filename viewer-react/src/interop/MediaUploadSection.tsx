@@ -17,7 +17,7 @@
  * those. It is handed back as a one-file `ImportedFile` for exactly that
  * reason: the panel already lists, frames, removes and merges those.
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, type ReactNode } from 'react';
 import type { Item } from '@companion-atlas/story';
 import {
   acceptAttribute,
@@ -45,6 +45,13 @@ export interface MediaUploadSectionProps {
    * while the opening flight frames the first.
    */
   position?: () => { lat: number; lon: number } | null;
+  /** Overrides the section's own heading and explanatory line — the Scene
+   *  editor uses this to say plainly that the result becomes *this scene's*
+   *  background, rather than repeating the panel's generic copy out of
+   *  context. Both default to the original text, so every existing call site
+   *  is unaffected. */
+  heading?: string;
+  hint?: ReactNode;
 }
 
 /**
@@ -78,7 +85,19 @@ export function itemFromUpload(
   } as unknown as Item;
 }
 
-export function MediaUploadSection({ api, onUploaded, position }: MediaUploadSectionProps) {
+export function MediaUploadSection({
+  api, onUploaded, position,
+  heading = 'Add a photo or video',
+  hint = (
+    <>
+      Uploaded to this Atlas server and pinned at the middle of the view, so it
+      travels with the story — onto the globe, out through an export, and, for a
+      photo, into the scene editor&rsquo;s backgrounds. An uploaded video has no
+      still frame, so it can be shown on the globe but not chosen as a scene
+      background.
+    </>
+  ),
+}: MediaUploadSectionProps) {
   const input = useRef<HTMLInputElement>(null);
   const upload = useMediaUpload(api);
   const busy = isUploadBusy(upload.state);
@@ -127,14 +146,8 @@ export function MediaUploadSection({ api, onUploaded, position }: MediaUploadSec
 
   return (
     <section className="io-section">
-      <h3>Add a photo or video</h3>
-      <p className="io-hint">
-        Uploaded to this Atlas server and pinned at the middle of the view, so it
-        travels with the story — onto the globe, out through an export, and, for a
-        photo, into the scene editor&rsquo;s backgrounds. An uploaded video has no
-        still frame, so it can be shown on the globe but not chosen as a scene
-        background.
-      </p>
+      <h3>{heading}</h3>
+      <p className="io-hint">{hint}</p>
 
       {!upload.available && upload.reason && (
         <p className="io-note" role="status">{upload.reason}</p>
