@@ -12,6 +12,12 @@ import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 const googleMapsAvailable = Boolean(
   (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GOOGLE_MAPS_API_KEY,
 );
+// Same derivation `InteropPanel` uses for its own upload section, module-scope
+// for the same reason: `import.meta.env` is frozen at build time, so reading it
+// per render would hand `useMediaUpload` a new (but equal) object every time.
+const ATLAS_API = atlasApiFromEnv(
+  (import.meta as unknown as { env: Record<string, string | undefined> }).env,
+);
 import { Starfield } from './ui/Backdrop.js';
 import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.js';
 import { nameUnplacedMemories, placeSummaries } from './model/atlasModel.js';
@@ -27,6 +33,8 @@ import { useLayers } from './layers/index.js';
 import { Presenter } from './ui/Presenter.js';
 import type { DeckSlide } from './ui/sceneDeck.js';
 import { InteropPanel, DropOverlay } from './interop/InteropPanel.js';
+import { atlasApiFromEnv } from './upload/index.js';
+import type { ImportedFile } from './interop/importFile.js';
 import { useImported, withImported } from './interop/useImported.js';
 import { applyMemoryPlaces, type MemoryImport } from './memory/import.js';
 import { isFramableBounds, type GeoPlace } from './memory/geocode.js';
@@ -843,6 +851,29 @@ export function AtlasApp() {
   const selectedScene = sceneControl.scenes.find((sc) => sc.id === selectedSceneId) ?? null;
   const selectedSceneIndex = sceneControl.scenes.findIndex((sc) => sc.id === selectedSceneId);
 
+  /**
+   * A photo uploaded from inside the Scene editor still has to travel the same
+   * road as any other upload — into `imported.items`, merged into the rendered
+   * story — or `sceneMediaPool` (built from that story) would have nothing to
+   * resolve the new attachment against. Unlike the Import & export panel's own
+   * upload, this one does not `frameAll()` afterward: the point of uploading
+   * from a scene is to keep working on that scene, not to be flown away from
+   * it to survey everything on the globe.
+   */
+  const onScenePhotoUploaded = useCallback((file: ImportedFile) => { imported.add([file]); }, [imported]);
+
+  /** Where a scene-context upload gets pinned: the scene's own declared view
+   *  when it has one — a photo uploaded while writing a scene belongs to that
+   *  scene's place even if the live camera has drifted elsewhere — and the
+   *  live view centre otherwise, the same fallback the Import panel uses. */
+  const sceneUploadPosition = useCallback((): { lat: number; lon: number } | null => {
+    const loc = selectedScene?.camera;
+    const lat = loc?.location?.lat ?? loc?.lat;
+    const lon = loc?.location?.lon ?? loc?.lon;
+    if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat: lat as number, lon: lon as number };
+    return viewCentre();
+  }, [selectedScene, viewCentre]);
+
   const addScene = useCallback(() => {
     setSelectedSceneId(sceneControl.create().id);
   }, [sceneControl.create]);
@@ -1209,6 +1240,9 @@ export function AtlasApp() {
             // from `exportStory` would let the author attach an entity the
             // presenter cannot see, and the slide would come back blank.
             story={story}
+            uploadApi={ATLAS_API}
+            onUploadPhoto={onScenePhotoUploaded}
+            uploadPosition={sceneUploadPosition}
           />
         </aside>
       )}
