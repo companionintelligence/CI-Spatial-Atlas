@@ -111,6 +111,18 @@ const css = (hex: string | undefined, fallback: Cesium.Color): Cesium.Color => {
  * (`fillOpacity: 0`, how KML's `<fill>0</fill>` arrives) clickable, since a
  * fully transparent fill is not pickable.
  */
+/** A note's on-globe label is the pin's neighbourhood, not the place to read
+ *  the whole thing — an unbounded label crowds out everything drawn near it,
+ *  and a long one runs off past a dozen other pins. The full text is one
+ *  click away (see `NoteCard`, docked the same way a place or a memory is). */
+export const NOTE_LABEL_MAX_CHARS = 20;
+
+export function cropNoteLabel(text: string): string {
+  return text.length > NOTE_LABEL_MAX_CHARS
+    ? `${text.slice(0, NOTE_LABEL_MAX_CHARS).trimEnd()}…`
+    : text;
+}
+
 export function addItemEntities(ds: Cesium.CustomDataSource, item: Item, selected: boolean): void {
   switch (item.type) {
     case 'marker': {
@@ -158,7 +170,7 @@ export function addItemEntities(ds: Cesium.CustomDataSource, item: Item, selecte
           disableDepthTestDistance: ON_TOP,
         },
         label: {
-          text: item.text,
+          text: cropNoteLabel(item.text),
           font: '600 13px Manrope, sans-serif',
           fillColor: FG,
           showBackground: true,

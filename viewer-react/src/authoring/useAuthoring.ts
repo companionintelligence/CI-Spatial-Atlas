@@ -6,11 +6,15 @@ import { createDraft, snapshot, type AuthoringMode, type DraftSnapshot } from '.
 import { describeCamera } from './camera.js';
 import { geocode, reverseGeocode, type GeoPlace } from '../memory/geocode.js';
 import { createHistory, summarize, type HistorySummary } from './history.js';
-import type { Measurement, MeasureUnits } from './measure.js';
+import type { Measurement, MeasureMode, MeasureUnits } from './measure.js';
 import { DEFAULT_STYLE, mergeStyle, type AuthoringStyle } from './style.js';
 import { storyIds, type AuthoringSelection } from './store.js';
 import { hydrateItems, readItems, writeItems, type AuthoringStorage } from './persist.js';
 import type { AuthoringToolbarProps } from './Toolbar.js';
+
+/** Stable across renders, so a caller who never passes `hiddenCategories`
+ *  does not retrigger the live-sync effect below on every render. */
+const EMPTY_HIDDEN: ReadonlySet<Item['type']> = new Set();
 
 /**
  * The React binding: controller lifecycle + the state the toolbar renders.
@@ -102,9 +106,16 @@ export interface UseAuthoringOptions {
    * units and then flips. A per-session default is honest about what it is.
    */
   units?: MeasureUnits;
+  /** Free-draw or click-points. Same per-session-only reasoning as `units`. */
+  measureMode?: MeasureMode;
   /** Notified when a measurement is taken, replaced or cleared. It is never an
    *  `Item` and never reaches the story — see `measure.ts`. */
   onMeasure?: (measurement: Measurement | null) => void;
+  /** Item types to leave off the globe — the top-nav visibility toggle. Unlike
+   *  `units`/`measureMode`, this is not a seed: it is owned entirely outside
+   *  this hook (by whatever renders the toggle's checkboxes) and pushed to the
+   *  live controller on every change, the same way `enabled` is. */
+  hiddenCategories?: ReadonlySet<Item['type']>;
 }
 
 export interface AuthoringControl {
@@ -138,6 +149,8 @@ export interface AuthoringControl {
   clearMeasurement: () => void;
   units: MeasureUnits;
   setUnits: (units: MeasureUnits) => void;
+  measureMode: MeasureMode;
+  setMeasureMode: (mode: MeasureMode) => void;
 
   /** Step the committed items back / forward one authoring action. */
   undo: () => void;
@@ -161,7 +174,7 @@ export function useAuthoring(
   viewer: Cesium.Viewer | null,
   options: UseAuthoringOptions = {},
 ): AuthoringControl {
-  const { story = null, enabled = true, scope = null } = options;
+  const { story = null, enabled = true, scope = null, hiddenCategories = EMPTY_HIDDEN } = options;
 
   const [mode, setModeState] = useState<AuthoringMode>('idle');
   const [draft, setDraft] = useState<DraftSnapshot>(() => snapshot(createDraft('idle')));
@@ -173,6 +186,7 @@ export function useAuthoring(
   const [ready, setReady] = useState(false);
   const [measurement, setMeasurementState] = useState<Measurement | null>(null);
   const [units, setUnitsState] = useState<MeasureUnits>(options.units ?? 'metric');
+  const [measureMode, setMeasureModeState] = useState<MeasureMode>(options.measureMode ?? 'free');
   const [historyState, setHistoryState] = useState<HistorySummary>(() => summarize(createHistory([])));
   /** The address of the staged pin, and what the lookup is doing. `idle` before
    *  a point exists; `none` when the lookup came back with nothing, which is a
@@ -223,6 +237,12 @@ export function useAuthoring(
    *  destroy the drawing layer to change a label from metres to feet. */
   const unitsRef = useRef(units);
   unitsRef.current = units;
+  const measureModeRef = useRef(measureMode);
+  measureModeRef.current = measureMode;
+  /** Read at construction only, like `enabled` — every later change goes
+   *  through `setHiddenCategories` on the live controller, below. */
+  const hiddenCategoriesRef = useRef(hiddenCategories);
+  hiddenCategoriesRef.current = hiddenCategories;
   const storyRef = useRef(story);
   storyRef.current = story;
 
@@ -235,7 +255,9 @@ export function useAuthoring(
       style,
       enabled: enabledRef.current,
       units: unitsRef.current,
+      measureMode: measureModeRef.current,
       renderItems: options.renderItems,
+      hiddenCategories: hiddenCategoriesRef.current,
       reservedIds: () => storyIds(storyRef.current),
       onChange: (next, change) => {
         emittedRef.current = next;
@@ -256,6 +278,16 @@ export function useAuthoring(
               ? controller.getSelection()
               : current,
           );
+        }
+        // A note just placed: the text that named it belongs to that note
+        // now, not to whichever one gets placed next in the same run — see
+        // `commit()`'s own reset of its internal copy, for the same reason.
+        // `setNoteTextState` directly, not the `setNoteText` wrapper below:
+        // that also writes back into the controller, which has already reset
+        // itself, and this closure runs inside the controller-creation effect,
+        // before `setNoteText` exists as a binding.
+        if (change.kind === 'add' && change.id && next.find((item) => item.id === change.id)?.type === 'note') {
+          setNoteTextState('');
         }
       },
       onSelect: (next) => {
@@ -321,6 +353,13 @@ export function useAuthoring(
   useEffect(() => {
     controllerRef.current?.setEnabled(enabled);
   }, [enabled, ready]);
+
+  // Same reasoning, same shape: pushed to the live controller rather than a
+  // construction-time seed, because the toggle that owns this value lives
+  // entirely outside this hook and can flip at any time.
+  useEffect(() => {
+    controllerRef.current?.setHiddenCategories(hiddenCategories);
+  }, [hiddenCategories, ready]);
 
   /**
    * Hydrate from storage whenever the scope resolves or changes.
@@ -419,6 +458,11 @@ export function useAuthoring(
     // toolbar's toggle has to reflect the press even one frame before the
     // viewer arrives, or it reads as a dead control.
     setUnitsState(next);
+  }, []);
+
+  const setMeasureMode = useCallback((next: MeasureMode) => {
+    controllerRef.current?.setMeasureMode(next);
+    setMeasureModeState(next);
   }, []);
 
   /** Put the pin at a coordinate without a click — the address box's route in. */
@@ -537,6 +581,8 @@ export function useAuthoring(
     onClearMeasurement: clearMeasurement,
     units,
     onUnits: setUnits,
+    measureMode,
+    onMeasureMode: setMeasureMode,
     canUndo: historyState.canUndo,
     canRedo: historyState.canRedo,
     undoLabel: historyState.undoLabel,
@@ -547,7 +593,7 @@ export function useAuthoring(
   }), [
     mode, setMode, draft, finish, cancel, undoVertex, style, setStyle,
     noteText, setNoteText, selection, deleteSelected, captureCamera, camera, enabled,
-    measurement, clearMeasurement, units, setUnits, historyState, undo, redo,
+    measurement, clearMeasurement, units, setUnits, measureMode, setMeasureMode, historyState, undo, redo,
     placeLabel, placeState, setPlaceLabel, addressResults, addressBusy, searchAddress, useAddress,
   ]);
 
@@ -561,7 +607,7 @@ export function useAuthoring(
     selection, select,
     items, setItems,
     finish, cancel, undoVertex, deleteSelected,
-    measurement, clearMeasurement, units, setUnits,
+    measurement, clearMeasurement, units, setUnits, measureMode, setMeasureMode,
     undo, redo,
     canUndo: historyState.canUndo,
     canRedo: historyState.canRedo,

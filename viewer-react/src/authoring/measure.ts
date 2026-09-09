@@ -75,6 +75,37 @@ export const UNIT_SHORT: Record<MeasureUnits, string> = {
   imperial: 'ft / mi',
 };
 
+// ---------------------------------------------------------------------------
+// How a click becomes a vertex
+// ---------------------------------------------------------------------------
+
+/**
+ * `'free'` — every click drops a point wherever the ray meets the terrain,
+ * the tape-measure behaviour this tool has always had.
+ *
+ * `'points'` — a click reads the position off whatever pin is under the
+ * cursor (a memory, a place, a drawn marker or note) instead of the terrain
+ * underneath it. The distinction matters past a few metres of imprecision: two
+ * memory pins are rarely exactly where a free click lands, terrain relief
+ * moves a "close enough" click by however many metres the slope adds, and the
+ * whole reason to reach for this mode is to measure the distance the app
+ * already knows two named places are apart, exactly — not eyeball it.
+ *
+ * A click that misses every pin does nothing in this mode rather than falling
+ * back to a terrain point: silently blending the two would make the toggle
+ * meaningless — the very next reading would be able to mix an exact pin
+ * position with an eyeballed one and there would be no way to tell which was
+ * which from the number on screen.
+ */
+export type MeasureMode = 'free' | 'points';
+
+export const MEASURE_MODES: readonly MeasureMode[] = ['free', 'points'];
+
+export const MEASURE_MODE_LABEL: Record<MeasureMode, string> = {
+  free: 'Free draw',
+  points: 'Click points',
+};
+
 // Exact definitions, not approximations: the international foot is defined as
 // 0.3048 m exactly and everything else below derives from it, so a length
 // converted out and back is bit-stable rather than drifting by a millimetre per

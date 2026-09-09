@@ -137,3 +137,24 @@ export function pickEntityId(viewer: Cesium.Viewer, windowPosition: Cesium.Carte
   const id = picked?.id?.id;
   return typeof id === 'string' ? id : null;
 }
+
+/**
+ * The world position an entity is actually anchored at, read off the entity
+ * itself rather than off wherever the click ray happens to meet the terrain
+ * underneath it.
+ *
+ * Built for "click points" measuring (`authoring/measure.ts`): a pin's own
+ * position is exact, and a `pickGlobePoint` at the same pixel is not — it is
+ * the terrain a few pixels away, off by however much the pin's own
+ * screen-space offset and the slope combine to add. `null` for a miss, and for
+ * a hit with no single position (a line or a polygon has a path, not a point)
+ * — "click points" is about pins, not shapes.
+ */
+export function pickEntityPosition(viewer: Cesium.Viewer, windowPosition: Cesium.Cartesian2): GeoPoint | null {
+  if (!viewer || viewer.isDestroyed()) return null;
+  const picked = viewer.scene.pick(windowPosition) as { id?: Cesium.Entity } | undefined;
+  const entity = picked?.id;
+  if (!entity?.position) return null;
+  const cartesian = entity.position.getValue(viewer.clock.currentTime);
+  return cartesian ? toGeoPoint(cartesian) : null;
+}

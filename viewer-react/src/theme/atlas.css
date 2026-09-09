@@ -400,19 +400,29 @@ body { background: var(--atlas-bg); overflow: hidden; }
  * rail, which is narrow but honest; below 760px the sheet takes over. */
 @media (max-width: 980px) { .atlas-stats, .atlas-legend, .atlas-scrap { display: none; } }
 
-/* ---- Map layers popover (basemap + sun) ---------------------------------- */
-.atlas-layers { position: relative; display: inline-flex; }
-.atlas-layers-pop {
+/* ---- Map layers popover (basemap + sun), and the visibility popover ------ */
+/* `.atlas-vis`/`.atlas-vis-pop` are the same shell as `.atlas-layers`'s, for a
+   different question (which authored categories are drawn, not which sources
+   are) — aliased rather than duplicated. */
+.atlas-layers, .atlas-vis { position: relative; display: inline-flex; }
+.atlas-layers-pop, .atlas-vis-pop {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: var(--z-popover);
   width: 268px; padding: 12px; border-radius: 12px;
   background: var(--atlas-card); border: 1px solid var(--atlas-line);
   box-shadow: var(--atlas-shadow);
   display: flex; flex-direction: column; gap: 8px;
 }
-.atlas-layers-pop .lay-head {
+.atlas-layers-pop .lay-head, .atlas-vis-pop .lay-head {
   font-size: 10px; letter-spacing: .09em; text-transform: uppercase;
   color: var(--atlas-fg-dim); font-weight: 700;
 }
+.vis-row {
+  display: flex; align-items: center; gap: 9px; padding: 8px;
+  border-radius: 9px; font-size: 12.5px; font-weight: 600; color: var(--atlas-fg);
+  cursor: pointer;
+}
+.vis-row:hover { background: rgba(64,155,155,.10); }
+.vis-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--atlas-teal); }
 .lay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .lay-opt, .lay-row {
   display: grid; align-items: center; gap: 2px 8px; padding: 8px;
@@ -599,7 +609,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
   /* Panels that assume a desktop gutter. */
   .atlas-drawer { left: 8px; right: 8px; width: auto; }
-  .atlas-layers-pop { width: min(268px, calc(100vw - 24px)); }
+  .atlas-layers-pop, .atlas-vis-pop { width: min(268px, calc(100vw - 24px)); }
 }
 
 /* Coarse pointers need real tap targets regardless of width. */

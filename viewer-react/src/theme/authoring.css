@@ -163,8 +163,12 @@
 .draw-measure { border-color: color-mix(in srgb, var(--atlas-dusk) 40%, var(--atlas-line)); }
 .draw-measure .draw-count b { color: var(--atlas-dusk); font: 700 13px var(--atlas-mono); }
 
-.draw-units { display: flex; gap: 5px; }
-.draw-unit {
+/* `.draw-measure-mode` (Free draw / Click points) is styled identically to
+   `.draw-units` (Metric / Imperial) — both are two-button segmented toggles in
+   the same panel — so they share one ruleset rather than a copy that could
+   drift out of sync with it. */
+.draw-units, .draw-measure-mode { display: flex; gap: 5px; }
+.draw-unit, .draw-measure-mode-btn {
   flex: 1;
   min-height: 28px;
   padding: 5px 8px;
@@ -177,8 +181,8 @@
   cursor: pointer;
   transition: color .15s, border-color .15s, background .15s;
 }
-.draw-unit:hover { color: var(--atlas-fg); border-color: var(--atlas-line-2); }
-.draw-unit.active {
+.draw-unit:hover, .draw-measure-mode-btn:hover { color: var(--atlas-fg); border-color: var(--atlas-line-2); }
+.draw-unit.active, .draw-measure-mode-btn.active {
   color: var(--atlas-dusk);
   border-color: var(--atlas-dusk);
   background: color-mix(in srgb, var(--atlas-dusk) 12%, transparent);
@@ -377,6 +381,7 @@
 .draw-swatch-custom:focus-within,
 .draw-width:focus-visible,
 .draw-unit:focus-visible,
+.draw-measure-mode-btn:focus-visible,
 .draw-icon:focus-visible,
 .draw-input:focus-visible,
 .draw-range:focus-visible,
@@ -428,7 +433,7 @@
   .draw-mode { min-height: 44px; }
   .draw-action { min-height: 40px; }
   .draw-swatch { width: 30px; height: 30px; }
-  .draw-unit { min-height: 40px; }
+  .draw-unit, .draw-measure-mode-btn { min-height: 40px; }
   .draw-width { min-height: 34px; }
 }
 

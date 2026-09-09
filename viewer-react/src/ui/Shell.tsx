@@ -102,7 +102,7 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
  *  view out of Atlas, which is what the Import & export panel is for, and that
  *  panel is where the other three exits already live. */
 export function TopBar({
-  onSearch, onFrameAll, live, sample, showPlaces, onTogglePlaces, layers,
+  onSearch, onFrameAll, live, sample, showPlaces, onTogglePlaces, layers, visibility,
   sceneMode = '3d', onSceneMode,
 }: {
   onSearch: () => void;
@@ -117,6 +117,10 @@ export function TopBar({
   onTogglePlaces?: () => void;
   /** Map-layers control, rendered inline in the bar. */
   layers?: React.ReactNode;
+  /** The notes/pins/outlines/areas/images visibility popover, rendered inline
+   *  next to `layers` — the same kind of decision (what's drawn), answered by
+   *  a different control (see `VisibilityToggles`). */
+  visibility?: React.ReactNode;
   /** Projection. Sits beside the layer control because it is the same kind of
    *  decision — how the world is drawn, not what is on it. */
   sceneMode?: SceneModeName;
@@ -161,6 +165,7 @@ export function TopBar({
         </button>
       )}
       {layers}
+      {visibility}
       {onFrameAll && (
         <button
           className="atlas-icon-btn"

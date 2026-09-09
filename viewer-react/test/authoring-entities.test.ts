@@ -6,6 +6,8 @@ import {
   addItemEntities,
   addSelectionHandles,
   createAuthoringDataSource,
+  cropNoteLabel,
+  NOTE_LABEL_MAX_CHARS,
   removeByPrefix,
   updateDraftEntities,
 } from '../src/authoring/entities.js';
@@ -147,6 +149,25 @@ describe('markers and notes', () => {
     const ds = createAuthoringDataSource();
     addItemEntities(ds, { id: 'n1', type: 'note', position: p(0, 0), text: 'we sat here' }, false);
     expect(at(ds.entities.getById(itemEntityId('n1'))!.label!.text)).toBe('we sat here');
+  });
+
+  it('crops a note label past 20 characters, with an ellipsis', () => {
+    const ds = createAuthoringDataSource();
+    addItemEntities(
+      ds,
+      { id: 'n2', type: 'note', position: p(0, 0), text: 'This sentence is much longer than twenty characters' },
+      false,
+    );
+    const shown = at(ds.entities.getById(itemEntityId('n2'))!.label!.text) as string;
+    expect(shown).toBe('This sentence is muc…');
+    expect([...shown].length - 1).toBe(NOTE_LABEL_MAX_CHARS); // the ellipsis is one extra character, not one of the 20
+  });
+
+  it('crops exactly at the boundary, and leaves anything at or under it alone', () => {
+    const exact = 'x'.repeat(NOTE_LABEL_MAX_CHARS);
+    expect(cropNoteLabel(exact)).toBe(exact);
+    expect(cropNoteLabel(`${exact}y`)).toBe(`${exact}…`);
+    expect(cropNoteLabel('short')).toBe('short');
   });
 
   it('leaves the story’s own entity types to the CZML layer', () => {
