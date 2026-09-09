@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
-import { buildScrapbookStory, curateJourney, type Camera, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
+import { buildScrapbookStory, curateJourney, type Camera, type Item, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
 import { useStory } from './story/useStory.js';
 import { usePlaces } from './story/usePlaces.js';
 import { CesiumStoryViewer, type SceneModeName } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
 import { Rail, TopBar } from './ui/Shell.js';
 import { MapLayers } from './ui/MapLayers.js';
+import { VisibilityToggles, type AuthoredCategory } from './ui/VisibilityToggles.js';
+import { NoteCard } from './ui/NoteCard.js';
 import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 
 const googleMapsAvailable = Boolean(
@@ -153,6 +155,23 @@ export function AtlasApp() {
   const [sunLighting, setSunLighting] = useState(false);
   const [buildings, setBuildings] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  // What's shown on the globe: an independent popover, anchored to its own
+  // header icon exactly like `layersOpen`/`MapLayers` — not part of
+  // `openDrawer`, which exists to make mutually exclusive same-anchored
+  // drawers unrepresentable, and this is neither of those things.
+  const [visOpen, setVisOpen] = useState(false);
+  // Images are off by default: an uploaded photo used to land on the globe
+  // the instant it had no scene, with no way to turn it back off.
+  const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<AuthoredCategory>>(
+    () => new Set(['photo']),
+  );
+  const toggleVisibilityCategory = useCallback((category: AuthoredCategory) => {
+    setHiddenCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category); else next.add(category);
+      return next;
+    });
+  }, []);
 
   // "What was this place to me": the other memories sharing the focused
   // memory's place, which is how a real archive is actually structured — a
@@ -200,6 +219,11 @@ export function AtlasApp() {
   // its own focus state — independent of `focusedId`/`focused`, which are memory-only.
   const [showPlaces, setShowPlaces] = useState(false);
   const [focusedPlace, setFocusedPlace] = useState<Place | null>(null);
+  // A clicked note's full text, docked in the same slot as `focusedPlace` —
+  // its label on the globe is cropped (see `cropNoteLabel`), so this is where
+  // the rest of it goes. `Item` rather than a plain string: `NoteCard` also
+  // wants the title, if the note has one.
+  const [focusedNote, setFocusedNote] = useState<(Item & { type: 'note' }) | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(!reduceMotion);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -755,11 +779,30 @@ export function AtlasApp() {
     // per connected memory, so two accounts on one browser never inherit each
     // other's annotations.
     scope: memory?.url ?? null,
+    // The top-nav visibility popover's "off" checkboxes. `hiddenCategories`
+    // also carries 'photo' (the Images checkbox), which no drawn item is ever
+    // typed as — harmless to pass through unfiltered.
+    hiddenCategories,
     onSelect: (sel) => {
       if (sel?.kind === 'memory') setFocusedId(sel.id);
       else if (sel?.kind === 'place') setFocusedPlace(places.find((p) => p.id === sel.id) ?? null);
+      // A note's on-globe label is cropped (see `cropNoteLabel`) — clicking it
+      // is how the rest of the text is read. Any other selection (including
+      // none) closes the card, the same way picking a different memory or
+      // place replaces whichever one of those was showing.
+      setFocusedNote(sel?.kind === 'item' && sel.item?.type === 'note' ? (sel.item as Item & { type: 'note' }) : null);
     },
   });
+
+  // Also deselects in the authoring controller, not just the card's own React
+  // state — otherwise `selection` stays pointed at the note (still drawn with
+  // its "selected" mint styling, still a Delete-key target) and clicking the
+  // SAME note again is a no-op: `onSelect` only fires on a kind/id change, and
+  // neither would have changed, so the card could never reopen.
+  const closeNote = useCallback(() => {
+    setFocusedNote(null);
+    draw.select(null);
+  }, [draw]);
 
   /**
    * The document built from `journeySources` alone: collected memories and
@@ -1204,6 +1247,15 @@ export function AtlasApp() {
             layers={layerControl}
           />
         )}
+        visibility={(
+          <VisibilityToggles
+            open={visOpen}
+            hidden={hiddenCategories}
+            onToggleCategory={toggleVisibilityCategory}
+            onToggle={() => setVisOpen((o) => !o)}
+            onClose={() => setVisOpen(false)}
+          />
+        )}
       />
       )}
       <main className="atlas-stage">
@@ -1226,6 +1278,8 @@ export function AtlasApp() {
           reduceMotion={reduceMotion}
           timeMs={currentMs || model.timeline.startMs}
           extraItemIds={importedIds}
+          hideJourneyRoute={draw.mode === 'note'}
+          showImages={!hiddenCategories.has('photo')}
         />
         {(
           <div className="atlas-overlay">
@@ -1251,7 +1305,9 @@ export function AtlasApp() {
         )}
       </main>
       {(
-        focusedPlace ? (
+        focusedNote ? (
+          <NoteCard note={focusedNote} onClose={closeNote} />
+        ) : focusedPlace ? (
           <PlaceCard place={focusedPlace} onFly={flyToPlace} onClose={closePlace} />
         ) : (
           <MemoryInspector

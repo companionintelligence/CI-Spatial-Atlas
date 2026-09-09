@@ -36,6 +36,27 @@ describe('keepForGlobe', () => {
     expect(keepForGlobe({ id: 'imported-1', point: {} }, ids)).toBe(true);
     expect(keepForGlobe({ id: 'other', point: {} }, ids)).toBe(false);
   });
+
+  describe('a passthrough billboard — a photo or video with no scene', () => {
+    const ids = new Set(['photo-1']);
+
+    it('is dropped by default, even once named as a passthrough', () => {
+      // An upload used to reach the globe the instant it had no scene, with no
+      // way to turn it back off. Omitting `opts` entirely must be as safe as
+      // passing `{ showImages: false }` explicitly.
+      expect(keepForGlobe({ id: 'photo-1', billboard: {} }, ids)).toBe(false);
+      expect(keepForGlobe({ id: 'photo-1', billboard: {} }, ids, { showImages: false })).toBe(false);
+    });
+
+    it('is kept once the caller opts in, but only when it is also a named passthrough', () => {
+      expect(keepForGlobe({ id: 'photo-1', billboard: {} }, ids, { showImages: true })).toBe(true);
+      expect(keepForGlobe({ id: 'other', billboard: {} }, ids, { showImages: true })).toBe(false);
+    });
+
+    it('does not gate anything else on showImages — a plain point ignores it', () => {
+      expect(keepForGlobe({ id: 'imported-1', point: {} }, new Set(['imported-1']), { showImages: false })).toBe(true);
+    });
+  });
 });
 
 describe('an imported KML story survives the filter', () => {

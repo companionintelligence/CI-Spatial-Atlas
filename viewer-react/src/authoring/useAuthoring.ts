@@ -12,6 +12,10 @@ import { storyIds, type AuthoringSelection } from './store.js';
 import { hydrateItems, readItems, writeItems, type AuthoringStorage } from './persist.js';
 import type { AuthoringToolbarProps } from './Toolbar.js';
 
+/** Stable across renders, so a caller who never passes `hiddenCategories`
+ *  does not retrigger the live-sync effect below on every render. */
+const EMPTY_HIDDEN: ReadonlySet<Item['type']> = new Set();
+
 /**
  * The React binding: controller lifecycle + the state the toolbar renders.
  *
@@ -107,6 +111,11 @@ export interface UseAuthoringOptions {
   /** Notified when a measurement is taken, replaced or cleared. It is never an
    *  `Item` and never reaches the story — see `measure.ts`. */
   onMeasure?: (measurement: Measurement | null) => void;
+  /** Item types to leave off the globe — the top-nav visibility toggle. Unlike
+   *  `units`/`measureMode`, this is not a seed: it is owned entirely outside
+   *  this hook (by whatever renders the toggle's checkboxes) and pushed to the
+   *  live controller on every change, the same way `enabled` is. */
+  hiddenCategories?: ReadonlySet<Item['type']>;
 }
 
 export interface AuthoringControl {
@@ -165,7 +174,7 @@ export function useAuthoring(
   viewer: Cesium.Viewer | null,
   options: UseAuthoringOptions = {},
 ): AuthoringControl {
-  const { story = null, enabled = true, scope = null } = options;
+  const { story = null, enabled = true, scope = null, hiddenCategories = EMPTY_HIDDEN } = options;
 
   const [mode, setModeState] = useState<AuthoringMode>('idle');
   const [draft, setDraft] = useState<DraftSnapshot>(() => snapshot(createDraft('idle')));
@@ -230,6 +239,10 @@ export function useAuthoring(
   unitsRef.current = units;
   const measureModeRef = useRef(measureMode);
   measureModeRef.current = measureMode;
+  /** Read at construction only, like `enabled` — every later change goes
+   *  through `setHiddenCategories` on the live controller, below. */
+  const hiddenCategoriesRef = useRef(hiddenCategories);
+  hiddenCategoriesRef.current = hiddenCategories;
   const storyRef = useRef(story);
   storyRef.current = story;
 
@@ -244,6 +257,7 @@ export function useAuthoring(
       units: unitsRef.current,
       measureMode: measureModeRef.current,
       renderItems: options.renderItems,
+      hiddenCategories: hiddenCategoriesRef.current,
       reservedIds: () => storyIds(storyRef.current),
       onChange: (next, change) => {
         emittedRef.current = next;
@@ -339,6 +353,13 @@ export function useAuthoring(
   useEffect(() => {
     controllerRef.current?.setEnabled(enabled);
   }, [enabled, ready]);
+
+  // Same reasoning, same shape: pushed to the live controller rather than a
+  // construction-time seed, because the toggle that owns this value lives
+  // entirely outside this hook and can flip at any time.
+  useEffect(() => {
+    controllerRef.current?.setHiddenCategories(hiddenCategories);
+  }, [hiddenCategories, ready]);
 
   /**
    * Hydrate from storage whenever the scope resolves or changes.

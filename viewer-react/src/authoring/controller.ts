@@ -179,6 +179,10 @@ export interface AuthoringControllerOptions {
    * this controller holds, not from whatever is rendering the shape.
    */
   renderItems?: boolean;
+  /** Item types to leave off the globe entirely, while keeping them in
+   *  `items`/the story — the top-nav visibility toggle's "off" checkboxes.
+   *  Seeds the setting; `setHiddenCategories` takes over from there. */
+  hiddenCategories?: ReadonlySet<Item['type']>;
 }
 
 export interface AuthoringController {
@@ -243,6 +247,12 @@ export interface AuthoringController {
   setMeasureMode(mode: MeasureMode): void;
   getMeasureMode(): MeasureMode;
 
+  /** Redraw with a different set of item types left off the globe. Items of
+   *  a hidden type stay in `items` untouched — only their entities are
+   *  skipped, so unhiding a category needs no re-fetch and no re-draw. */
+  setHiddenCategories(categories: ReadonlySet<Item['type']>): void;
+  getHiddenCategories(): ReadonlySet<Item['type']>;
+
   /**
    * Step the committed item list back / forward one action.
    *
@@ -289,6 +299,10 @@ export interface AuthoringController {
   destroy(): void;
 }
 
+/** Shared so a caller that never sets `hiddenCategories` does not hand every
+ *  controller its own throwaway empty Set. */
+const EMPTY_HIDDEN: ReadonlySet<Item['type']> = new Set();
+
 /** Ask for one frame. `requestRenderMode` is off today (see the long note in
  *  `CesiumStoryViewer`), so this is groundwork — and required the moment it is
  *  turned on, because a plain property set on an entity is invisible to it. */
@@ -329,6 +343,7 @@ export function createAuthoringController(
   let measurement: Measurement | null = null;
   let units: MeasureUnits = options.units ?? 'metric';
   let measureMode: MeasureMode = options.measureMode ?? 'free';
+  let hiddenCategories: ReadonlySet<Item['type']> = options.hiddenCategories ?? EMPTY_HIDDEN;
   /** Undo/redo over the committed items. Starts empty and is re-based by
    *  `setItems` — see `resetHistory`. */
   let history: HistoryState = createHistory([]);
@@ -438,6 +453,14 @@ export function createAuthoringController(
       for (const item of items) {
         if (seen.has(item.id)) continue;
         seen.add(item.id);
+        // Hidden categories stay in `items` — and so in the story — untouched.
+        // Only the entity is skipped, which is why unhiding needs no reload.
+        // A literal `item.type` check, not "photo folds in video" — safe only
+        // because `addItemEntities`'s `default:` case never draws either one
+        // (they belong to the story's CZML layer, gated separately by
+        // `showImages`). If a photo/video case is ever added here, this needs
+        // to treat the two as one bucket the way the "Images" checkbox does.
+        if (hiddenCategories.has(item.type)) continue;
         addItemEntities(ds, item, selection?.kind === 'item' && selection.id === item.id);
       }
     }
@@ -1080,6 +1103,27 @@ export function createAuthoringController(
       }
     },
     getMeasureMode: () => measureMode,
+
+    setHiddenCategories(next) {
+      if (destroyed || next === hiddenCategories) return;
+      hiddenCategories = next;
+      // `redrawItems` skips a hidden item's own entity, but `redrawHandles`
+      // draws whatever `selection` still points at with no hiddenCategories
+      // check of its own — the item is deliberately left in `items`, so
+      // `findItem` keeps succeeding. Left alone, that leaves a selected item's
+      // drag handles rendered and pickable over geometry the user can no
+      // longer see, silently rewriting a shape they cannot look at to check.
+      // Dropping the selection here is the same call `setMode` already makes
+      // when arming a drawing tool clears it — content you cannot see is not
+      // a legal drag target.
+      const selectedItem = selection?.kind === 'item' ? findItem(items, selection.id) : null;
+      if (selectedItem && hiddenCategories.has(selectedItem.type)) {
+        setSelection(null, { emit: true });
+      } else {
+        redrawItems();
+      }
+    },
+    getHiddenCategories: () => hiddenCategories,
 
     undo() {
       if (destroyed) return false;

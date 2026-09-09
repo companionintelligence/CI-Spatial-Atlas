@@ -26,8 +26,18 @@ export interface CzmlLike {
  * builds the memory list from `story.scenes`, so an item that no scene
  * references has no pin representing it — dropping its packet here would mean
  * it never appears at all.
+ *
+ * `showImages` gates one further case within that: a passthrough photo or
+ * video does not fall back to the plain point every other passthrough item
+ * gets — `storyToCzml` gives it a real image billboard instead. That used to
+ * reach the globe unconditionally the moment an upload had no scene, with no
+ * way to turn it back off. Off by default; the caller opts back in.
  */
-export function keepForGlobe(packet: CzmlLike, passthroughIds: ReadonlySet<string>): boolean {
+export function keepForGlobe(
+  packet: CzmlLike,
+  passthroughIds: ReadonlySet<string>,
+  opts: { showImages?: boolean } = {},
+): boolean {
   // The document packet carries the clock. Without it the viewer has no
   // timeline to scrub.
   if (packet.id === 'document') return true;
@@ -38,6 +48,9 @@ export function keepForGlobe(packet: CzmlLike, passthroughIds: ReadonlySet<strin
   // Neither has any drawn geometry: the pin layer draws points and its own
   // journey route, never a story's polylines or polygons.
   if (packet.polyline !== undefined || packet.polygon !== undefined) return true;
+
+  // A photo/video's image is opt-in — see the doc comment above.
+  if (packet.billboard !== undefined && !opts.showImages) return false;
 
   // Anything else — points, billboards, labels — is a located memory the pin
   // layer redraws interactively, unless it is one of the sceneless items above.

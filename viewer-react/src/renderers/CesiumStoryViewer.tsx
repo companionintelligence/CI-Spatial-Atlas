@@ -187,7 +187,7 @@ export function CesiumStoryViewer({
   buildings = false,
   onViewer, onPick, onPickPlace, onHover, onInteract,
   layers = [], claimedUrls, timeMs = null, extraItemIds = EMPTY_IDS,
-  sceneMode = '3d', reduceMotion = false,
+  sceneMode = '3d', reduceMotion = false, hideJourneyRoute = false, showImages = false,
 }: {
   story: Story;
   memories: AtlasMemory[];
@@ -240,6 +240,18 @@ export function CesiumStoryViewer({
    *  standing in for them — imported KML/GeoJSON features, and anything drawn
    *  by hand. Their CZML packets are rendered rather than filtered away. */
   extraItemIds?: readonly string[];
+  /** Hide the "journey (time-ordered)" route arc and its traveler dot — the
+   *  glowing line `buildMemoryLayer` always draws between located memories.
+   *  Meant for the moment a note is being placed: the route line often runs
+   *  straight through wherever the next memory-worthy spot is, and unbroken it
+   *  reads as something the note tool just drew rather than a pre-existing
+   *  feature of the globe. */
+  hideJourneyRoute?: boolean;
+  /** A photo or video with no owning scene reaches the globe as a real image
+   *  billboard (see `globeCzml.ts`) rather than the plain point every other
+   *  sceneless passthrough gets. Off by default — an upload used to appear on
+   *  the globe the instant it landed, with no way to turn it back off. */
+  showImages?: boolean;
 }) {
   // Read inside the mount effect without making it a dependency (remounting
   // the viewer to change basemap would tear down the whole scene).
@@ -267,8 +279,8 @@ export function CesiumStoryViewer({
   // See globeCzml.ts for why this filter is narrower than it looks.
   const passthroughIds = useMemo(() => new Set(extraItemIds), [extraItemIds]);
   const globeCzml = useMemo(
-    () => czml.filter((p) => keepForGlobe(p as CzmlLike, passthroughIds)),
-    [czml, passthroughIds],
+    () => czml.filter((p) => keepForGlobe(p as CzmlLike, passthroughIds, { showImages })),
+    [czml, passthroughIds, showImages],
   );
 
   const ref = useRef<CesiumComponentRef<Cesium.Viewer>>(null);
@@ -535,7 +547,7 @@ export function CesiumStoryViewer({
   // ---- memory layer: pins + journey arc + traveler (rebuilt on memory change) ----
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    const ds = buildMemoryLayer(memories, focusedIdRef.current);
+    const ds = buildMemoryLayer(memories, focusedIdRef.current, !hideJourneyRoute);
     memLayerRef.current = ds;
     // The layer is rebuilt from scratch, so the pin the highlight was last
     // applied to no longer exists. Forget it, or the next focus change would
@@ -549,7 +561,7 @@ export function CesiumStoryViewer({
       if (memLayerRef.current === ds) memLayerRef.current = null;
       void added.then((d) => { if (!viewer.isDestroyed()) viewer.dataSources.remove(d ?? ds, true); });
     };
-  }, [viewer, memories]);
+  }, [viewer, memories, hideJourneyRoute]);
 
   // ---- focus highlight: repaint two pins, rather than all of them every frame ----
   useEffect(() => {
@@ -774,8 +786,13 @@ function applyFocusHighlight(
   }
 }
 
-/** Build the interactive memory layer as a CustomDataSource. */
-function buildMemoryLayer(memories: AtlasMemory[], focusedId: string | null): Cesium.CustomDataSource {
+/** Build the interactive memory layer as a CustomDataSource. `showRoute` is
+ *  false while a note is being placed — see `hideJourneyRoute` above. */
+export function buildMemoryLayer(
+  memories: AtlasMemory[],
+  focusedId: string | null,
+  showRoute: boolean,
+): Cesium.CustomDataSource {
   const ds = new Cesium.CustomDataSource('atlas-memories');
   const teal = PIN_TEAL;
   const mint = PIN_MINT;
@@ -833,7 +850,7 @@ function buildMemoryLayer(memories: AtlasMemory[], focusedId: string | null): Ce
   }
 
   const route = [...located].sort((a, b) => a.timeMs - b.timeMs);
-  if (route.length > 1) {
+  if (showRoute && route.length > 1) {
     ds.entities.add({
       polyline: {
         positions: route.map((m) => Cesium.Cartesian3.fromDegrees(m.lon, m.lat, 0)),
