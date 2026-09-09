@@ -1,4 +1,4 @@
-import type { Visibility } from '@companion-atlas/story';
+import type { Scene, Visibility } from '@companion-atlas/story';
 import { mediaThumb, type AtlasMemory } from '../model/atlasModel.js';
 import { SparkIcon, PlayIcon, PlusIcon } from './icons.js';
 
@@ -20,9 +20,20 @@ const VIS_LABEL: { v: Visibility; label: string }[] = [
  * The scrapbook drawer — collected memories become a journey: curate it with
  * the Companion, play it on the globe, and save it back into Companion Memory
  * (which is what shares it with the household).
+ *
+ * A journey's stops are not only collected memories: the deck of scenes
+ * written in the Scenes panel is right there, already telling a story, and
+ * "collect the same places over again by hand to reuse them" was the only
+ * route in. Checking one into the journey here weaves it into the same
+ * chronological line curate/play/save already build, in the position its own
+ * moment puts it — not tacked on after everything else the way every
+ * authored scene is when it is left unchecked.
  */
+const NO_SELECTION: ReadonlySet<string> = new Set();
+
 export function ScrapbookDrawer({
-  open, entries, title, visibility, canSave, canClear, saveState, sceneCount = 0,
+  open, entries, title, visibility, canSave, canClear, saveState,
+  scenes = [], selectedSceneIds = NO_SELECTION, onToggleScene,
   onClose, onTitle, onVisibility, onRemove, onClear, onCurate, onPlay, onSave, onDownload,
 }: {
   open: boolean;
@@ -30,9 +41,13 @@ export function ScrapbookDrawer({
   title: string;
   visibility: Visibility;
   canSave: boolean;
-  /** Authored scenes waiting to be saved alongside (or instead of) the
-   *  collected memories. They travel in the same document. */
-  sceneCount?: number;
+  /** The authored deck, offered as journey stops. Every scene here is savable
+   *  content in its own right whether or not it is checked — checking one
+   *  moves it INTO the journey; the rest still travel alongside it. */
+  scenes?: Scene[];
+  /** Which of `scenes`, by id, are checked in as journey stops. */
+  selectedSceneIds?: ReadonlySet<string>;
+  onToggleScene?: (id: string) => void;
   /** True when the raw draft holds anything — even ids this story can't resolve. */
   canClear: boolean;
   saveState: SaveState;
@@ -51,9 +66,16 @@ export function ScrapbookDrawer({
   // Download must not be dead just because nothing was collected. A user who
   // writes a five-scene story and collects no memories has still written a
   // story, and this drawer holds the only Save button they will look for.
-  // Curate and Play stay gated on entries: both operate on collected memories.
   const empty = entries.length === 0;
-  const nothingToSave = empty && sceneCount === 0;
+  const nothingToSave = empty && scenes.length === 0;
+  // `selectedSceneIds.size` alone would count a checked id whose scene has
+  // since been deleted — a stale selection nothing here can act on. Checking
+  // it against the LIVE `scenes` list is what keeps this in sync with what
+  // `AtlasApp`'s `journeySources` (built the same way, from the same two
+  // inputs) will actually produce, so the button is never enabled for a click
+  // that would visibly do nothing.
+  const checkedInCount = scenes.filter((sc) => selectedSceneIds.has(sc.id)).length;
+  const journeyEmpty = empty && checkedInCount === 0;
   return (
     <aside className="atlas-sbdrawer" aria-label="Scrapbook">
       <header className="sb-head">
@@ -101,11 +123,45 @@ export function ScrapbookDrawer({
         </ul>
       )}
 
+      {scenes.length > 0 && (
+        <div className="sb-scenes">
+          <span className="sb-scenes-label">Scenes — check any to include as journey stops</span>
+          <ul className="sb-scene-list">
+            {scenes.map((sc) => {
+              const on = selectedSceneIds.has(sc.id);
+              return (
+                <li key={sc.id} className="sb-scene-item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => onToggleScene?.(sc.id)}
+                    />
+                    <span className="sb-scene-title">{sc.title || 'Untitled scene'}</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          {/* A scene left unchecked is not discarded — see `draftStory` — but an
+              author who just checked five boxes and sees no change to "Curate"
+              or "Play" below would reasonably conclude the checkbox did
+              nothing. Both operate on the journey now, not on collected
+              memories alone, so this says so exactly where the confusion would
+              start. */}
+          <p className="sb-scenes-note">
+            {selectedSceneIds.size > 0
+              ? `${selectedSceneIds.size} scene${selectedSceneIds.size === 1 ? '' : 's'} will play as part of this journey.`
+              : 'Unchecked scenes still save with the story — just not as part of this journey.'}
+          </p>
+        </div>
+      )}
+
       <div className="sb-actions">
-        <button className="atlas-btn primary" disabled={empty} onClick={onCurate} title="Companion writes the narrative and titles the journey">
+        <button className="atlas-btn primary" disabled={journeyEmpty} onClick={onCurate} title="Companion writes the narrative and titles the journey">
           <SparkIcon />Curate with Companion
         </button>
-        <button className="atlas-btn" disabled={empty} onClick={onPlay}><PlayIcon />Play journey</button>
+        <button className="atlas-btn" disabled={journeyEmpty} onClick={onPlay}><PlayIcon />Play journey</button>
         <button
           className="atlas-btn"
           disabled={nothingToSave || !canSave || saveState.s === 'saving'}
