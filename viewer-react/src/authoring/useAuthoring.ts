@@ -6,7 +6,7 @@ import { createDraft, snapshot, type AuthoringMode, type DraftSnapshot } from '.
 import { describeCamera } from './camera.js';
 import { geocode, reverseGeocode, type GeoPlace } from '../memory/geocode.js';
 import { createHistory, summarize, type HistorySummary } from './history.js';
-import type { Measurement, MeasureUnits } from './measure.js';
+import type { Measurement, MeasureMode, MeasureUnits } from './measure.js';
 import { DEFAULT_STYLE, mergeStyle, type AuthoringStyle } from './style.js';
 import { storyIds, type AuthoringSelection } from './store.js';
 import { hydrateItems, readItems, writeItems, type AuthoringStorage } from './persist.js';
@@ -102,6 +102,8 @@ export interface UseAuthoringOptions {
    * units and then flips. A per-session default is honest about what it is.
    */
   units?: MeasureUnits;
+  /** Free-draw or click-points. Same per-session-only reasoning as `units`. */
+  measureMode?: MeasureMode;
   /** Notified when a measurement is taken, replaced or cleared. It is never an
    *  `Item` and never reaches the story — see `measure.ts`. */
   onMeasure?: (measurement: Measurement | null) => void;
@@ -138,6 +140,8 @@ export interface AuthoringControl {
   clearMeasurement: () => void;
   units: MeasureUnits;
   setUnits: (units: MeasureUnits) => void;
+  measureMode: MeasureMode;
+  setMeasureMode: (mode: MeasureMode) => void;
 
   /** Step the committed items back / forward one authoring action. */
   undo: () => void;
@@ -173,6 +177,7 @@ export function useAuthoring(
   const [ready, setReady] = useState(false);
   const [measurement, setMeasurementState] = useState<Measurement | null>(null);
   const [units, setUnitsState] = useState<MeasureUnits>(options.units ?? 'metric');
+  const [measureMode, setMeasureModeState] = useState<MeasureMode>(options.measureMode ?? 'free');
   const [historyState, setHistoryState] = useState<HistorySummary>(() => summarize(createHistory([])));
   /** The address of the staged pin, and what the lookup is doing. `idle` before
    *  a point exists; `none` when the lookup came back with nothing, which is a
@@ -223,6 +228,8 @@ export function useAuthoring(
    *  destroy the drawing layer to change a label from metres to feet. */
   const unitsRef = useRef(units);
   unitsRef.current = units;
+  const measureModeRef = useRef(measureMode);
+  measureModeRef.current = measureMode;
   const storyRef = useRef(story);
   storyRef.current = story;
 
@@ -235,6 +242,7 @@ export function useAuthoring(
       style,
       enabled: enabledRef.current,
       units: unitsRef.current,
+      measureMode: measureModeRef.current,
       renderItems: options.renderItems,
       reservedIds: () => storyIds(storyRef.current),
       onChange: (next, change) => {
@@ -256,6 +264,16 @@ export function useAuthoring(
               ? controller.getSelection()
               : current,
           );
+        }
+        // A note just placed: the text that named it belongs to that note
+        // now, not to whichever one gets placed next in the same run — see
+        // `commit()`'s own reset of its internal copy, for the same reason.
+        // `setNoteTextState` directly, not the `setNoteText` wrapper below:
+        // that also writes back into the controller, which has already reset
+        // itself, and this closure runs inside the controller-creation effect,
+        // before `setNoteText` exists as a binding.
+        if (change.kind === 'add' && change.id && next.find((item) => item.id === change.id)?.type === 'note') {
+          setNoteTextState('');
         }
       },
       onSelect: (next) => {
@@ -421,6 +439,11 @@ export function useAuthoring(
     setUnitsState(next);
   }, []);
 
+  const setMeasureMode = useCallback((next: MeasureMode) => {
+    controllerRef.current?.setMeasureMode(next);
+    setMeasureModeState(next);
+  }, []);
+
   /** Put the pin at a coordinate without a click — the address box's route in. */
   const placePoint = useCallback((point: { lat: number; lon: number }): boolean =>
     controllerRef.current?.placePoint(point) ?? false, []);
@@ -537,6 +560,8 @@ export function useAuthoring(
     onClearMeasurement: clearMeasurement,
     units,
     onUnits: setUnits,
+    measureMode,
+    onMeasureMode: setMeasureMode,
     canUndo: historyState.canUndo,
     canRedo: historyState.canRedo,
     undoLabel: historyState.undoLabel,
@@ -547,7 +572,7 @@ export function useAuthoring(
   }), [
     mode, setMode, draft, finish, cancel, undoVertex, style, setStyle,
     noteText, setNoteText, selection, deleteSelected, captureCamera, camera, enabled,
-    measurement, clearMeasurement, units, setUnits, historyState, undo, redo,
+    measurement, clearMeasurement, units, setUnits, measureMode, setMeasureMode, historyState, undo, redo,
     placeLabel, placeState, setPlaceLabel, addressResults, addressBusy, searchAddress, useAddress,
   ]);
 
@@ -561,7 +586,7 @@ export function useAuthoring(
     selection, select,
     items, setItems,
     finish, cancel, undoVertex, deleteSelected,
-    measurement, clearMeasurement, units, setUnits,
+    measurement, clearMeasurement, units, setUnits, measureMode, setMeasureMode,
     undo, redo,
     canUndo: historyState.canUndo,
     canRedo: historyState.canRedo,

@@ -34,6 +34,7 @@ import {
 import {
   measurementOf,
   type Measurement,
+  type MeasureMode,
   type MeasureUnits,
 } from './measure.js';
 import {
@@ -51,7 +52,7 @@ import {
   type HistorySummary,
 } from './history.js';
 import { DRAFT_VERTEX_PREFIX, MOVE_HANDLE_ID, VERTEX_PREFIX, parsePickedId } from './ids.js';
-import { pickEntityId, pickGlobePoint } from './pick.js';
+import { pickEntityId, pickEntityPosition, pickGlobePoint } from './pick.js';
 import {
   applyStyle,
   DEFAULT_STYLE,
@@ -137,6 +138,8 @@ export interface AuthoringControllerOptions {
   /** Which units the on-globe measurement label is written in. One setting for
    *  the whole feature — see `measure.ts`. */
   units?: MeasureUnits;
+  /** Free-draw or click-points. See `measure.ts`. */
+  measureMode?: MeasureMode;
   /** Seed style for the first shape. */
   style?: Partial<AuthoringStyle>;
   /** Id prefix for new items — `draw-polygon-1` by default. */
@@ -233,6 +236,12 @@ export interface AuthoringController {
   clearMeasurement(): void;
   setUnits(units: MeasureUnits): void;
   getUnits(): MeasureUnits;
+  /** Free-draw or click-points — see `measure.ts`. Switching mode mid-reading
+   *  cancels whatever is in progress: a path with some vertices placed freely
+   *  and others snapped to pins would have no honest way to show which is
+   *  which, so a mode change starts the reading over rather than mixing them. */
+  setMeasureMode(mode: MeasureMode): void;
+  getMeasureMode(): MeasureMode;
 
   /**
    * Step the committed item list back / forward one action.
@@ -319,6 +328,7 @@ export function createAuthoringController(
    *  tool change and why it dies with the session. */
   let measurement: Measurement | null = null;
   let units: MeasureUnits = options.units ?? 'metric';
+  let measureMode: MeasureMode = options.measureMode ?? 'free';
   /** Undo/redo over the committed items. Starts empty and is re-based by
    *  `setItems` — see `resetHistory`. */
   let history: HistoryState = createHistory([]);
@@ -573,6 +583,13 @@ export function createAuthoringController(
     // The name belonged to the point that has just become an item. Leaving it
     // set would name the next pin after the last pin's street.
     placeLabel = '';
+    // Same reasoning, for the same "placed in runs" tool: leaving text set
+    // would let the first note's words get silently reused as the second
+    // pin's, placed right after it. The React-visible copy of `noteText` is
+    // cleared by `useAuthoring`'s `onChange` handler, which is the one place
+    // that already knows a committed item's type — clearing it here keeps
+    // this controller's OWN state correct even before that round-trips back.
+    if (mode === 'note') noteText = '';
 
     // Asymmetric on purpose. A marker or a note is a single click and people
     // place them in runs, so the tool stays armed and nothing is selected —
@@ -715,6 +732,21 @@ export function createAuthoringController(
     // The second click of a double-click lands here before LEFT_DOUBLE_CLICK
     // does. Drop it — see DOUBLE_CLICK_PIXELS.
     if (withinDoubleClick(lastVertexWindow, e.position)) return;
+
+    // "Click points": the vertex comes from whatever pin is under the cursor,
+    // not from the terrain beneath it — see `measure.ts`. A click that misses
+    // every pin does nothing rather than quietly falling back to a terrain
+    // point, which would make the mode toggle meaningless: the very next
+    // reading could mix an exact pin position with an eyeballed one with no
+    // way to tell which was which from the number on screen.
+    if (isMeasureMode(draft.mode) && measureMode === 'points') {
+      const pinned = pickEntityPosition(viewer, e.position);
+      if (!pinned) return;
+      lastVertexWindow = Cesium.Cartesian2.clone(e.position);
+      draft = addVertex(draft, pinned);
+      syncDraft();
+      return;
+    }
 
     const hit = pickGlobePoint(viewer, e.position);
     // A click that missed the globe entirely (the sky occupies half the
@@ -1034,6 +1066,20 @@ export function createAuthoringController(
       syncMeasure();
     },
     getUnits: () => units,
+
+    setMeasureMode(next) {
+      if (destroyed || next === measureMode) return;
+      measureMode = next;
+      // A path with some vertices placed freely and others snapped to a pin's
+      // exact position would have no honest way to show which is which on
+      // screen — start the reading over rather than let the two blend.
+      if (isMeasureMode(draft.mode) && draft.vertices.length > 0) {
+        draft = cancelDraft(draft);
+        lastVertexWindow = null;
+        syncDraft();
+      }
+    },
+    getMeasureMode: () => measureMode,
 
     undo() {
       if (destroyed) return false;

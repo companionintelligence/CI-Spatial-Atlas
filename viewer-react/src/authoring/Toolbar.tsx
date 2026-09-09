@@ -5,10 +5,13 @@ import {
   describeMeasurement,
   formatArea,
   formatLength,
+  MEASURE_MODES,
+  MEASURE_MODE_LABEL,
   MEASURE_UNITS,
   UNIT_LABEL,
   UNIT_SHORT,
   type Measurement,
+  type MeasureMode,
   type MeasureUnits,
 } from './measure.js';
 import {
@@ -93,6 +96,9 @@ export interface AuthoringToolbarProps {
   /** The one units setting for the whole feature. */
   units?: MeasureUnits;
   onUnits?: (units: MeasureUnits) => void;
+  /** Free-draw or click-points — see `measure.ts`. */
+  measureMode?: MeasureMode;
+  onMeasureMode?: (mode: MeasureMode) => void;
 
   /** Undo/redo over committed authoring actions — NOT `onUndoVertex`, which
    *  works on the shape in progress. Both are offered, because they are two
@@ -200,6 +206,7 @@ export function AuthoringToolbar({
   noteText, onNoteText,
   selection, onDelete,
   onCaptureCamera, capturedCamera,
+  measureMode = 'free', onMeasureMode,
   measurement = null, onClearMeasurement,
   units = 'metric', onUnits,
   canUndo = false, canRedo = false, undoLabel = null, redoLabel = null,
@@ -222,7 +229,11 @@ export function AuthoringToolbar({
   const showFill = styleTarget === 'polygon';
   const showWidth = styleTarget === 'line' || styleTarget === 'polygon';
   const showIcons = styleTarget === 'marker';
-  const showNoteText = mode === 'note' || selectedItem?.type === 'note';
+  // Only the "editing an already-placed note" case — see the inline field
+  // rendered ahead of "Click the globe to start" below for the "about to
+  // place one" case, which needs the text typed BEFORE the click that used to
+  // be the only visible instruction on screen.
+  const showNoteText = selectedItem?.type === 'note';
   const measuring = mode === 'measure';
   // The draw status block belongs to the shape tools. Measuring gets its own,
   // because its buttons mean different things: there is nothing to "Finish"
@@ -310,10 +321,37 @@ export function AuthoringToolbar({
 
       {measuring || measurement ? (
         <div className="draw-status draw-measure">
+          {/* Which a click means, decided before anything that depends on it —
+              same reasoning as putting the address box above a marker's
+              coordinates rather than below. "Click points" changes what a
+              click on the globe DOES, so the control for it has to be seen
+              before the first click, not discovered after one goes the wrong
+              way. */}
+          {measuring ? (
+            <div className="draw-field">
+              <span className="draw-label" id={`${ids}-measure-mode`}>How to pick points</span>
+              <div className="draw-measure-mode" role="group" aria-labelledby={`${ids}-measure-mode`}>
+                {MEASURE_MODES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`draw-measure-mode-btn${measureMode === m ? ' active' : ''}`}
+                    aria-pressed={measureMode === m}
+                    onClick={() => onMeasureMode?.(m)}
+                  >
+                    {MEASURE_MODE_LABEL[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {measuring ? (
             <p className="draw-count" aria-live="polite">
               {draft.vertexCount === 0
-                ? 'Click two or more points to measure.'
+                ? (measureMode === 'points'
+                    ? 'Click two or more pins to measure between them.'
+                    : 'Click two or more points to measure.')
                 : `${draft.vertexCount} point${draft.vertexCount === 1 ? '' : 's'}${draftMeasure(draft, units)}`}
             </p>
           ) : null}
@@ -414,9 +452,34 @@ export function AuthoringToolbar({
               onUse={onUseAddress}
             />
           )}
+          {/* A note is nothing but its text — placing one with none refuses
+              ("A note needs some text."), which used to be the FIRST thing a
+              person discovered, after already clicking the globe once on the
+              strength of "Click the globe to start" being the only visible
+              instruction. The field the click actually depends on now renders
+              before that instruction, the same fix already made for a
+              marker's address box: type first, then click knowing the click
+              will work. */}
+          {mode === 'note' && (
+            <div className="draw-field">
+              <label htmlFor={`${ids}-note-first`}>Note text</label>
+              <input
+                id={`${ids}-note-first`}
+                className="draw-input"
+                type="text"
+                value={noteText}
+                placeholder="What happened here?"
+                onChange={(e) => onNoteText(e.target.value)}
+              />
+            </div>
+          )}
           <p className="draw-count" aria-live="polite">
             {draft.vertexCount === 0
-              ? `Click the globe to start${mode === 'polygon' ? ' the outline' : ''}.`
+              ? (mode === 'note'
+                  ? (noteText.trim()
+                      ? 'Click the globe to place the note.'
+                      : 'Type the note above, then click the globe to place it.')
+                  : `Click the globe to start${mode === 'polygon' ? ' the outline' : ''}.`)
               : `${draft.vertexCount} point${draft.vertexCount === 1 ? '' : 's'}${draftMeasure(draft, units)}`}
           </p>
 
