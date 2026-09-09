@@ -36,7 +36,7 @@ import { useAuthoring } from './authoring/useAuthoring.js';
 import { poseFromCamera } from './authoring/camera.js';
 import { useScenes } from './scenes/index.js';
 import { SceneList } from './scenes/SceneList.js';
-import { SceneEditor } from './scenes/SceneEditor.js';
+import { SceneEditor, CAPTURE_UNSETTLED } from './scenes/SceneEditor.js';
 import { AuthoringToolbar, mergeAuthoredItems } from './authoring/index.js';
 import { importFiles } from './interop/importFile.js';
 import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
@@ -197,9 +197,37 @@ export function AtlasApp() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<AtlasMemory | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [sbOpen, setSbOpen] = useState(false);
-  const [peopleOpen, setPeopleOpen] = useState(false);
-  const [interopOpen, setInteropOpen] = useState(false);
+  /**
+   * Which of the four right-anchored drawers is open, or none.
+   *
+   * One state rather than four independent booleans, because all four render
+   * at the identical spot (`top:14px; right:14px`, same z-index) — that is
+   * what "the left nav buttons do not work cleanly" was: People and Collections
+   * closed each other by hand-written pairs of setters, but Scenes and Import &
+   * export did not, so opening Scenes over an open Import panel left the import
+   * panel state-open and invisible underneath it, and closing Scenes again
+   * brought it back looking like it had appeared from nowhere. A single value
+   * makes "more than one open" impossible to represent, so that class of bug
+   * cannot come back by someone forgetting to add a `setXOpen(false)` at a new
+   * call site.
+   */
+  const [openDrawer, setOpenDrawer] = useState<'scrapbook' | 'people' | 'scenes' | 'interop' | null>(null);
+  const sbOpen = openDrawer === 'scrapbook';
+  const peopleOpen = openDrawer === 'people';
+  const scenesOpen = openDrawer === 'scenes';
+  const interopOpen = openDrawer === 'interop';
+  /** Toggle: clicking the button for the open drawer closes it; clicking any
+   *  other one switches to it. */
+  const toggleDrawer = useCallback(
+    (id: 'scrapbook' | 'people' | 'scenes' | 'interop') => setOpenDrawer((cur) => (cur === id ? null : id)),
+    [],
+  );
+  /** Close one specific drawer — a no-op if a different one is open (or none),
+   *  so an X button never reopens something else by accident. */
+  const closeDrawer = useCallback(
+    (id: 'scrapbook' | 'people' | 'scenes' | 'interop') => setOpenDrawer((cur) => (cur === id ? null : cur)),
+    [],
+  );
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCamera, setShareCamera] = useState<Camera | null>(null);
   const [presenting, setPresenting] = useState(false);
@@ -574,8 +602,9 @@ export function AtlasApp() {
     flownToRef.current = null;
     setFocusedId(null);
     setJourney(s);
-    setSbOpen(false);
-    setPeopleOpen(false);
+    // Only one drawer can be open at once now, so "close whichever of these
+    // sent us here" is just "close whatever is open".
+    setOpenDrawer(null);
     play();
   }, [play]);
 
@@ -746,11 +775,11 @@ export function AtlasApp() {
     // top-right corner and the sheet is the wider of the pair — so it hid that
     // panel whole, including the button just pressed, while every control
     // underneath stayed in the tab order and reachable by keyboard. Same
-    // one-drawer-at-a-time rule the rail already follows for People and
-    // Collections.
-    setInteropOpen(false);
+    // one-drawer-at-a-time rule the rail follows for all four right-anchored
+    // drawers — see `openDrawer`.
+    closeDrawer('interop');
     setShareOpen(true);
-  }, [draw]);
+  }, [draw, closeDrawer]);
   const closeShare = useCallback(() => setShareOpen(false), []);
 
   // A "Saved" banner must not outlive the thing it described: editing the draft
@@ -766,9 +795,9 @@ export function AtlasApp() {
   // don't re-subscribe on every ~240ms clock-driven re-render.
   const closeLightbox = useCallback(() => setLightbox(null), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
-  const closeScrapbook = useCallback(() => setSbOpen(false), []);
-  const closePeople = useCallback(() => setPeopleOpen(false), []);
-  const closeInterop = useCallback(() => setInteropOpen(false), []);
+  const closeScrapbook = useCallback(() => closeDrawer('scrapbook'), [closeDrawer]);
+  const closePeople = useCallback(() => closeDrawer('people'), [closeDrawer]);
+  const closeInterop = useCallback(() => closeDrawer('interop'), [closeDrawer]);
 
   // The way back out of an empty or unwanted import, without a page reload.
   const clearImport = useCallback(() => {
@@ -794,7 +823,7 @@ export function AtlasApp() {
     async (files: File[]) => {
       const result = await importFiles(files);
       imported.add(result.files);
-      setInteropOpen(true);
+      setOpenDrawer('interop');
       if (result.items.length) frameAll();
     },
     [imported, frameAll],
@@ -805,8 +834,12 @@ export function AtlasApp() {
   const importedIds = useMemo(() => imported.items.map((i) => i.id), [imported.items]);
 
 
-  const [scenesOpen, setScenesOpen] = useState(false);
+  // `scenesOpen` lives in `openDrawer`, declared with its three siblings above.
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  /** Feedback for the draw toolbar's own capture button — the created scene's
+   *  title, or why nothing was created. Replaces the raw camera-pose readout
+   *  that button used to print, which described a value nothing else read. */
+  const [sceneCaptureNote, setSceneCaptureNote] = useState<string | null>(null);
   const selectedScene = sceneControl.scenes.find((sc) => sc.id === selectedSceneId) ?? null;
   const selectedSceneIndex = sceneControl.scenes.findIndex((sc) => sc.id === selectedSceneId);
 
@@ -821,7 +854,33 @@ export function AtlasApp() {
   const addSceneFromView = useCallback(() => {
     const scene = sceneControl.createFromCamera(draw.captureCamera());
     if (scene) setSelectedSceneId(scene.id);
+    return scene;
   }, [sceneControl.createFromCamera, draw.captureCamera]);
+
+  /**
+   * The draw toolbar's OWN "Capture this view" button — a second entry point
+   * to the same act, for someone who is drawing rather than sitting in the
+   * Scenes panel already.
+   *
+   * This used to call `useAuthoring`'s internal `captureCamera`, which stored
+   * the pose in local state and printed it back as a read-only line nobody
+   * consumed — `createFromCamera`'s own doc comment already named the intended
+   * destination ("'Capture this view' → a new scene at the end of the deck")
+   * for the *other* caller; this button just never reached it. Wired to the
+   * same `addSceneFromView` the Scenes panel uses, so a captured view is a
+   * scene whichever panel it was captured from, and the Scenes drawer opens
+   * (rather than merely toggling) so the result is somewhere to look, not a
+   * change that happened off-screen.
+   */
+  const captureSceneFromDraw = useCallback(() => {
+    const scene = addSceneFromView();
+    if (scene) {
+      setOpenDrawer('scenes');
+      setSceneCaptureNote(`"${scene.title || 'Untitled scene'}" added to the deck.`);
+    } else {
+      setSceneCaptureNote(CAPTURE_UNSETTLED);
+    }
+  }, [addSceneFromView]);
 
   const removeScene = useCallback((id: string) => {
     sceneControl.remove(id);
@@ -945,16 +1004,19 @@ export function AtlasApp() {
         onFrameAll={frameAll}
         onDraw={() => setDrawing((d) => !d)}
         drawing={drawing}
-        onPeople={() => { setPeopleOpen((o) => !o); setSbOpen(false); }}
-        onCollections={() => { setSbOpen((o) => !o); setPeopleOpen(false); }}
+        onPeople={() => toggleDrawer('people')}
+        peopleOpen={peopleOpen}
+        onCollections={() => toggleDrawer('scrapbook')}
+        collectionsOpen={sbOpen}
         // Count what the drawer can actually show, so the badge can never claim
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
         onPresent={() => setPresenting(true)}
-        onScenes={() => setScenesOpen((v) => !v)}
+        onScenes={() => toggleDrawer('scenes')}
         scenesOpen={scenesOpen}
         sceneCount={sceneControl.count}
-        onInterop={() => setInteropOpen((o) => !o)}
+        onInterop={() => toggleDrawer('interop')}
+        interopOpen={interopOpen}
         // `memoryToStory` returns `scenes: []`, so gating on scenes hid Present
         // from every real story and left it reachable only from the bundled
         // demo. `buildDeck` now projects memories when a story has no authored
@@ -1107,7 +1169,15 @@ export function AtlasApp() {
       />
       )}
       <Lightbox memory={lightbox} onClose={closeLightbox} />
-      {chrome.drawing && <AuthoringToolbar {...draw.toolbarProps} />}
+      {chrome.drawing && (
+        <AuthoringToolbar
+          {...draw.toolbarProps}
+          // Overrides the pass-through pair from `useAuthoring`: see
+          // `captureSceneFromDraw`.
+          onCaptureCamera={captureSceneFromDraw}
+          capturedCamera={sceneCaptureNote}
+        />
+      )}
       {chrome.sceneAuthoring && scenesOpen && (
         <aside className="atlas-scenes" aria-label="Scene authoring">
           <SceneList
@@ -1123,7 +1193,7 @@ export function AtlasApp() {
             onMove={sceneControl.move}
             onMoveTo={sceneControl.moveTo}
             problems={sceneControl.problems}
-            onClose={() => setScenesOpen(false)}
+            onClose={() => closeDrawer('scenes')}
           />
           <SceneEditor
             scene={selectedScene}
