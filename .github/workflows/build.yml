@@ -24,7 +24,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}
+  # push (branches-ignore: [main]) and pull_request both fire for the same
+  # commit once a PR is open — github.ref differs between the two events
+  # (refs/heads/<branch> vs refs/pull/<n>/merge), so keying on it let both
+  # runs proceed independently and build the same commit twice. Key on the
+  # commit SHA instead (present under both event names) so the later-starting
+  # run's cancel-in-progress actually cancels the earlier one.
+  group: build-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
