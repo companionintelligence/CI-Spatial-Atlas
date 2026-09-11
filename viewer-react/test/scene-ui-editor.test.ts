@@ -157,7 +157,7 @@ describe('the body field', () => {
   });
 
   it('is a plain textarea whose characters are what the slide renders', () => {
-    // No rich-text surface: `Markdown.tsx` renders a small subset with no
+    // No rich-text surface: `MarkdownRenderer.tsx` renders a small subset with no
     // `dangerouslySetInnerHTML` anywhere, and a WYSIWYG layer would either
     // have to emit exactly that subset or start lying about the slide.
     const html = render({ scene: { id: 'a', narrative: '# Heading\n\n- one\n- two' } });

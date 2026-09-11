@@ -25,7 +25,7 @@
  * stepper chrome; nothing here knows the deck exists.
  */
 import type { ReactNode } from 'react';
-import { Markdown } from './Markdown.js';
+import { Markdown } from './MarkdownRenderer.js';
 import type { DeckSlide } from './sceneDeck.js';
 
 export function SceneLayout({ slide, position, className, children }: {

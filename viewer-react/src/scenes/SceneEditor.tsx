@@ -27,7 +27,7 @@
  * ## What is typed is what gets rendered
  *
  * The body is a plain `<textarea>` and not a rich-text surface, on purpose. The
- * presenter renders `scene.narrative` through `ui/markdown.ts` → `Markdown.tsx`,
+ * presenter renders `scene.narrative` through `ui/markdown.ts` → `MarkdownRenderer.tsx`,
  * which is a deliberately small subset (headings, emphasis, code, links,
  * images, lists) parsed to React elements with no `dangerouslySetInnerHTML`
  * anywhere. A WYSIWYG surface over that would have to emit exactly that subset
