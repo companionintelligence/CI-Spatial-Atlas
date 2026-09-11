@@ -349,7 +349,12 @@ export function applyOrbitGrab(
 export function rotateAbout(t: WorldTransform, pivot: Vector3, axis: Vector3, angle: number): WorldTransform {
   _q.setFromAxisAngle(axis, angle);
   t.quaternion.premultiply(_q).normalize();
-  t.position.sub(pivot).applyQuaternion(_q).add(pivot);
+  // `pivot` is allowed to be `t.position` (the flat-window trackball uses the
+  // globe's own centre). Copy it before mutating `t.position`; otherwise
+  // `sub(pivot)` also zeros the pivot and the final `add(pivot)` cannot restore
+  // the centre, sending the globe to the origin after the first drag.
+  _v2.copy(pivot);
+  t.position.sub(_v2).applyQuaternion(_q).add(_v2);
   return t;
 }
 

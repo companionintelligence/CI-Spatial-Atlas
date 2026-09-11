@@ -5,7 +5,7 @@
 > **XR Time Machine** product vision (ci.computer), **CI-Common** (`@companionintelligence/ui`
 > + tokens), **CI-Server MemoryPage** (Map/Timeline/Gallery/Graph), the two XR viewers
 > (**CI-Spatial-Companion-WebXR**, **CI-WebXR-Time-Machine**), and the original **lifescope-xr**.
-> Mockup: `docs/redesign/atlas-redesign.html` (interactive). Last updated 2026-07-15.
+> Mockup: `docs/redesign/atlas-redesign.html` (interactive). Last updated 2026-08-30.
 
 ## 1. The idea in one line
 
@@ -93,7 +93,7 @@ Type: **Manrope** (CI canon since tokens v0.3; the shell loads it self-hosted vi
 
 ## 6. Build plan (phased, targets `viewer-react` — the canonical Resium viewer)
 
-Status as of 2026-07-15 (Companion-Atlas PR #13): A/C delivered, B/D partial.
+Status as of 2026-08-30: A/C delivered, B/D partial.
 
 - **Phase A — CI shell. ✅ delivered.** Icon rail + top bar + view switcher + ⌘K command palette.
   *Correction:* earlier editions of this line said the tokens were **vendored** into the repo.
@@ -106,10 +106,12 @@ Status as of 2026-07-15 (Companion-Atlas PR #13): A/C delivered, B/D partial.
   make the token import resolvable without a sibling checkout.
 - **Phase B — Memory data. ✅ delivered.** The viewer connects to a live CI-Server: `memoryToStory`
   maps the located `search()` result (`includeTypes:["event"]`, `hasLocation:true`) into a Story, and
-  `fetchMemoryStory` does the transport with a Portal OIDC bearer / session cookie. Point the viewer
-  with `?memory=<ci-server-url>` (or `VITE_MEMORY_URL`) and the globe renders real memories — title,
-  narrative, place, time, and presigned media all flow through. *Remaining:* pagination past the
-  first page, bbox/time-window server-side filtering, and write-back (`createEvent`).
+  `fetchMemoryStory` does the transport with a Portal OIDC bearer, session cookie, or scoped API key.
+  Point the viewer with `?memory=<ci-server-url>` plus `?apiKey=<key>` (or `VITE_MEMORY_URL` /
+  `VITE_MEMORY_API_KEY`) and the globe renders real memories — title, narrative, place, time, and
+  presigned media all flow through. Pagination across CI-Server's 100-row limit and idempotent
+  write-back (`createEvent`) are implemented; bbox/time-window server-side filtering remains future
+  work.
 - **Phase C — Time Machine. ✅ delivered.** Scrubber (density histogram + keyboard-operable playhead)
   driving the Cesium `Clock` via `storyToCzml`; sky-follows-the-moment lighting; journey arc,
   clock-driven traveler, camera fly-through; globe pin click/hover picking.

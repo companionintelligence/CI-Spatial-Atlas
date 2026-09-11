@@ -5,6 +5,8 @@ import { fetchMemoryStory } from '../src/memory/client.js';
 const PORT = 4611;
 const N = 250; // deliberately more than one server page
 let mode: 'ok' | 'gqlerror' | 'unauth' = 'ok';
+let lastHeaders: http.IncomingHttpHeaders = {};
+let lastQuery = '';
 
 const mk = (i: number) => ({
   cursor: `c${i}`,
@@ -20,8 +22,11 @@ const mk = (i: number) => ({
 const ALL = Array.from({ length: N }, (_, i) => mk(i));
 
 const server = http.createServer(async (req, res) => {
+  lastHeaders = req.headers;
   let b = ''; for await (const c of req) b += c;
-  const { variables = {} } = JSON.parse(b || '{}');
+  const body = JSON.parse(b || '{}') as { query?: string; variables?: { first?: number; after?: string } };
+  lastQuery = body.query ?? '';
+  const { variables = {} } = body;
   if (mode === 'gqlerror') { // Apollo/Nest return 400 WITH a valid errors body
     res.writeHead(400, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ errors: [{ message: 'Unknown argument "bbox" on field "search".' }] }));
@@ -53,6 +58,15 @@ describe('Companion Memory client', () => {
     const story = await fetchMemoryStory(src);
     // Asking for 200 used to be clamped to 100 with no paging: memory 101+ vanished.
     expect(story.media).toHaveLength(N);
+    expect(story.media?.[0]?.id).toBe('mem:e249');
+    expect(story.media?.at(-1)?.id).toBe('mem:e0');
+    expect(lastQuery).toContain('sortOrder: "desc"');
+  });
+
+  it('sends CI-Server API keys through the dedicated header', async () => {
+    mode = 'ok';
+    await fetchMemoryStory({ ...src, apiKey: 'test-api-key' });
+    expect(lastHeaders['x-api-key']).toBe('test-api-key');
   });
 
   it('surfaces a GraphQL error returned with HTTP 400', async () => {

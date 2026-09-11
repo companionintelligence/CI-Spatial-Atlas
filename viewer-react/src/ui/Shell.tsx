@@ -4,7 +4,6 @@ import {
   SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon,
 } from './icons.js';
 
-
 /** Left icon rail. Globe navigates home; Draw arms the drawing tools; People
  *  opens the participants facet; Collections opens the scrapbook drawer; Scenes
  *  opens the deck editor; Present steps through the story's authored scenes;

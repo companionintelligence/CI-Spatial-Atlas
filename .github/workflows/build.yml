@@ -38,47 +38,44 @@ jobs:
     name: Static viewer build
     runs-on: ubuntu-latest
     steps:
+      # The vanilla-TS viewer this job was written for (a root-level app with
+      # no workspace deps of its own) was removed — viewer-react is now the
+      # only viewer, and `npm run build` at the root means story-schema +
+      # viewer-react's real `tsc --noEmit && vite build`. That needs the full
+      # workspace tree installed, including the @companionintelligence/tokens
+      # submodule viewer-react's theme imports.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      # `npm ci` is not used: package-lock.json resolves
-      # @companionintelligence/tokens to a "link" at ../ci-common/packages/tokens
-      # — a path outside this repository — so a clean checkout gets a broken
-      # symlink. That dependency belongs to the viewer-react workspace only; the
-      # root viewer built here does not import it.
-      - name: Install root dependencies
-        run: npm install --no-audit --no-fund --workspaces=false --include-workspace-root
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Typecheck and build viewer
-        run: npm run build
-
-      - name: Stage Cesium runtime assets
-        run: npm run cesium:assets
-
-      # public/ is copied into dist/ by Vite, so cesium:assets must precede a
-      # final build for /cesium/* to exist in the bundle.
-      - name: Rebuild with Cesium assets staged
         run: npm run build
 
       - name: Verify bundle contents
         run: |
           set -euo pipefail
-          test -f dist/index.html
+          test -f viewer-react/dist/index.html
+          # vite-plugin-cesium stages the runtime assets into dist/cesium/ as
+          # part of the one `vite build` above — no separate copy step needed.
           # Cesium's Workers/* are content-hashed chunks, so assert on the
           # stable asset paths instead. Without these the default renderer
           # cannot resolve CESIUM_BASE_URL at runtime.
-          test -f dist/cesium/Assets/approximateTerrainHeights.json
-          test -d dist/cesium/Widgets/CesiumWidget
-          test -n "$(ls -A dist/cesium/Workers)"
-          echo "dist size: $(du -sh dist | cut -f1), files: $(find dist -type f | wc -l)"
+          test -f viewer-react/dist/cesium/Assets/approximateTerrainHeights.json
+          test -d viewer-react/dist/cesium/Widgets/CesiumWidget
+          test -n "$(ls -A viewer-react/dist/cesium/Workers)"
+          echo "dist size: $(du -sh viewer-react/dist | cut -f1), files: $(find viewer-react/dist -type f | wc -l)"
 
       - uses: actions/upload-artifact@v4
         with:
           name: atlas-viewer-dist
-          path: dist
+          path: viewer-react/dist
           retention-days: 7
 
   schema:
@@ -162,10 +159,19 @@ jobs:
     name: Viewer image (build only, no push)
     runs-on: ubuntu-latest
     steps:
+      # The Dockerfile this job built moved to viewer-react/Dockerfile when
+      # the vanilla-TS viewer (and its root-level Dockerfile) was removed —
+      # viewer-react is now the only viewer, and its Dockerfile documents that
+      # the build context must stay the repo root (it COPYs
+      # packages/story-schema and third_party/ci-common/packages/tokens,
+      # resolved via the npm workspace). The submodule checkout is required
+      # for that COPY to have real content.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Build image
-        run: docker build -t companion-atlas-viewer:ci .
+        run: docker build -f viewer-react/Dockerfile -t companion-atlas-viewer:ci .
 
       # Proves the container actually serves, on the port hub/config.json and
       # hub/docker-compose.json advertise to CI-Hub (8080).

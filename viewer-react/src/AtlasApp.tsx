@@ -52,6 +52,7 @@ import { importFiles } from './interop/importFile.js';
 import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
 import { PeoplePanel, groupByPerson, type PersonGroup } from './ui/PeoplePanel.js';
 import { saveStoryToMemory } from './memory/client.js';
+import { StoryLoadError } from './ui/StoryLoadError.js';
 
 /** The last memory whose time is at or before `ms` (the segment being played). */
 function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
@@ -67,15 +68,17 @@ function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
 const PLAYBACK_SECONDS = 45;
 
 /**
- * The current URL with credentials stripped. `?token=` is a bearer token and
- * `?memory=` is a private server address — neither belongs on the clipboard or
- * persisted into a household-visible event's `metadata.shareUrl`.
+ * The current URL with credentials stripped. `?token=` is a bearer token,
+ * `?apiKey=` is a server credential, and `?memory=` is a private server address
+ * — none belongs on the clipboard or persisted into a household-visible
+ * event's `metadata.shareUrl`.
  */
 function safeShareUrl(): string {
   try {
     const u = new URL(window.location.href);
     u.searchParams.delete('token');
     u.searchParams.delete('memory');
+    u.searchParams.delete('apiKey');
     return u.toString();
   } catch {
     return window.location.origin;
@@ -1154,7 +1157,7 @@ export function AtlasApp() {
 
   if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
   if (error || !model || !story) {
-    return <div className="atlas-boot"><div className="msg"><strong>Couldn’t load a story.</strong><span>{error ?? 'Append ?story=<url> to view one.'}</span></div></div>;
+    return <StoryLoadError error={error} memoryUrl={memory?.url} />;
   }
   // A memory query that matches nothing returns a perfectly valid *empty* story,
   // so the error branch never fires — without this the user just gets a blank

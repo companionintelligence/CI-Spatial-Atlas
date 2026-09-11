@@ -26,9 +26,8 @@ WORKDIR /app/server
 # the build context — the rest of the npm/Deno workspace (viewer-react, the
 # root viewer) is never copied in. That matters: Deno's npm-workspace
 # resolution re-validates every workspace member's package.json on each
-# `deno task` call, and viewer-react's @companionintelligence/tokens
-# dependency lives on a private GitHub Packages registry (see
-# viewer-react/.npmrc) this image has no reason to need credentials for.
+# `deno task` call. The browser viewer is deliberately not copied into this
+# image, keeping its WebGL dependencies out of the server build.
 COPY server/package.json server/package-lock.json server/deno.json ./
 RUN deno install
 COPY server/ ./

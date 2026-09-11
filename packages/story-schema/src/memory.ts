@@ -18,9 +18,11 @@
 import { STORY_SCHEMA_ID, type GeoPoint, type Item, type MediaItem, type Story } from './schema.js';
 import { loadStory, storyEntities, timelineBounds } from './normalize.js';
 
-/** Located media memories, chronological, paginated. `query:""` takes CI-Server's
- *  "timed" path; `includeTypes:["event"]` + `hasLocation:true` restricts to
- *  located events (the MapView surface). */
+/** Located media memories, paginated newest-first for CI-Server's stable
+ *  keyset cursor. `query:""` takes the server's "timed" path;
+ *  `includeTypes:["event"]` + `hasLocation:true` restricts to located events
+ *  (the MapView surface). Full-story callers reverse the collected pages after
+ *  paging so the canonical Story remains chronological. */
 export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
   query AtlasLocatedMedia($first: Int = 100, $after: String, $startTime: String, $endTime: String, $bbox: [Float!], $eventTypes: [String!]) {
     search(
@@ -43,7 +45,10 @@ export const LOCATED_MEDIA_QUERY = /* GraphQL */ `
         endTime: $endTime
         bbox: $bbox
         sortBy: "time"
-        sortOrder: "asc"
+        # CI-Server's timed cursor is stable in its native newest-first order;
+        # ascending requests can report hasNextPage=false before the full
+        # total. Consumers that need chronology reverse after collecting pages.
+        sortOrder: "desc"
         first: $first
         after: $after
       }

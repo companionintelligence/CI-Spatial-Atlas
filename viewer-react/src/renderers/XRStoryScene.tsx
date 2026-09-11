@@ -27,22 +27,16 @@ import { initialTileSource, type TileSource } from './xr/ImageryGlobe.js';
  *    readable cards for the ones being looked at.
  *
  * URL switches: `?renderer=xr` forces this renderer, `?tiles=esri|google`
- * chooses the imagery, `?emulate=1` runs the WebXR device emulator so a session
- * can be entered (and driven) without a headset.
+ * chooses the imagery, and `?xremu=quest3` runs the WebXR device emulator so a
+ * session can be entered (and driven) without a headset. `?emulate=1` remains
+ * a legacy alias for the default Quest 3 profile.
  */
-const params = typeof window === 'undefined' ? new URLSearchParams() : new URLSearchParams(window.location.search);
 
 export const xrStore = createXRStore({
-  // `iwer` normally only stands in for a headset on `localhost`; `?emulate=1`
-  // turns it on anywhere, which is the nearest thing to a real XR session
-  // (poses, grips, stereo) available from a dev server on 127.0.0.1 or a LAN
-  // address. Two things to know before relying on it: iwer refuses to replace a
-  // native `navigator.xr`, so a browser that ships WebXR without hardware needs
-  // that property hidden first; and as of @iwer/devui 2.x its debug overlay
-  // bundles its own older three and throws `material.onBuild is not a function`
-  // against three 0.183, which stops the frame loop. It gets you into a
-  // session, not through one.
-  emulate: params.get('emulate') === '1' ? { inject: true, syntheticEnvironment: false } : undefined,
+  // Emulation is installed once, before the renderer is dynamically imported,
+  // by `maybeInstallXREmulator()` in main.tsx. Passing the old store-level
+  // `emulate` option as well created a second iwer runtime, which produced
+  // duplicate-three warnings and an extra, misleading "Enter XR" control.
   // Foveation trades edge sharpness for fill rate. The globe's detail is where
   // the viewer is looking, so this is nearly free.
   foveation: 0.4,

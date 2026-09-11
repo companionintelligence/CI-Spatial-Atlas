@@ -30,7 +30,7 @@ describe('queryLocatedMedia', () => {
         },
       },
     });
-    const cfg: CiMemoryClientConfig = { endpoint, token: 'portal-token', fetchImpl };
+    const cfg: CiMemoryClientConfig = { endpoint, token: 'portal-token', apiKey: 'memory-api-key', fetchImpl };
     const items = await queryLocatedMedia(cfg, { first: 50 });
 
     expect(items).toHaveLength(1);
@@ -43,8 +43,10 @@ describe('queryLocatedMedia', () => {
     expect(url).toBe(endpoint);
     expect((init as RequestInit).method).toBe('POST');
     expect((init as { headers: Record<string, string> }).headers.authorization).toBe('Bearer portal-token');
+    expect((init as { headers: Record<string, string> }).headers['x-api-key']).toBe('memory-api-key');
     const sent = JSON.parse((init as { body: string }).body);
     expect(sent.query).toContain('includeTypes: ["event"]');
+    expect(sent.query).toContain('sortOrder: "desc"');
     expect(sent.variables.first).toBe(50);
   });
 

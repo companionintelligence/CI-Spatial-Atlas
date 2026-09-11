@@ -10,6 +10,7 @@
  * which means it also works in automation and in any browser.
  *
  * Opt-in via `?xremu` (optionally `?xremu=quest2|quest3|questPro|generic`).
+ * The older `?emulate=1` form remains a compatibility alias.
  * Never on by default and never in a production build: it replaces
  * `navigator.xr` wholesale, and shipping that would hide a real headset from
  * real users. `installRuntime` already declines when a native `navigator.xr` is
@@ -39,17 +40,18 @@ declare global {
 }
 
 /**
- * Install the emulated device if `?xremu` is present. Returns true when a
- * runtime was installed. Must be awaited before the app mounts — the R3F XR
- * store reads `navigator.xr` during setup, and installing afterwards leaves it
- * believing the browser has no XR support.
+ * Install the emulated device if `?xremu` or the legacy `?emulate` alias is
+ * present. Returns true when a runtime was installed. Must be awaited before
+ * the app mounts — the R3F XR store reads `navigator.xr` during setup, and
+ * installing afterwards leaves it believing the browser has no XR support.
  */
 export async function maybeInstallXREmulator(): Promise<boolean> {
   const env = (import.meta as unknown as { env?: { DEV?: boolean } }).env;
   if (!env?.DEV) return false;
 
   const params = new URLSearchParams(window.location.search);
-  if (!params.has('xremu')) return false;
+  const requestedParam = params.has('xremu') ? 'xremu' : params.has('emulate') ? 'emulate' : null;
+  if (!requestedParam) return false;
 
   // Never shadow a real device — but "has navigator.xr" is not the same as "has
   // a headset". Desktop Chromium ships the WebXR API and reports
@@ -66,10 +68,9 @@ export async function maybeInstallXREmulator(): Promise<boolean> {
     }
   }
 
-  const requested = (params.get('xremu') ?? '').toLowerCase();
-  const profile = ALIASES[requested] ?? (PROFILES as readonly string[]).includes(requested)
-    ? (ALIASES[requested] ?? (requested as ProfileName))
-    : 'metaQuest3';
+  const requested = (params.get(requestedParam) ?? '').toLowerCase();
+  const profile = ALIASES[requested]
+    ?? (PROFILES.includes(requested as ProfileName) ? requested as ProfileName : 'metaQuest3');
 
   try {
     const iwer = await import('iwer');

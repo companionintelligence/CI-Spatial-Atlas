@@ -49,7 +49,7 @@ export function usePlaces(
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memory?.url, memory?.token, provided]);
+  }, [memory?.url, memory?.token, memory?.apiKey, provided]);
 
   return { places, placesLoading: loading, placesError: error };
 }

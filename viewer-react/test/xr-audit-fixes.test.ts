@@ -81,6 +81,17 @@ describe('AR must not paint over the room', () => {
   });
 });
 
+describe('flat globe rotation keeps its centre fixed', () => {
+  it('is safe when the pivot aliases the world position', () => {
+    const world = createWorldTransform();
+    const before = world.position.clone();
+
+    rotateAbout(world, world.position, new Vector3(0, 1, 0), Math.PI / 8);
+
+    expect(world.position.distanceTo(before)).toBeLessThan(1e-12);
+  });
+});
+
 describe('a hand on a panel is not a hand on the sky', () => {
   /**
    * The sky grab asked only whether the head-to-hand line misses the globe. A

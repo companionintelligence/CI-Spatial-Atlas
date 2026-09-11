@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadStory, type Story } from '@companion-atlas/story';
 import { fetchMemoryStory } from '../memory/client.js';
+import { storedMemoryToken } from '../memory/auth.js';
 import { memoryCredentialsAllowed } from '../embed/index.js';
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
@@ -10,7 +11,9 @@ export type StorySource = 'memory' | 'story';
 /**
  * Load the 4D unit the globe renders. Two sources:
  *  - **Companion Memory** (real data): `?memory=<ci-server-url>` (optionally
- *    `&token=<jwt>`) or the `VITE_MEMORY_URL` / `VITE_MEMORY_TOKEN` env vars —
+ *    `&token=<jwt>` or `&apiKey=<key>`) or the `VITE_MEMORY_URL`,
+ *    `VITE_MEMORY_TOKEN` / `VITE_MEMORY_API_KEY` env vars, or the short-lived
+ *    token from the in-viewer sign-in —
  *    queries CI-Server's located `search()` and maps it to a Story.
  *  - **A published Story**: `?story=<url>` (accepts legacy Atlas + Earth-2
  *    documents), falling back to the bundled sample so the viewer renders out of
@@ -29,7 +32,7 @@ export function useStory(): {
    */
   isSample: boolean;
   /** The connected Companion Memory (for write-back), or null when offline. */
-  memory: { url: string; token?: string } | null;
+  memory: { url: string; token?: string; apiKey?: string } | null;
 } {
   const [story, setStory] = useState<Story | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +49,16 @@ export function useStory(): {
   // Environment variables are unaffected: those are the deployment's own
   // choice, not something a third-party page can write.
   const urlCredentials = memoryCredentialsAllowed(window.location.search);
-  const memoryUrl = (urlCredentials ? params.get('memory') : null) ?? env.VITE_MEMORY_URL;
-  const memoryToken = (urlCredentials ? params.get('token') : null) ?? env.VITE_MEMORY_TOKEN;
+  const memoryParam = urlCredentials ? params.get('memory') : null;
+  const memoryUrl = memoryParam ?? env.VITE_MEMORY_URL;
+  // A URL supplied in the address bar is an explicit connection choice. Do not
+  // silently combine it with credentials baked into a different deployment:
+  // that is especially dangerous for `?memory=/memory`, where the intended
+  // credential is the same-origin CI-Server session cookie. A caller can still
+  // opt into a bearer/key explicitly with `?token=` or `?apiKey=`.
+  const sessionToken = memoryUrl ? storedMemoryToken(memoryUrl) : undefined;
+  const memoryToken = (urlCredentials ? params.get('token') : null) ?? sessionToken ?? (memoryParam == null ? env.VITE_MEMORY_TOKEN : undefined);
+  const memoryApiKey = (urlCredentials ? params.get('apiKey') : null) ?? (memoryParam == null ? env.VITE_MEMORY_API_KEY : undefined);
   const source: StorySource = memoryUrl ? 'memory' : 'story';
 
   useEffect(() => {
@@ -56,7 +67,7 @@ export function useStory(): {
       try {
         let s: Story;
         if (memoryUrl) {
-          s = await fetchMemoryStory({ url: memoryUrl, token: memoryToken });
+          s = await fetchMemoryStory({ url: memoryUrl, token: memoryToken, apiKey: memoryApiKey });
         } else {
           const explicit = params.get('story');
           const url = explicit ?? '/stories/sample-pacific-journey.json';
@@ -79,5 +90,12 @@ export function useStory(): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { story, error, loading, source, isSample, memory: memoryUrl ? { url: memoryUrl, token: memoryToken } : null };
+  return {
+    story,
+    error,
+    loading,
+    source,
+    isSample,
+    memory: memoryUrl ? { url: memoryUrl, token: memoryToken, apiKey: memoryApiKey } : null,
+  };
 }

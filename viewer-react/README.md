@@ -4,7 +4,10 @@
 > architecture (Resium/Cesium viewer + React-Three-Fiber for WebXR, one `Story`
 > model). The vanilla-TS viewer that used to live in `../src` has been removed —
 > this app is the only viewer, and the root `npm run dev` / `npm run build` /
-> `npm test` drive it.
+> `npm test` drive it. The shell, search, inspector, time machine, map layers,
+> named places, media lightbox, scrapbook, curation, download, sanitized
+> sharing, live Memory loading, and in-viewer Memory sign-in are implemented
+> and covered by automated checks plus Codex-browser smoke tests.
 >
 > **Builds from a clean checkout.** `@companionintelligence/tokens` is a pinned
 > git submodule at `third_party/ci-common` and an npm workspace, so
@@ -13,6 +16,12 @@
 > path outside the repo, which is why neither the build nor the image could ever
 > complete. Update the pin with
 > `git submodule update --remote third_party/ci-common` and commit the new SHA.
+>
+> This is still a pre-release build: a physical-device matrix, screen-reader
+> audit, performance budget, and fully wired Portal OIDC browser flow remain
+> open. The embedded Memory sign-in (`src/memory/auth.ts`) is a recovery path
+> for a connected CI-Server; `src/auth/portal.ts` remains the Portal
+> Authorization Code + PKCE scaffold, present but not yet wired into the shell.
 
 ## Architecture
 
@@ -40,7 +49,12 @@
 - `src/renderers/XRStoryScene.tsx` — R3F `<Canvas><XR>` globe rendering
   `storyEntities(story)` as pins; ports CI-Earth-2's working WebXR path.
 - `src/renderers/rendererForDevice.ts` — `immersive-vr` support check → renderer.
-- `src/AtlasApp.tsx` — loads the story, switches renderer, shares the story with both.
+- `src/AtlasApp.tsx` — loads the story, switches renderer, owns the shell state,
+  and shares the story with both renderers.
+- `src/memory/auth.ts` — obtains a short-lived CI-Server bearer after the
+  in-viewer sign-in flow and keeps it scoped to the browser tab and Memory URL.
+- `src/ui/StoryLoadError.tsx` — separates authentication failures from empty and
+  unavailable stories and provides sign-in/retry recovery.
 
 ## Open work
 
@@ -58,4 +72,9 @@ From [`../docs/CONSOLIDATION.md`](../docs/CONSOLIDATION.md):
    locked camera and clock, masked dynamic regions, tolerant
    `maxDiffPixelRatio`). `tests/viewer.capture.ts` is the harness to build on.
 3. Publish `@companionintelligence/tokens` to a registry CI and Docker can
-   resolve, so `npm run build` and the image work from a clean checkout.
+   resolve, so `npm run build` and the image work from a clean checkout — the
+   git submodule closes this for a local/manual build, but CI and the Docker
+   image still resolve it via the workspace link.
+4. Configure Portal's public `companion-atlas` client and wire
+   `src/auth/portal.ts` into the shell before enabling the production OIDC
+   redirect flow (see `docs/INTEGRATION.md` §2, §7).

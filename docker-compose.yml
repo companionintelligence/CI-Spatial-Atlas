@@ -26,6 +26,7 @@ services:
         VITE_CESIUM_ION_TOKEN: ${VITE_CESIUM_ION_TOKEN:-}
         VITE_MEMORY_URL: ${VITE_MEMORY_URL:-}
         VITE_MEMORY_TOKEN: ${VITE_MEMORY_TOKEN:-}
+        VITE_MEMORY_API_KEY: ${VITE_MEMORY_API_KEY:-}
         # Terrain heights without an account. Cesium reads exactly one terrain
         # wire format (quantized-mesh-1.0) and nobody publishes a free global
         # service in it, so the keyless route is necessarily "point at a
@@ -83,6 +84,7 @@ services:
       ATLAS_CORS_ORIGINS: ${ATLAS_CORS_ORIGINS:-http://localhost:4174}
       # Suite + auth wiring (see .env.default)
       CI_MEMORY_URL: ${CI_MEMORY_URL:-}
+      CI_MEMORY_API_KEY: ${CI_MEMORY_API_KEY:-}
       OPENCLAW_URL: ${OPENCLAW_URL:-}
       HERMES_URL: ${HERMES_URL:-}
       COMPANION_OIDC_ISSUER: ${COMPANION_OIDC_ISSUER:-}

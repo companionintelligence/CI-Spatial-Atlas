@@ -46,9 +46,11 @@ export async function memoryGraphQL<T>(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        ...(src.apiKey ? { 'x-api-key': src.apiKey } : {}),
         ...(src.token ? { authorization: `Bearer ${src.token}` } : {}),
       },
-      // Send the CI-Server session cookie when no explicit token is supplied.
+      // Keep cookies available for deployments that accept them. CI-Server's
+      // guarded GraphQL path still needs the bearer/API key the viewer supplies.
       credentials: 'include',
       body: JSON.stringify({ query, variables }),
       signal: opts.signal,
@@ -78,7 +80,7 @@ export async function memoryGraphQL<T>(
   if (json?.errors?.length) throw new Error(json.errors[0]?.message ?? 'Companion Memory GraphQL error');
   if (!res.ok) {
     const hint = res.status === 401 || res.status === 403
-      ? " — sign in, or pass ?token=<jwt>."
+      ? " — sign in, or pass ?token=<jwt> or ?apiKey=<key>."
       : text ? ` — ${text.slice(0, 160)}` : ' — check the server URL.';
     throw new Error(`Companion Memory returned HTTP ${res.status}${hint}`);
   }
@@ -102,8 +104,10 @@ interface SearchEnvelope {
 export interface MemorySource {
   /** CI-Server origin (`http://localhost:3030`) or full GraphQL endpoint. */
   url: string;
-  /** Portal OIDC bearer token (optional if the CI-Server accepts the session cookie). */
+  /** Portal/CI-Server bearer token. CI-Server's guarded GraphQL path requires this or an API key. */
   token?: string;
+  /** CI-Server API key. Sent through its dedicated x-api-key header. */
+  apiKey?: string;
   /** Page size for the located-media query. */
   first?: number;
 }
@@ -118,8 +122,8 @@ export async function fetchMemoryStory(src: MemorySource): Promise<Story> {
   const { origin } = endpointOf(src.url);
   // Page through the whole located set. `first: 200` was silently clamped to 100
   // server-side and never paged, so anyone with more than 100 located memories
-  // just never saw the rest — with `sortOrder: "asc"`, that meant the most recent
-  // ones were the ones missing.
+  // just never saw the rest — with CI-Server's timed cursor, the native
+  // newest-first order is the reliable direction for collecting every page.
   const first = Math.min(src.first ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
   const edges: unknown[] = [];
   let after: string | undefined;
@@ -141,6 +145,10 @@ export async function fetchMemoryStory(src: MemorySource): Promise<Story> {
   if (totalCount > edges.length) {
     console.warn(`[atlas] Companion Memory reports ${totalCount} located memories; showing ${edges.length}.`);
   }
+  // Ask CI-Server for newest-first pages because that is the direction its
+  // timed keyset cursor can page reliably. Restore chronological order before
+  // handing the result to the canonical Story mapper and the time machine.
+  edges.reverse();
   // `origin` (without /graphql) prefixes the relative presigned media URLs.
   return memoryToStory({ search: { totalCount, edges } }, { origin, title: 'Companion Memory' });
 }

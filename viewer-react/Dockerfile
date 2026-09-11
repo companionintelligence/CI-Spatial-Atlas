@@ -35,11 +35,12 @@ COPY . .
 RUN npm run build -w packages/story-schema
 # Vite inlines import.meta.env.VITE_* at build time (see src/story/useStory.ts,
 # src/renderers/CesiumStoryViewer.tsx). These are optional build-time
-# defaults — `?memory=`/`?token=` URL params still override at runtime, so a
-# single built image can point at different Companion Memory servers per load.
+# defaults — `?memory=`/`?token=`/`?apiKey=` URL params still override at runtime,
+# so a single built image can point at different Companion Memory servers per load.
 ARG VITE_CESIUM_ION_TOKEN=""
 ARG VITE_MEMORY_URL=""
 ARG VITE_MEMORY_TOKEN=""
+ARG VITE_MEMORY_API_KEY=""
 # Self-hosted quantized-mesh terrain: the only terrain route that needs no
 # account, and the reason renderers/terrain.ts exists. These have to be ARGs,
 # not runtime ENVs — Vite inlines VITE_* at build time, so an env var on the
@@ -57,6 +58,7 @@ ARG VITE_ATLAS_API=""
 ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN \
     VITE_MEMORY_URL=$VITE_MEMORY_URL \
     VITE_MEMORY_TOKEN=$VITE_MEMORY_TOKEN \
+    VITE_MEMORY_API_KEY=$VITE_MEMORY_API_KEY \
     VITE_TERRAIN_URL=$VITE_TERRAIN_URL \
     VITE_TERRAIN_CREDIT=$VITE_TERRAIN_CREDIT \
     VITE_ATLAS_API=$VITE_ATLAS_API

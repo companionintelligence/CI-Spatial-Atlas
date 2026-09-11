@@ -3,7 +3,7 @@
 > **Private & Confidential — Property of Lifescope Inc.**
 > How Atlas connects to the Companion Intelligence platform: CI-Portal OIDC,
 > CI-Server Memory, the CI-Hub/marketplace framework, and CI-Common theming — plus
-> the local dev mode. Grounded in recon of each repo's default branch (2026-07).
+> the local dev mode. Grounded in the current Atlas implementation (2026-09-03).
 
 ## Status legend
 
@@ -47,6 +47,8 @@ Set in `.env.dev`:
 ```sh
 COMPANION_OIDC_ISSUER=https://hub.ci.localhost/api/auth   # local Portal dev
 CI_MEMORY_URL=http://localhost:3030/graphql               # local CI-Server
+# Or use a scoped key when the server is reached directly:
+CI_MEMORY_API_KEY=
 ```
 Now the API verifies Portal JWTs and seeds stories from real located memories.
 Requires the two cross-repo prerequisites in §5.
@@ -71,10 +73,9 @@ endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
   `portalConfigFromEnv` have no importer in the app — only the test named
   below — so none of this reaches the bundle: there is no
   `/auth/callback` handling at boot, no sign-in control in the shell, and no
-  consumer for the token if one were obtained — the viewer reaches Companion
-  Memory by ambient CI-Server session cookie or an explicit `?token=<jwt>` /
-  `VITE_MEMORY_TOKEN` instead. The app being unbuilt was never what stood in the
-  way; three other things do, and only the first is a code change here:
+  consumer for the token if one were obtained. The app being unbuilt was never
+  what stood in the way; three other things do, and only the first is a code
+  change here:
   1. no caller — plus an Atlas-API client to spend the bearer on
      (`VITE_ATLAS_API` has no reader in `viewer-react` today, so a completed
      login would change nothing about what the viewer can fetch);
@@ -89,28 +90,41 @@ endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
   arrives that way) rather than "missing authorization code", and that the PKCE
   verifier is consumed on every path.
 
+  Separately, the viewer now has an embedded **CI-Server Memory sign-in** path
+  that *is* wired in —
+  [`viewer-react/src/memory/auth.ts`](../viewer-react/src/memory/auth.ts). It
+  exchanges a connected Memory server's CSRF-protected credentials for a
+  scoped access token, kept in `sessionStorage` scoped to the Memory URL. This
+  is unrelated to the Portal OIDC flow above: it authenticates against
+  CI-Server directly rather than brokering through Portal, for the case where
+  a viewer is pointed at a Memory server with no Portal in front of it.
+
 ## 3. CI-Server Companion Memory ✅
 
 CI-Server exposes **GraphQL** at `/graphql` (`:3030` direct, `/api/graphql` via proxy).
-- **Query** ✅ located photos/videos via `search(input:{ includeTypes:["event"],
-  hasLocation:true, eventTypes:["photo","video"], sortBy:"time" })` → `EventType`
-  nodes → canonical `MediaItem[]`. **Corrects PR #8:** the slug is `"event"` (not
-  `"EventType"`, which returns zero rows), and `previewUrl`/`mediaUrl` are **relative
-  presigned paths** that are absolutized against the CI-Server origin.
+- **Query** ✅ located events via `search(input:{ includeTypes:["event"],
+  hasLocation:true, sortBy:"time", sortOrder:"desc" })` → `EventType` nodes →
+  canonical `MediaItem[]`. The shared query pages through CI-Server's 100-row
+  limit and restores chronological order for the viewer. **Corrects PR #8:** the
+  slug is `"event"` (not `"EventType"`, which returns zero rows), and
+  `previewUrl`/`mediaUrl` are **relative presigned paths** that are absolutized
+  against the CI-Server origin.
 - **Write-back** ✅ via the idempotent `createEvent` mutation (dedups on
   source triple; `sharingLevel` from story visibility).
 - Transport in [`server/src/ci-memory-client.ts`](../server/src/ci-memory-client.ts)
   (tested with a mock fetch); query/mutation/mapping live in `@companion-atlas/story`
   (`memory.ts`); the suite facade is `server/src/connectors.ts` (`CiMemoryConnector`).
-- Auth: sends `Authorization: Bearer <PortalToken>`. Needs `PORTAL_OIDC_ENABLED=true`
-  + `companion-atlas` in CI-Server `PORTAL_OIDC_AUDIENCE` (or a CI-Server JWT / key).
+- Auth: sends `Authorization: Bearer <PortalToken>` or the dedicated `x-api-key`
+  header for a scoped CI-Server key. Needs `PORTAL_OIDC_ENABLED=true` +
+  `companion-atlas` in CI-Server `PORTAL_OIDC_AUDIENCE` when using Portal tokens.
 
 ## 4. CI-Hub / Marketplace 🟡 *(manifests written; never installed into a Hub)*
 
 Register Atlas as a Hub app: [`hub/config.json`](../hub/config.json) (`AppInfo`) +
 [`hub/docker-compose.json`](../hub/docker-compose.json). Key blocks:
 - `hub_integration.oidc` → the Hub injects `COMPANION_OIDC_ISSUER=<CI_CLOUD_URL>/api/auth`.
-- `hub_integration.memory` → the Hub injects `CI_MEMORY_URL` + a minted `CI_MEMORY_TOKEN`.
+- `hub_integration.memory` → the Hub injects `CI_MEMORY_URL` + a minted `CI_MEMORY_TOKEN`
+  (or a scoped `CI_MEMORY_API_KEY` for direct server deployments).
 - `agents.mcp` + `agents.intents[]` → on install the Hub auto-registers Atlas's MCP
   tools + intents with CI-Server ("agent-declared intents"), growing the assistant's
   vocabulary.
@@ -180,7 +194,8 @@ verifier ourselves per §2.
 - Wire the SPA login: give `viewer-react/src/auth/portal.ts` a caller — callback
   handling at boot, a sign-in control, and an Atlas-API client that spends the
   bearer (§2). Building the viewer is *not* part of this; it has been built and
-  run since the Resium spike landed.
+  run since the Resium spike landed. The separate embedded CI-Server Memory
+  sign-in (§2, `memory/auth.ts`) is already wired and does not depend on this.
 - Make `vite build` work in a single-repo checkout (§6) — the last thing between
   this repo and a green Docker/CI image.
 - ~~Drive the Cesium `Viewer` clock from the CZML doc packet.~~ Done — `AtlasApp`
@@ -189,4 +204,5 @@ verifier ourselves per §2.
   bullet and only half of it was still true.
 - Persistence (Postgres/Redis/MinIO) + GPU reconstruction — `docs/CONSOLIDATION.md`
   Phases 3–4.
-- Live end-to-end (Portal + CI-Server up) + screenshots/demo videos.
+- Live end-to-end with populated located memories, Portal + CI-Server, physical
+  devices, and repeatable screenshot/demo capture in release CI.
