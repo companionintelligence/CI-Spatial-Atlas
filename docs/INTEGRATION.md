@@ -3,7 +3,7 @@
 > **Private & Confidential — Property of Lifescope Inc.**
 > How Atlas connects to the Companion Intelligence platform: CI-Portal OIDC,
 > CI-Server Memory, the CI-Hub/marketplace framework, and CI-Common theming — plus
-> the local dev mode. Grounded in recon of each repo's default branch (2026-07).
+> the local dev mode. Grounded in the current Atlas implementation (2026-09-03).
 
 ## Status legend
 
@@ -32,6 +32,8 @@ Set in `.env.dev`:
 ```sh
 COMPANION_OIDC_ISSUER=https://hub.ci.localhost/api/auth   # local Portal dev
 CI_MEMORY_URL=http://localhost:3030/graphql               # local CI-Server
+# Or use a scoped key when the server is reached directly:
+CI_MEMORY_API_KEY=
 ```
 Now the API verifies Portal JWTs and seeds stories from real located memories.
 Requires the two cross-repo prerequisites in §5.
@@ -51,30 +53,38 @@ endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
   Replaces the previous decode-only stub. Empty issuer ⇒ dev subject. Tested with a
   local keypair (signature/issuer/audience/expiry) in `server/test/auth-oidc.test.ts`.
 - **SPA login** 🟡 — [`viewer-react/src/auth/portal.ts`](../viewer-react/src/auth/portal.ts):
-  Authorization Code + PKCE (S256), public client. Mirrors the Hub RP flow.
+  Authorization Code + PKCE (S256), public client. The module mirrors the Hub
+  RP flow but is not yet wired into the viewer shell. The viewer does provide a
+  separate embedded CI-Server sign-in/retry path for a connected Memory source;
+  it exchanges the server's CSRF-protected credentials for a scoped bearer kept
+  in the browser tab.
 
 ## 3. CI-Server Companion Memory ✅
 
 CI-Server exposes **GraphQL** at `/graphql` (`:3030` direct, `/api/graphql` via proxy).
-- **Query** ✅ located photos/videos via `search(input:{ includeTypes:["event"],
-  hasLocation:true, eventTypes:["photo","video"], sortBy:"time" })` → `EventType`
-  nodes → canonical `MediaItem[]`. **Corrects PR #8:** the slug is `"event"` (not
-  `"EventType"`, which returns zero rows), and `previewUrl`/`mediaUrl` are **relative
-  presigned paths** that are absolutized against the CI-Server origin.
+- **Query** ✅ located events via `search(input:{ includeTypes:["event"],
+  hasLocation:true, sortBy:"time", sortOrder:"desc" })` → `EventType` nodes →
+  canonical `MediaItem[]`. The shared query pages through CI-Server's 100-row
+  limit and restores chronological order for the viewer. **Corrects PR #8:** the
+  slug is `"event"` (not `"EventType"`, which returns zero rows), and
+  `previewUrl`/`mediaUrl` are **relative presigned paths** that are absolutized
+  against the CI-Server origin.
 - **Write-back** ✅ via the idempotent `createEvent` mutation (dedups on
   source triple; `sharingLevel` from story visibility).
 - Transport in [`server/src/ci-memory-client.ts`](../server/src/ci-memory-client.ts)
   (tested with a mock fetch); query/mutation/mapping live in `@companion-atlas/story`
   (`memory.ts`); the suite facade is `server/src/connectors.ts` (`CiMemoryConnector`).
-- Auth: sends `Authorization: Bearer <PortalToken>`. Needs `PORTAL_OIDC_ENABLED=true`
-  + `companion-atlas` in CI-Server `PORTAL_OIDC_AUDIENCE` (or a CI-Server JWT / key).
+- Auth: sends `Authorization: Bearer <PortalToken>` or the dedicated `x-api-key`
+  header for a scoped CI-Server key. Needs `PORTAL_OIDC_ENABLED=true` +
+  `companion-atlas` in CI-Server `PORTAL_OIDC_AUDIENCE` when using Portal tokens.
 
 ## 4. CI-Hub / Marketplace 🟡
 
 Register Atlas as a Hub app: [`hub/config.json`](../hub/config.json) (`AppInfo`) +
 [`hub/docker-compose.json`](../hub/docker-compose.json). Key blocks:
 - `hub_integration.oidc` → the Hub injects `COMPANION_OIDC_ISSUER=<CI_CLOUD_URL>/api/auth`.
-- `hub_integration.memory` → the Hub injects `CI_MEMORY_URL` + a minted `CI_MEMORY_TOKEN`.
+- `hub_integration.memory` → the Hub injects `CI_MEMORY_URL` + a minted `CI_MEMORY_TOKEN`
+  (or a scoped `CI_MEMORY_API_KEY` for direct server deployments).
 - `agents.mcp` + `agents.intents[]` → on install the Hub auto-registers Atlas's MCP
   tools + intents with CI-Server ("agent-declared intents"), growing the assistant's
   vocabulary.
@@ -98,19 +108,22 @@ tokens itself (§6). No runtime CSS injection.
 
 ## 6. Theming (CI-Common) ✅
 
-CI canonical tokens (`@companionintelligence/tokens`, teal `--primary`
-#0f717a/#abd4d8 + Montserrat) are **vendored** (sanctioned offline path) into
-[`viewer-react/src/theme/`](../viewer-react/src/theme/) — `tokens.css`/`tokens.json`
-imported by `theme.css`; `primaryHex()` for Cesium/R3F colors; dark mode = `.dark`
-on `<html>`. `npm run lint:canon` (CI-Common's zero-dep gate) fails the build if
-`--primary` drifts. CI-Common's `auth` package is a stub (contract only) — we
-implemented the verifier ourselves per §2.
+The small CI token contract used by Atlas is kept in the standalone
+[`viewer-react/src/theme/atlas-tokens.css`](../viewer-react/src/theme/atlas-tokens.css)
+bridge so a fresh checkout does not depend on a sibling CI-Common checkout or a
+private registry. `theme.css` imports the bridge and `theme/index.ts` exposes
+`primaryHex()` for Cesium/R3F colors. Manrope is self-hosted via `@fontsource`.
+`npm run lint:canon` remains the brand-color gate. CI-Common's `auth` package is
+a stub (contract only) — we implemented the verifier ourselves per §2.
 
 ## 7. What's left
 
 - Adopt `@companion-atlas/story` in the server schema (delete the mirrored Zod) — a
   breaking migration; see `docs/CONSOLIDATION.md`.
-- Build `viewer-react` (Resium spike), wire the SPA login + Cesium clock.
+- Wire the Portal SPA login into the viewer shell and define token refresh/logout
+  semantics. The Cesium clock, React shell, scrapbook, and CI-Server sign-in
+  recovery are already implemented in `viewer-react`.
 - Persistence (Postgres/Redis/MinIO) + GPU reconstruction — `docs/CONSOLIDATION.md`
   Phases 3–4.
-- Live end-to-end (Portal + CI-Server up) + screenshots/demo videos.
+- Live end-to-end with populated located memories, Portal + CI-Server, physical
+  devices, and repeatable screenshot/demo capture in release CI.

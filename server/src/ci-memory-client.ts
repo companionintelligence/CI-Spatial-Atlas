@@ -3,7 +3,8 @@
  *
  * Verified against CI-Server `origin/main`: POST GraphQL to `/graphql`
  * (`http://localhost:3030/graphql` locally, or `https://ci-server.localhost/api/graphql`
- * through the proxy) with `Authorization: Bearer <PortalOIDCToken>`. The query,
+ * through the proxy) with `Authorization: Bearer <PortalOIDCToken>` or
+ * CI-Server's dedicated `x-api-key` header. The query,
  * mutation, node→MediaItem mapping, and story→createEvent input all live in the
  * shared `@companion-atlas/story` package (single source of truth); this module
  * is just the transport.
@@ -23,8 +24,10 @@ export interface CiMemoryClientConfig {
   /** Origin used to absolutize CI-Server's relative presigned media URLs.
    *  Defaults to the endpoint's origin. */
   origin?: string;
-  /** Portal OIDC bearer token (or a CI-Server JWT / scoped API key). */
+  /** Portal OIDC bearer token or CI-Server JWT. */
   token?: string;
+  /** CI-Server scoped API key, sent through its dedicated x-api-key header. */
+  apiKey?: string;
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
 }
@@ -52,6 +55,7 @@ async function graphql<T>(cfg: CiMemoryClientConfig, query: string, variables: R
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...(cfg.apiKey ? { 'x-api-key': cfg.apiKey } : {}),
       ...(cfg.token ? { authorization: `Bearer ${cfg.token}` } : {}),
     },
     body: JSON.stringify({ query, variables }),

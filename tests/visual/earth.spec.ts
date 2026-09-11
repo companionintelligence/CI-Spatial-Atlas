@@ -76,8 +76,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function waitForLocalTextures(page: Page): Promise<void> {
+  // Static mode still decodes eight KTX2/raw assets. Under the desktop + Pixel
+  // projects running in parallel, browser workers can queue GPU transcoding for
+  // longer than the old 10s budget even though the renderer is healthy.
   await expect(page.locator('#viewport')).toHaveAttribute('data-local-textures', 'ready', {
-    timeout: 10_000
+    timeout: 20_000
   });
 }
 

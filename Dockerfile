@@ -9,10 +9,9 @@ WORKDIR /app
 # added to this image. The root viewer doesn't depend on any of them, and
 # Deno's npm-workspace resolution re-checks *every* workspace member's
 # package.json on each `deno task` invocation (unlike `npm run`, which only
-# resolves once at `npm ci` time) — if viewer-react's package.json were
-# present, every `deno task` here would try to resolve its private
-# @companionintelligence/tokens dependency (see viewer-react/.npmrc) and fail
-# without registry credentials this image doesn't need.
+# resolves once at `npm ci` time) — this image intentionally copies only the
+# root viewer manifests so unrelated workspace packages and browser-only
+# dependencies cannot affect its build.
 COPY package.json package-lock.json deno.json ./
 RUN deno install
 COPY index.html tsconfig.json vite.config.ts ./

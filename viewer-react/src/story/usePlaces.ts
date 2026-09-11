@@ -32,7 +32,7 @@ export function usePlaces(memory: MemorySource | null): {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memory?.url, memory?.token]);
+  }, [memory?.url, memory?.token, memory?.apiKey]);
 
   return { places, placesLoading: loading, placesError: error };
 }

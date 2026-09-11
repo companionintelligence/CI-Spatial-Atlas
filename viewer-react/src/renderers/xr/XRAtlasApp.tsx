@@ -13,6 +13,7 @@ import { useMemo } from 'react';
 import { useStory } from '../../story/useStory.js';
 import { deriveModel } from '../../model/atlasModel.js';
 import { XRStoryScene } from '../XRStoryScene.js';
+import { StoryLoadError } from '../../ui/StoryLoadError.js';
 
 export function XRAtlasApp() {
   const { story, error, loading, source, memory } = useStory();
@@ -27,14 +28,7 @@ export function XRAtlasApp() {
   }
 
   if (error || !model || !story) {
-    return (
-      <div className="atlas-boot">
-        <div className="msg">
-          <strong>Couldn’t load a story.</strong>
-          <span>{error ?? 'Append ?story=<url> to view one.'}</span>
-        </div>
-      </div>
-    );
+    return <StoryLoadError error={error} memoryUrl={memory?.url} />;
   }
 
   if (source === 'memory' && model.memories.length === 0) {

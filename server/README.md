@@ -59,7 +59,8 @@ scoping to add once that's wired up.
 
 ## Configuration
 
-See [`../.env.default`](../.env.default) for `CI_MEMORY_URL`, `OPENCLAW_URL`,
+See [`../.env.default`](../.env.default) for `CI_MEMORY_URL`, optional
+`CI_MEMORY_TOKEN` / `CI_MEMORY_API_KEY`, `OPENCLAW_URL`,
 `HERMES_URL`, `COMPANION_OIDC_*`, `DATABASE_URL`, `REDIS_URL`, and `S3_*`.
 With no OIDC issuer set, auth is disabled and everything runs as a single dev
 subject.

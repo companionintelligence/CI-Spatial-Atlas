@@ -1,15 +1,16 @@
 /*
  * Companion Atlas theme entry — Companion Intelligence canonical tokens.
  *
- * Consumes @companionintelligence/tokens v0.3 (phthalo-mist palette, Manrope).
- * Manrope is loaded self-hosted via @fontsource. `--primary` canon is enforced
- * by `npm run lint:canon` at the repo root.
+ * Uses the standalone Atlas token bridge (the same dark CI contract as
+ * @companionintelligence/tokens v0.3) so a fresh checkout does not depend on a
+ * sibling CI-Common repository. Manrope is loaded self-hosted via @fontsource.
+ * `--primary` canon is enforced by `npm run lint:canon` at the repo root.
  */
 @import '@fontsource/manrope/400.css';
 @import '@fontsource/manrope/500.css';
 @import '@fontsource/manrope/600.css';
 @import '@fontsource/manrope/700.css';
-@import '@companionintelligence/tokens/tokens.css';
+@import './atlas-tokens.css';
 
 :root {
   --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;

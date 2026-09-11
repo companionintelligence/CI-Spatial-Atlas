@@ -12,7 +12,8 @@
  *     MCP *clients* of Atlas: they call the Atlas MCP tools to build views
  *     automatically. Atlas may also call back into them for enrichment.
  *
- * `CI_MEMORY_URL` (+ optional `CI_MEMORY_TOKEN`, both Hub-injectable), `OPENCLAW_URL`,
+ * `CI_MEMORY_URL` (+ optional `CI_MEMORY_TOKEN` or `CI_MEMORY_API_KEY`, both
+ * Hub-injectable), `OPENCLAW_URL`,
  * `HERMES_URL`, and the OIDC settings come from env (.env.default).
  */
 
@@ -49,6 +50,8 @@ export class CiMemoryConnector {
     private readonly baseUrl = process.env.CI_MEMORY_URL ?? '',
     /** Optional service token (Hub-injected). Per-request Portal tokens take precedence. */
     private readonly serviceToken = process.env.CI_MEMORY_TOKEN ?? '',
+    /** Optional service API key for CI-Server deployments using x-api-key. */
+    private readonly serviceApiKey = process.env.CI_MEMORY_API_KEY ?? '',
   ) {}
 
   get configured(): boolean {
@@ -63,7 +66,12 @@ export class CiMemoryConnector {
     } catch {
       origin = undefined;
     }
-    return { endpoint, origin, token: token || this.serviceToken || undefined };
+    return {
+      endpoint,
+      origin,
+      token: token || this.serviceToken || undefined,
+      apiKey: this.serviceApiKey || undefined,
+    };
   }
 
   /** Find located memories to seed a story (one page). */

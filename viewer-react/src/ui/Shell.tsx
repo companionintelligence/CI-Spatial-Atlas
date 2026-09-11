@@ -3,6 +3,8 @@ import {
   SearchIcon, ShareIcon, FlagIcon,
 } from './icons.js';
 
+export type ShareState = 'idle' | 'copied' | 'error';
+
 
 /** Left icon rail. Globe navigates home; Places fits the camera to every memory;
  *  People opens the participants facet; Collections opens the scrapbook drawer;
@@ -40,9 +42,10 @@ export function Rail({ onSearch, onFrameAll, onPeople, onCollections, scrapbookC
 }
 
 /** Top bar — wordmark, connection state, ⌘K search, places toggle, share. */
-export function TopBar({ onSearch, onShare, live, sample, showPlaces, onTogglePlaces, layers }: {
+export function TopBar({ onSearch, onShare, shareState = 'idle', live, sample, showPlaces, onTogglePlaces, layers }: {
   onSearch: () => void;
-  onShare: () => void;
+  onShare: () => void | Promise<void>;
+  shareState?: ShareState;
   live?: boolean;
   /** Showing the bundled demo story because no Companion Memory is connected. */
   sample?: boolean;
@@ -80,7 +83,14 @@ export function TopBar({ onSearch, onShare, live, sample, showPlaces, onTogglePl
         </button>
       )}
       {layers}
-      <button className="atlas-icon-btn" title="Copy link to this view" aria-label="Copy link to this view" onClick={onShare}><ShareIcon /></button>
+      {shareState === 'copied' && <span className="atlas-share-status ok" role="status">Link copied</span>}
+      {shareState === 'error' && <span className="atlas-share-status err" role="alert">Couldn’t copy link</span>}
+      <button
+        className="atlas-icon-btn"
+        title={shareState === 'copied' ? 'Link copied' : 'Copy link to this view'}
+        aria-label={shareState === 'copied' ? 'Link copied' : 'Copy link to this view'}
+        onClick={onShare}
+      ><ShareIcon /></button>
     </header>
   );
 }

@@ -47,6 +47,7 @@ services:
         VITE_CESIUM_ION_TOKEN: ${VITE_CESIUM_ION_TOKEN:-}
         VITE_MEMORY_URL: ${VITE_MEMORY_URL:-}
         VITE_MEMORY_TOKEN: ${VITE_MEMORY_TOKEN:-}
+        VITE_MEMORY_API_KEY: ${VITE_MEMORY_API_KEY:-}
     ports:
       - "4174:80"
 
@@ -64,6 +65,7 @@ services:
       S3_BUCKET: atlas
       # Suite + auth wiring (see .env.default)
       CI_MEMORY_URL: ${CI_MEMORY_URL:-}
+      CI_MEMORY_API_KEY: ${CI_MEMORY_API_KEY:-}
       OPENCLAW_URL: ${OPENCLAW_URL:-}
       HERMES_URL: ${HERMES_URL:-}
       COMPANION_OIDC_ISSUER: ${COMPANION_OIDC_ISSUER:-}

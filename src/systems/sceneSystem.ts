@@ -33,6 +33,12 @@ function seededRandomFactory(seed: number): () => number {
 
 export function createSceneSystem({ mountEl, viewportEl, isStaticMode, imageryMode }: CreateSceneSystemOptions) {
   const useLocalSurface = isStaticMode || imageryMode === 'local';
+  // 4096px interactive maps are useful on a desktop monitor but needlessly
+  // expensive on a phone: eight compressed textures are transcoded before the
+  // first stable frame. Use the deterministic 2048px pack on narrow screens;
+  // the procedural surface is already visible while those assets arrive, and
+  // a reload after rotation will select the appropriate desktop detail.
+  const useCompactTextures = isStaticMode || (typeof window !== 'undefined' && window.innerWidth < 768);
   const sceneConfig: SceneConfig = {
     camera: {
       fov: 52,
@@ -303,7 +309,7 @@ export function createSceneSystem({ mountEl, viewportEl, isStaticMode, imageryMo
     void initTilesSystem(scene, camera, renderer, sceneConfig.globe.radius, viewportEl).then((sys) => { tilesSystem = sys; });
   }
 
-  void loadLocalTexturePack(renderer, isStaticMode ? 'static' : 'interactive')
+  void loadLocalTexturePack(renderer, useCompactTextures ? 'static' : 'interactive')
     .then((texturePack) => {
       if (useLocalSurface) {
         globeMaterial.map = texturePack.day;

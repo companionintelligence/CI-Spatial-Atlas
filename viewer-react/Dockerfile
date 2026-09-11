@@ -5,14 +5,8 @@
 # @companion-atlas/story via the npm workspace, so the root package.json and
 # packages/story-schema must be in the build context.
 #
-# KNOWN LIMITATION: this image cannot build to completion today.
-# viewer-react's src/theme/index.ts imports @companionintelligence/tokens,
-# which package-lock.json resolves to `link:../ci-common/packages/tokens` — a
-# path outside this repository, unresolvable in a build context that is only
-# this repo. Everything up to (and validated by CI as of this change) the
-# `npm run build -w packages/story-schema` step below works; the final
-# `npm run build -w viewer-react` fails on that one import until the
-# dependency is published somewhere this build context can reach.
+# The viewer keeps its small standalone token bridge in this repository, so
+# this image does not need a private CI-common package or registry credentials.
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -30,14 +24,16 @@ COPY . .
 RUN npm run build -w packages/story-schema
 # Vite inlines import.meta.env.VITE_* at build time (see src/story/useStory.ts,
 # src/renderers/CesiumStoryViewer.tsx). These are optional build-time
-# defaults — `?memory=`/`?token=` URL params still override at runtime, so a
-# single built image can point at different Companion Memory servers per load.
+# defaults — `?memory=`/`?token=`/`?apiKey=` URL params still override at runtime,
+# so a single built image can point at different Companion Memory servers per load.
 ARG VITE_CESIUM_ION_TOKEN=""
 ARG VITE_MEMORY_URL=""
 ARG VITE_MEMORY_TOKEN=""
+ARG VITE_MEMORY_API_KEY=""
 ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN \
     VITE_MEMORY_URL=$VITE_MEMORY_URL \
-    VITE_MEMORY_TOKEN=$VITE_MEMORY_TOKEN
+    VITE_MEMORY_TOKEN=$VITE_MEMORY_TOKEN \
+    VITE_MEMORY_API_KEY=$VITE_MEMORY_API_KEY
 RUN npm run build -w viewer-react
 
 FROM nginx:1.27-alpine AS runtime

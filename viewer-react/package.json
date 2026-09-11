@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@companion-atlas/story": "*",
-    "@companionintelligence/tokens": "^0.3.1",
     "@fontsource/manrope": "^5.2.8",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.17.10",

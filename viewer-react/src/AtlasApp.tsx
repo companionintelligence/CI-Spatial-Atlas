@@ -5,7 +5,7 @@ import { useStory } from './story/useStory.js';
 import { usePlaces } from './story/usePlaces.js';
 import { CesiumStoryViewer } from './renderers/CesiumStoryViewer.js';
 import { deriveModel, memoriesAround, nearestMemory, type AtlasMemory } from './model/atlasModel.js';
-import { Rail, TopBar } from './ui/Shell.js';
+import { Rail, TopBar, type ShareState } from './ui/Shell.js';
 import { MapLayers } from './ui/MapLayers.js';
 import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
 
@@ -26,6 +26,8 @@ import { useScrapbook } from './scrapbook/useScrapbook.js';
 import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
 import { PeoplePanel, groupByPerson, type PersonGroup } from './ui/PeoplePanel.js';
 import { saveStoryToMemory } from './memory/client.js';
+import { StoryLoadError } from './ui/StoryLoadError.js';
+import { copyShareUrl } from './ui/share.js';
 
 /** The last memory whose time is at or before `ms` (the segment being played). */
 function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
@@ -41,15 +43,17 @@ function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
 const PLAYBACK_SECONDS = 45;
 
 /**
- * The current URL with credentials stripped. `?token=` is a bearer token and
- * `?memory=` is a private server address — neither belongs on the clipboard or
- * persisted into a household-visible event's `metadata.shareUrl`.
+ * The current URL with credentials stripped. `?token=` is a bearer token,
+ * `?apiKey=` is a server credential, and `?memory=` is a private server address
+ * — none belongs on the clipboard or persisted into a household-visible
+ * event's `metadata.shareUrl`.
  */
 function safeShareUrl(): string {
   try {
     const u = new URL(window.location.href);
     u.searchParams.delete('token');
     u.searchParams.delete('memory');
+    u.searchParams.delete('apiKey');
     return u.toString();
   } catch {
     return window.location.origin;
@@ -141,6 +145,7 @@ export function AtlasApp() {
   const [sbOpen, setSbOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
+  const [shareState, setShareState] = useState<ShareState>('idle');
   const lastSync = useRef(0);
   const flownToRef = useRef<string | null>(null);
   const introDone = useRef(false);
@@ -463,9 +468,15 @@ export function AtlasApp() {
     return () => removeEventListener('keydown', onKey);
   }, []);
 
-  const share = useCallback(() => {
-    try { void navigator.clipboard?.writeText(safeShareUrl()); } catch { /* ignore */ }
+  const share = useCallback(async () => {
+    setShareState(await copyShareUrl(safeShareUrl()) ? 'copied' : 'error');
   }, []);
+
+  useEffect(() => {
+    if (shareState === 'idle') return;
+    const timer = window.setTimeout(() => setShareState('idle'), 2400);
+    return () => window.clearTimeout(timer);
+  }, [shareState]);
 
   // A "Saved" banner must not outlive the thing it described: editing the draft
   // (or clearing it) invalidates the confirmation.
@@ -485,7 +496,7 @@ export function AtlasApp() {
 
   if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
   if (error || !model || !story) {
-    return <div className="atlas-boot"><div className="msg"><strong>Couldn’t load a story.</strong><span>{error ?? 'Append ?story=<url> to view one.'}</span></div></div>;
+    return <StoryLoadError error={error} memoryUrl={memory?.url} />;
   }
   // A memory query that matches nothing returns a perfectly valid *empty* story,
   // so the error branch never fires — without this the user just gets a blank
@@ -522,6 +533,7 @@ export function AtlasApp() {
       <TopBar
         onSearch={() => setPaletteOpen(true)}
         onShare={share}
+        shareState={shareState}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}

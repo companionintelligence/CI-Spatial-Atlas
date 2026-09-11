@@ -1,0 +1,26 @@
+/*
+ * Companion Atlas' standalone token bridge.
+ *
+ * Atlas is shipped and previewed as an independent workspace. Keeping the
+ * small set of canonical CI values it actually consumes here prevents a fresh
+ * checkout from resolving @companionintelligence/tokens to a sibling
+ * `ci-common` directory that may not exist. The values mirror the dark
+ * Companion Intelligence token contract used by the former v0.3.1 package.
+ * Keep these names stable when the shared package is available so the shell
+ * remains compatible with the wider CI design system.
+ */
+:root {
+  --background: #041620;
+  --foreground: #e8f2f4;
+  --font-letter-spacing: 0.2pt;
+  --font-word-spacing: 0.4pt;
+
+  --teal-200: #abd4d8;
+  --teal-600: #0f717a;
+  --teal-900: #0a222e;
+  --teal-950: #041620;
+  --aqua: #00a9a7;
+  --aqua-light: #72ddd4;
+  --teal-accent: #2c676d;
+  --teal-mid: #409b9b;
+}

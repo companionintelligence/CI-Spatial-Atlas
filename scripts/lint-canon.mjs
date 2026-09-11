@@ -37,7 +37,7 @@ const TOL = 14;
 // __fixtures__ deliberately included: lint-canon.test.mjs's fixtures contain intentional
 // non-canon values (that's the point of the retired-primary fixture), and would otherwise
 // fail a whole-repo scan of the very repo that authors this script.
-const IGNORE = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '.turbo', 'coverage', 'vendor', '.cache', 'target', '.output', '.vercel', '__fixtures__']);
+const IGNORE = new Set(['node_modules', '.git', '.claude', 'dist', 'build', 'out', '.next', '.turbo', 'coverage', 'vendor', '.cache', 'target', '.output', '.vercel', '__fixtures__']);
 // CI design-token namespace the transition manages — undefined uses of these are real bugs.
 const CI_TOKENS = /^--(primary|secondary|muted|accent|destructive|success|warning|info|border|input|ring|card|popover|background|foreground|sidebar|chart-\d|teal-\d{2,3}|aqua|aqua-light|teal-accent|teal-mid|gradient-\w+|shadow-(sm|md|lg)|radius-\w+)(-foreground)?$/;
 // standard/framework vars that are legitimately defined elsewhere (never flag as undefined)

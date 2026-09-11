@@ -170,9 +170,24 @@ export async function createCesiumScene(options: CreateCesiumSceneOptions): Prom
     const position = new Cesium.Cartesian2(clientX - rect.left, clientY - rect.top);
     const ray = viewer.camera.getPickRay(position);
     if (!ray) return null;
-    const groundPosition = viewer.scene.globe.pick(ray, viewer.scene);
-    if (!groundPosition) return null;
-    return Cesium.Cartographic.fromCartesian(groundPosition);
+
+    // `globe.pick` needs a rendered imagery/terrain tile. During startup,
+    // offline fallback, and a brief period after a camera move it can return
+    // null even though the camera is visibly aimed at the ellipsoid. Falling
+    // back to the mathematical ellipsoid keeps pin placement and the HUD
+    // usable while terrain catches up; real terrain still wins whenever it is
+    // available.
+    let groundPosition: Cesium.Cartesian3 | undefined;
+    try {
+      groundPosition = viewer.scene.globe.pick(ray, viewer.scene) ?? undefined;
+    } catch {
+      // A tile provider can be in the middle of replacing its surface. The
+      // ellipsoid fallback below is still a valid geographic target.
+    }
+    const surfacePosition = groundPosition
+      ?? viewer.camera.pickEllipsoid(position, viewer.scene.globe.ellipsoid);
+    if (!surfacePosition) return null;
+    return Cesium.Cartographic.fromCartesian(surfacePosition);
   }
 
   function raycastGroundFromCenter(): { lat: number; lon: number; height: number } | null {

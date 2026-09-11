@@ -131,7 +131,11 @@ export async function initCesiumApp(dom: CesiumAppDom, options: CesiumAppOptions
     },
     onCreatePin(label) {
       const ground = scene.raycastGroundFromCenter();
-      if (ground) scrapbook.addPinFromLatLon(ground.lat, ground.lon, ground.height, label);
+      if (!ground) {
+        refreshUI('Could not place a pin — move the globe to a visible surface and try again.');
+        return;
+      }
+      scrapbook.addPinFromLatLon(ground.lat, ground.lon, ground.height, label);
       refreshUI('Pin created.');
     },
     onSelectPin(pinId) {
