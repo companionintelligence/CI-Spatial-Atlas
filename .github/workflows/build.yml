@@ -54,6 +54,10 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lint design canon (ci-lint-canon from @companionintelligence/config)
+        run: npm run lint:canon
 
       - name: Typecheck and build viewer
         run: npm run build
@@ -90,6 +94,8 @@ jobs:
 
       - name: Install
         run: npm install --no-audit --no-fund --workspace @companion-atlas/story --include-workspace-root
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # packages/story-schema publishes ./dist, but nothing built it, so every
       # consumer of @companion-atlas/story failed to typecheck from a clean tree.
@@ -111,6 +117,8 @@ jobs:
 
       - name: Install
         run: npm install --no-audit --no-fund --workspace @companion-atlas/viewer-react --workspace @companion-atlas/story --include-workspace-root
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build @companion-atlas/story
         run: npm run build --workspace @companion-atlas/story
@@ -145,6 +153,8 @@ jobs:
       # npm workspace hoisting), so include it explicitly here too.
       - name: Install
         run: npm install --no-audit --no-fund --workspace server --workspace @companion-atlas/story --include-workspace-root
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build @companion-atlas/story
         run: npm run build --workspace @companion-atlas/story

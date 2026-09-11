@@ -2,7 +2,7 @@
   "name": "companion-atlas",
   "private": true,
   "version": "0.1.0",
-  "description": "Companion Atlas \u2014 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
+  "description": "Companion Atlas — 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
   "license": "CI-Commercial-1.0",
   "type": "module",
   "workspaces": [
@@ -17,13 +17,14 @@
     "preview": "npm run preview -w viewer-react",
     "test": "npm run build -w packages/story-schema && npm test -w viewer-react && npm test -w server",
     "typecheck": "npm run build -w packages/story-schema && npm run typecheck -w server",
-    "lint:canon": "node scripts/lint-canon.mjs .",
+    "lint:canon": "ci-lint-canon .",
     "account:new": "tsx scripts/new-account.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^25.5.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@companionintelligence/config": "^1.0.0"
   }
 }
