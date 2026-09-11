@@ -47,6 +47,14 @@
   --z-popover: 5;    /* inside --z-chrome */
   --z-modal: 60;     /* command palette */
   --z-lightbox: 70;  /* full-screen media */
+
+  /* Width of the stage's left gutter column.
+     `.atlas-stats`, `.atlas-draw` and `.atlas-legend` all sit at left: 18px and
+     read as one column, so their width is one decision, not three. It was three:
+     the stats ribbon was content-sized (3 cards x 92px + 2 x 10px gap = 296px)
+     while the drawing panel hard-coded 264px, and the mismatch was visible as a
+     step in the gutter and, once a sixth tool arrived, as a clipped button. */
+  --atlas-gutter: 296px;
 }
 
 .atlas-app *, .atlas-overlay * { box-sizing: border-box; }
@@ -88,7 +96,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-rail-btn.active { color: var(--atlas-teal); background: rgba(64,155,155,.16); border-color: rgba(114,221,212,.28); }
 .atlas-rail-btn svg { width: 21px; height: 21px; }
 .atlas-rail-btn:focus-visible, .atlas-icon-btn:focus-visible, .switch button:focus-visible, .atlas-btn:focus-visible, .tm-play:focus-visible,
-.tm-btn:focus-visible, .tm-track:focus-visible, .atlas-scrap:focus-visible, .atlas-rel:focus-visible, .atlas-search:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
+.tm-btn:focus-visible, .tm-track:focus-visible, .atlas-scrap:focus-visible, .atlas-rel:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
 .atlas-rail-spacer { flex: 1; }
 .atlas-rail-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua)); display: grid; place-items: center; color: var(--atlas-ink); font-weight: 700; font-size: 13px; margin-top: 6px; }
 
@@ -114,11 +122,6 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .switch button:hover { color: var(--atlas-fg); }
 .switch button.active { color: var(--atlas-ink); background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light)); box-shadow: 0 0 18px rgba(114,221,212,.28); }
 .atlas-grow { flex: 1; }
-.atlas-search { display: flex; align-items: center; gap: 9px; width: min(340px, 30vw); padding: 8px 12px; border-radius: 10px; color: var(--atlas-fg-dim); background: rgba(4,18,26,.6); border: 1px solid var(--atlas-line); cursor: pointer; font: inherit; text-align: left; }
-.atlas-search:hover { border-color: var(--atlas-line-2); color: var(--atlas-fg); }
-.atlas-search span:first-of-type { font-size: 12.5px; }
-.atlas-search svg { width: 15px; height: 15px; }
-.atlas-search .kbd { margin-left: auto; font: 600 10px/1 var(--atlas-mono); color: var(--atlas-fg-dim); border: 1px solid var(--atlas-line-2); border-radius: 5px; padding: 3px 5px; }
 .atlas-icon-btn { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: var(--atlas-fg-dim); background: transparent; border: 1px solid transparent; cursor: pointer; }
 .atlas-icon-btn:hover { color: var(--atlas-teal); background: rgba(64,155,155,.10); }
 .atlas-icon-btn svg { width: 18px; height: 18px; }
@@ -166,8 +169,11 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-scrap .cap b { display: block; font-size: 11.5px; color: var(--atlas-fg-hi); font-weight: 600; }
 .atlas-scrap .cap span { display: block; font: 500 9.5px/1.3 var(--atlas-mono); color: var(--atlas-fg-dim); margin-top: 3px; }
 
-.atlas-stats { position: absolute; left: 18px; top: 16px; display: flex; gap: 10px; }
-.atlas-stat { background: var(--atlas-glass); border: 1px solid var(--atlas-line); border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(10px); min-width: 92px; }
+.atlas-stats { position: absolute; left: 18px; top: 16px; display: flex; gap: 10px; width: var(--atlas-gutter); }
+/* `flex: 1` so the cards divide the gutter rather than defining it — the
+   ribbon's width is now stated once, above, and a fourth stat would share the
+   same column instead of widening it past the panel below. */
+.atlas-stat { flex: 1 1 0; background: var(--atlas-glass); border: 1px solid var(--atlas-line); border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(10px); min-width: 0; }
 .atlas-stat b { display: block; font-size: 20px; font-weight: 700; color: var(--atlas-fg-hi); letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
 .atlas-stat span { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--atlas-fg-dim); }
 
@@ -362,6 +368,17 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .sb-item-body span { display: block; margin-top: 2px; font: 500 9.5px/1.3 var(--atlas-mono); color: var(--atlas-fg-dim); }
 .sb-remove { width: 44px; height: 44px; min-width: 44px; flex: none; border-radius: 8px; border: 0; background: transparent; color: var(--atlas-fg-dim); cursor: pointer; }
 .sb-remove:hover { color: var(--atlas-coral); background: rgba(255,141,110,.12); }
+
+/* ---- scenes as journey stops ---------------------------------------------- */
+.sb-scenes { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px solid var(--atlas-line); }
+.sb-scenes-label { font: 600 10px/1.3 var(--atlas-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--atlas-fg-dim); }
+.sb-scene-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; max-height: 132px; overflow-y: auto; }
+.sb-scene-item label { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; cursor: pointer; }
+.sb-scene-item label:hover { background: rgba(64,155,155,.10); }
+.sb-scene-item input[type="checkbox"] { flex: none; accent-color: var(--atlas-teal); width: 14px; height: 14px; }
+.sb-scene-title { font-size: 12px; color: var(--atlas-fg-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-scenes-note { margin: 0; font-size: 10.5px; line-height: 1.4; color: var(--atlas-fg-dim); }
+
 .sb-actions { display: flex; flex-direction: column; gap: 7px; margin-top: auto; }
 .sb-actions .atlas-btn { flex: none; }
 .atlas-btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -387,21 +404,43 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-journey-chip button:hover { border-color: var(--atlas-mint); color: var(--atlas-mint); }
 
 @media (prefers-reduced-motion: reduce) { .atlas-app *, .atlas-overlay * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
-@media (max-width: 980px) { .atlas-inspector, .atlas-stats, .atlas-legend, .atlas-scrap { display: none; } }
+/* Decluttering for a narrow stage — but NOT the inspector.
+ *
+ * It used to be in this list, and the 760px block below turns it back on as a
+ * bottom sheet, so between 761px and 980px it got neither: no side panel, no
+ * sheet, nothing. Clicking a pin worked the whole time — the pick resolves, the
+ * focus changes, the globe re-highlights — and the card that is supposed to
+ * appear was `display: none`, so the click looked like it had missed. That band
+ * is not exotic: it is a landscape tablet, a split-screen window, and the
+ * in-app browser pane this project is developed in.
+ *
+ * The panel is 320px. At 761px that still leaves ~380px of globe beside the
+ * rail, which is narrow but honest; below 760px the sheet takes over. */
+@media (max-width: 980px) { .atlas-stats, .atlas-legend, .atlas-scrap { display: none; } }
 
-/* ---- Map layers popover (basemap + sun) ---------------------------------- */
-.atlas-layers { position: relative; display: inline-flex; }
-.atlas-layers-pop {
+/* ---- Map layers popover (basemap + sun), and the visibility popover ------ */
+/* `.atlas-vis`/`.atlas-vis-pop` are the same shell as `.atlas-layers`'s, for a
+   different question (which authored categories are drawn, not which sources
+   are) — aliased rather than duplicated. */
+.atlas-layers, .atlas-vis { position: relative; display: inline-flex; }
+.atlas-layers-pop, .atlas-vis-pop {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: var(--z-popover);
   width: 268px; padding: 12px; border-radius: 12px;
   background: var(--atlas-card); border: 1px solid var(--atlas-line);
   box-shadow: var(--atlas-shadow);
   display: flex; flex-direction: column; gap: 8px;
 }
-.atlas-layers-pop .lay-head {
+.atlas-layers-pop .lay-head, .atlas-vis-pop .lay-head {
   font-size: 10px; letter-spacing: .09em; text-transform: uppercase;
   color: var(--atlas-fg-dim); font-weight: 700;
 }
+.vis-row {
+  display: flex; align-items: center; gap: 9px; padding: 8px;
+  border-radius: 9px; font-size: 12.5px; font-weight: 600; color: var(--atlas-fg);
+  cursor: pointer;
+}
+.vis-row:hover { background: rgba(64,155,155,.10); }
+.vis-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--atlas-teal); }
 .lay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .lay-opt, .lay-row {
   display: grid; align-items: center; gap: 2px 8px; padding: 8px;
@@ -518,7 +557,24 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-wordmark b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .atlas-wordmark span { display: none; }
   .atlas-grow { display: none; }
-  .atlas-live, .atlas-sample { flex: 0 0 auto; font-size: 9.5px; padding: 3px 7px; }
+  /* The connection chip yields before the controls do. It is 165px of prose
+     and the only thing in the bar that is purely informational; holding it at
+     its natural width pushed the right-hand cluster past the viewport, so
+     Share and the projection toggle were the first things off the edge. It
+     truncates instead, and its `title` still carries the whole sentence. */
+  .atlas-live, .atlas-sample {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: 9.5px;
+    padding: 3px 7px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  /* Fixed 44px target, not the base 36px: on mobile these are primary touch
+     controls, so they keep the same target as the rail and time-machine
+     buttons even when the browser does not report a coarse pointer (as
+     desktop browser emulation commonly does not). */
   .atlas-top .atlas-icon-btn { flex: 0 0 44px; width: 44px; height: 44px; }
   /* Icon-only search. Left as a flex:1 box with its label hidden it rendered
      as a wide empty pill that looked like a broken input. */
@@ -586,7 +642,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
   /* Panels that assume a desktop gutter. */
   .atlas-drawer { left: 8px; right: 8px; width: auto; }
-  .atlas-layers-pop { width: min(268px, calc(100vw - 24px)); }
+  .atlas-layers-pop, .atlas-vis-pop { width: min(268px, calc(100vw - 24px)); }
   /* The base rail buttons are 42px for dense desktop navigation. On a phone
      they are primary touch controls, so keep the same 44px target as the
      header and time-machine buttons even when the browser does not report a
@@ -663,3 +719,54 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-insp-plainhead .sv-absent svg { width: 14px; height: 14px; flex: 0 0 14px; margin-top: 1px; opacity: .7; }
 .atlas-insp-plainhead .sv-absent span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .atlas-insp-plainhead .sv-absent small { font-size: 10.5px; opacity: .72; }
+
+/* Projection control (3D / 2.5D / 2D), in the top bar beside Map layers.
+   Segmented rather than three separate icon buttons: the three are mutually
+   exclusive answers to one question, and spacing them apart would read as three
+   independent toggles. */
+.atlas-scenemode {
+  display: flex; gap: 2px; padding: 3px;
+  background: rgba(4, 18, 26, .6);
+  border: 1px solid var(--atlas-line);
+  border-radius: 999px;
+}
+.atlas-scenemode-btn {
+  min-width: 38px; padding: 4px 9px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--atlas-fg-dim); cursor: pointer;
+  font: 600 10.5px/1 var(--atlas-mono); letter-spacing: .04em;
+}
+.atlas-scenemode-btn:hover { color: var(--atlas-fg-hi); }
+.atlas-scenemode-btn.active {
+  color: var(--atlas-bg);
+  background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light));
+}
+.atlas-scenemode-btn:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
+/* Narrow viewports. Adding three buttons to a bar that was already full pushed
+   the share button clean off the right edge — measured at 412px: the control
+   ended at 442 and share sat at 448-484, entirely outside the viewport and
+   unreachable. So below 760px the specialist option goes rather than the bar
+   overflowing. 2.5D is the one to drop: it matters when a story carries 3D
+   tilesets or raised tracks, which is desktop work, and 3D/2D is the choice
+   Google Earth itself offers. It stays reachable by widening the window. */
+/* One button instead of three below 760px. Adding a segmented control to a bar
+   that was already nearly full pushed the share button clean off the right
+   edge — measured at 412px, share moved from ending at 404 (inside the
+   viewport) to 429 (outside it, unreachable). Shrinking the segments was not
+   enough. Hiding the control entirely would have cost phones the flat map,
+   which is the width where a flat map is arguably most useful, so the capability
+   collapses instead: one cycling button, 3D <-> 2D. Columbus stays a
+   wide-viewport option, which is honest — it exists for 3D tilesets and raised
+   tracks, and that is desktop work. */
+.atlas-scenemode-cycle { display: none; }
+@media (max-width: 760px) {
+  .atlas-scenemode { display: none; }
+  .atlas-scenemode-cycle {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 34px; height: 34px; padding: 0 8px;
+    border: 1px solid var(--atlas-line); border-radius: 999px;
+    background: rgba(4, 18, 26, .6); color: var(--atlas-fg-dim); cursor: pointer;
+    font: 600 10.5px/1 var(--atlas-mono); letter-spacing: .04em;
+  }
+  .atlas-scenemode-cycle:hover { color: var(--atlas-fg-hi); }
+  .atlas-scenemode-cycle:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
+}

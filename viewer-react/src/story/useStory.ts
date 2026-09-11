@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { loadStory, type Story } from '@companion-atlas/story';
 import { fetchMemoryStory } from '../memory/client.js';
 import { storedMemoryToken } from '../memory/auth.js';
+import { memoryCredentialsAllowed } from '../embed/index.js';
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
 
@@ -39,7 +40,16 @@ export function useStory(): {
   const [isSample, setIsSample] = useState(false);
 
   const params = new URLSearchParams(window.location.search);
-  const memoryParam = params.get('memory');
+  // An iframe's `src` is written by the *embedding* page, so in embed mode
+  // every parameter is attacker-supplied: `?embed=1&memory=https://evil&token=…`
+  // would point Atlas at a server of the embedder's choosing, with credentials,
+  // inside a frame they control — and the viewer would faithfully connect. An
+  // embed renders `?story=` or the bundled sample and nothing else.
+  //
+  // Environment variables are unaffected: those are the deployment's own
+  // choice, not something a third-party page can write.
+  const urlCredentials = memoryCredentialsAllowed(window.location.search);
+  const memoryParam = urlCredentials ? params.get('memory') : null;
   const memoryUrl = memoryParam ?? env.VITE_MEMORY_URL;
   // A URL supplied in the address bar is an explicit connection choice. Do not
   // silently combine it with credentials baked into a different deployment:
@@ -47,8 +57,8 @@ export function useStory(): {
   // credential is the same-origin CI-Server session cookie. A caller can still
   // opt into a bearer/key explicitly with `?token=` or `?apiKey=`.
   const sessionToken = memoryUrl ? storedMemoryToken(memoryUrl) : undefined;
-  const memoryToken = params.get('token') ?? sessionToken ?? (memoryParam == null ? env.VITE_MEMORY_TOKEN : undefined);
-  const memoryApiKey = params.get('apiKey') ?? (memoryParam == null ? env.VITE_MEMORY_API_KEY : undefined);
+  const memoryToken = (urlCredentials ? params.get('token') : null) ?? sessionToken ?? (memoryParam == null ? env.VITE_MEMORY_TOKEN : undefined);
+  const memoryApiKey = (urlCredentials ? params.get('apiKey') : null) ?? (memoryParam == null ? env.VITE_MEMORY_API_KEY : undefined);
   const source: StorySource = memoryUrl ? 'memory' : 'story';
 
   useEffect(() => {

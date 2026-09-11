@@ -58,6 +58,14 @@ export const PlaneIcon = (p: P) => (
   <svg {...S(p)}><path d="M10.5 13.5 3 11l18-7-7 18-2.5-7.5L10.5 13.5z" /></svg>
 );
 export const PlusIcon = (p: P) => <svg {...S({ ...p, strokeWidth: 1.8 })}><path d="M12 5v14M5 12h14" /></svg>;
+/** The drawing tools. A plus said "add something" — true of the Collect button
+ *  and the layer picker too, which is why it could not also mean "draw". */
+export const PencilIcon = (p: P) => (
+  <svg {...S(p)}>
+    <path d="M4 20l.9-4L16.3 4.6a2.1 2.1 0 0 1 3 3L7.9 19.1 4 20z" />
+    <path d="M14.6 6.6l2.8 2.8" />
+  </svg>
+);
 export const FlagIcon = (p: P) => (
   <svg {...S(p)}><path d="M5 21V4" /><path d="M5 5c2-1.5 4-1.5 6 0s4 1.5 6 0v9c-2 1.5-4 1.5-6 0s-4-1.5-6 0V5z" /></svg>
 );
@@ -86,4 +94,16 @@ export const BuildingIcon = (p: P) => (
     <path d="M3 21h18M5 21V6l7-3v18M19 21V11l-7-3" />
     <path d="M8.5 8.5v.01M8.5 12v.01M8.5 15.5v.01M15.5 13v.01M15.5 16.5v.01" />
   </svg>
+);
+
+/** Import & export — arrows crossing in opposite directions. Distinct from
+ *  ShareIcon, which means "copy a link to this view", not "move data". */
+export const ExchangeIcon = (p: P) => (
+  <svg {...S(p)}><path d="M7 21V7m0 0L3.5 10.5M7 7l3.5 3.5" /><path d="M17 3v14m0 0 3.5-3.5M17 17l-3.5-3.5" /></svg>
+);
+
+/** Present — a framed slide. PlayIcon already means "play the journey on the
+ *  globe", which is a different thing from stepping through authored scenes. */
+export const SlidesIcon = (p: P) => (
+  <svg {...S(p)}><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M12 17v3m-3 0h6" /><path d="m10 8.5 4 2.5-4 2.5z" /></svg>
 );

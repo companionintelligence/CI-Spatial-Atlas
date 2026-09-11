@@ -1,45 +1,24 @@
-# Companion Atlas — containerized 3D processing server + web viewer(s).
+# Companion Atlas — containerized 3D processing server + web viewer.
 #
-#   viewer        legacy static web viewer (nginx) — renders shared 4D stories
-#   viewer-react  consolidated viewer (Resium/CesiumJS + R3F/WebXR, ADR-0001) —
-#                 the one with live Companion Memory + Places integration
-#   atlas-api     3D processing API + MCP server (REST + /mcp)
-#   worker        GPU reconstruction worker (photogrammetry / gaussian splat)
-#   minio         S3-compatible object store for media + generated 3D Tiles
-#   postgres      story / scene / media metadata
-#   redis         job queue (ingest → reconstruct → tile)
+#   viewer     the viewer (Resium/CesiumJS + R3F/WebXR, ADR-0001), with live
+#              Companion Memory + Places integration — built from
+#              viewer-react/Dockerfile
+#   atlas-api  3D processing API + MCP server (REST + /mcp)
+#   worker     GPU reconstruction worker (photogrammetry / gaussian splat)
+#   minio      S3-compatible object store for media + generated 3D Tiles
+#   postgres   story / scene / media metadata
+#   redis      job queue (ingest → reconstruct → tile)
 #
 # Bring up the app tier (viewer + api + stores):
 #   docker compose up viewer atlas-api minio postgres redis
-# Or the consolidated viewer (talks directly to an external CI-Server, no
-# atlas-api dependency — set VITE_MEMORY_URL):
-#   docker compose up viewer-react
+# The viewer can also run alone, talking directly to an external CI-Server with
+# no atlas-api dependency — set VITE_MEMORY_URL:
+#   docker compose up viewer
 # Add reconstruction (needs an NVIDIA GPU):
 #   docker compose --profile gpu up worker
 
 services:
   viewer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        CESIUM_ION_TOKEN: ${CESIUM_ION_TOKEN:-}
-        GOOGLE_MAP_PLATFORM: ${GOOGLE_MAP_PLATFORM:-}
-        MAPBOX_API_KEY: ${MAPBOX_API_KEY:-}
-        ESRI_API_KEY: ${ESRI_API_KEY:-}
-    ports:
-      # Container-side must be 8080: the viewer image serves the static bundle
-      # with nginx `listen 8080` (see Dockerfile), matching the port this app
-      # advertises to CI-Hub in hub/config.json and hub/docker-compose.json.
-      # This said "4173:80" until now, which pointed at a dead port — nothing
-      # listens on 80 in that image. Host side stays 4173 so it keeps matching
-      # ATLAS_VIEWER_BASE_URL below, the README quickstart, and the Playwright
-      # baseURL.
-      - "4173:8080"
-    depends_on:
-      - atlas-api
-
-  viewer-react:
     build:
       context: .
       dockerfile: viewer-react/Dockerfile
@@ -48,8 +27,34 @@ services:
         VITE_MEMORY_URL: ${VITE_MEMORY_URL:-}
         VITE_MEMORY_TOKEN: ${VITE_MEMORY_TOKEN:-}
         VITE_MEMORY_API_KEY: ${VITE_MEMORY_API_KEY:-}
+        # Terrain heights without an account. Cesium reads exactly one terrain
+        # wire format (quantized-mesh-1.0) and nobody publishes a free global
+        # service in it, so the keyless route is necessarily "point at a
+        # tileset you built and host yourself" — which only works if the URL
+        # can reach a build. Vite inlines VITE_* at BUILD time, so for a
+        # container this has to be a build arg: setting it in `environment:`
+        # on the runtime service would change nothing, the bundle is already
+        # compiled. `VITE_TERRAIN_CREDIT` is not defaulted on purpose — every
+        # free global DEM worth tiling (Copernicus certainly) requires its own
+        # attribution, and only the operator knows which DEM they tiled.
+        # See viewer-react/src/renderers/terrain.ts for what the tileset must
+        # satisfy, including the EGM2008→ellipsoid conversion coastal pins
+        # depend on.
+        VITE_TERRAIN_URL: ${VITE_TERRAIN_URL:-}
+        VITE_TERRAIN_CREDIT: ${VITE_TERRAIN_CREDIT:-}
+        # Where "Add a photo or video" uploads to. Defaulted to the atlas-api
+        # service's published address rather than left empty: the stack below
+        # runs that API and MinIO, so an image built from this file that could
+        # not reach them would be disabled against a store sitting next to it.
+        # Must match ATLAS_CORS_ORIGINS on atlas-api from the other direction.
+        VITE_ATLAS_API: ${VITE_ATLAS_API:-http://localhost:8787/api}
     ports:
-      - "4174:80"
+      # Container-side must be 8080: the viewer image serves the static bundle
+      # with nginx `listen 8080` (see viewer-react/Dockerfile), matching the
+      # port this app advertises to CI-Hub in hub/config.json and
+      # hub/docker-compose.json. Host side is 4174, matching the viewer's dev
+      # port and ATLAS_VIEWER_BASE_URL below.
+      - "4174:8080"
 
   atlas-api:
     build:
@@ -57,12 +62,26 @@ services:
       dockerfile: server/Dockerfile
     environment:
       PORT: "8787"
-      ATLAS_VIEWER_BASE_URL: ${ATLAS_VIEWER_BASE_URL:-http://localhost:4173}
+      ATLAS_VIEWER_BASE_URL: ${ATLAS_VIEWER_BASE_URL:-http://localhost:4174}
       ATLAS_API_BASE_URL: ${ATLAS_API_BASE_URL:-http://localhost:8787/api}
       DATABASE_URL: postgres://atlas:atlas@postgres:5432/atlas
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: atlas
+      # Without these the upload endpoint answers 503 "storage is not
+      # configured" — honest, but not useful in a stack that ships MinIO. The
+      # bucket named above must exist: MinIO does not create one on write.
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-atlas}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-atlas-secret}
+      ATLAS_MAX_UPLOAD_BYTES: ${ATLAS_MAX_UPLOAD_BYTES:-33554432}
+      # The viewer service below is a different origin from this one (:8080 vs
+      # :8787), so the browser preflights every upload. Without this the file
+      # picker works, the server is healthy, and nothing ever arrives.
+      # localhost:4174 — the *host* port the viewer is published on above
+      # (4174:8080). The browser's Origin is the address a person typed, not
+      # the container's internal port, and getting that wrong fails only in the
+      # browser, silently.
+      ATLAS_CORS_ORIGINS: ${ATLAS_CORS_ORIGINS:-http://localhost:4174}
       # Suite + auth wiring (see .env.default)
       CI_MEMORY_URL: ${CI_MEMORY_URL:-}
       CI_MEMORY_API_KEY: ${CI_MEMORY_API_KEY:-}

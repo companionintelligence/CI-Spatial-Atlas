@@ -1,9 +1,22 @@
 # Architectural Product Plan for 'Companion Atlas': WebXR, WebGPU, and Planetary-Scale Open-Source Ecosystems
 
-> Historical planning doc, retained for its engine/rendering research. Superseded
-> as product direction by [`REIMAGINE.md`](REIMAGINE.md), which recommends
-> CesiumJS over the three.js/WebXR path outlined below. The product was renamed
-> from "Companion Earth" to "Companion Atlas" during that reimagining.
+> **Status: original research paper, partly superseded.** This is the strategy
+> document written before the current implementation, kept for the reasoning and
+> the citations. Two of its conclusions no longer describe the code:
+>
+> - **Renderer.** It argues for a bespoke three.js/TSL engine with IWSDK. The
+>   shipped viewer is Resium/CesiumJS for desktop and mobile, with three.js
+>   (React-Three-Fiber) confined to the WebXR path — see
+>   [`docs/adr/0001-resium-viewer-r3f-xr.md`](docs/adr/0001-resium-viewer-r3f-xr.md).
+> - **Visual regression.** The Playwright pixel-diff pipeline described below
+>   existed for the removed vanilla-TS viewer and does not exist today; see
+>   [`docs/architecture.md` §8](docs/architecture.md#8-known-gaps--deliberately-out-of-scope-today).
+>
+> Product direction was superseded by [`REIMAGINE.md`](REIMAGINE.md), which
+> recommends CesiumJS over the three.js/WebXR path outlined below; the product
+> was renamed from "Companion Earth" to "Companion Atlas" during that
+> reimagining. For how the system actually works now, read
+> [`docs/architecture.md`](docs/architecture.md).
 
 The conceptualization and execution of 'Companion Atlas' represent a formidable convergence of spatial computing, geographic information systems (GIS), and high-performance web graphics. As a cross-platform, planetary-scale immersive application, its architecture must reconcile the extreme computational demands of rendering a 1:1 scale Earth with the strict latency and framerate requirements of immersive headsets such as the Meta Quest 3, alongside graceful fallbacks for mobile and desktop browser environments. The strategic mandate of this product plan is to define a comprehensive technical blueprint explicitly optimized for an autonomous AI coding agent. This agent will be responsible for orchestrating the application's infrastructure, developing custom shading logic, and managing real-time geospatial data pipelines entirely within an open-source software (OSS) ecosystem.
 

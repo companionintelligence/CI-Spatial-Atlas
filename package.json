@@ -8,43 +8,22 @@
   "workspaces": [
     "packages/*",
     "viewer-react",
-    "server"
+    "server",
+    "third_party/ci-common/packages/tokens"
   ],
   "scripts": {
-    "dev": "vite",
-    "dev:viewer-react": "npm run build -w packages/story-schema && npm run dev -w viewer-react",
-    "vibe:dev": "vite --host 127.0.0.1 --port 4173",
-    "build": "tsc --noEmit && vite build",
-    "build:viewer-react": "npm run build -w packages/story-schema && npm run build -w viewer-react",
-    "vibe:build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "test:visual": "playwright test --config=playwright.config.js",
-    "test:visual:update": "playwright test --config=playwright.config.js --update-snapshots",
-    "vibe:test": "playwright test --config=playwright.config.js",
-    "vibe:test:update": "playwright test --config=playwright.config.js --update-snapshots",
-    "vibe:loop": "npm run vibe:build && npm run vibe:test",
-    "textures:build": "tsx scripts/generate-textures.ts",
-    "typecheck": "tsc --noEmit",
+    "dev": "npm run build -w packages/story-schema && npm run dev -w viewer-react",
+    "build": "npm run build -w packages/story-schema && npm run build -w viewer-react",
+    "preview": "npm run preview -w viewer-react",
+    "test": "npm run build -w packages/story-schema && npm test -w viewer-react && npm test -w server",
+    "typecheck": "npm run build -w packages/story-schema && npm run typecheck -w server",
     "lint:canon": "node scripts/lint-canon.mjs .",
-    "account:new": "tsx scripts/new-account.ts",
-    "docs:screenshots": "tsx scripts/capture-doc-screenshots.ts",
-    "cesium:assets": "tsx scripts/copy-cesium-assets.ts"
-  },
-  "dependencies": {
-    "3d-tiles-renderer": "^0.4.22",
-    "cesium": "^1.143.0",
-    "three": "^0.183.0"
+    "account:new": "tsx scripts/new-account.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^25.5.0",
-    "@types/pngjs": "^6.0.5",
-    "@types/three": "^0.183.1",
-    "jpeg-js": "^0.4.4",
-    "ktx2-encoder": "^0.5.1",
-    "pngjs": "^7.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.1.5"
+    "typescript": "^5.9.3"
   }
 }

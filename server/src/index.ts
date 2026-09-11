@@ -5,30 +5,55 @@
  * (stateless: a fresh server + transport per request). Suite services
  * (OpenClaw, Hermes) and OIDC-authenticated clients connect here; local agents
  * use the stdio entry in mcp-stdio.ts instead.
+ *
+ * Because this entry point is the one reachable over the network, it is also
+ * where the dev auth bypass is fenced off: `assertAuthSafeToBoot()` runs before
+ * anything binds a port.
  */
 
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
-import { buildApi } from './api.js';
+import { buildApi, type ApiDeps } from './api.js';
+import { assertAuthSafeToBoot } from './auth.js';
+import { corsPolicyFromEnv } from './cors.js';
 import { createConnectors } from './connectors.js';
-import { createAtlasMcpServer, type AtlasDeps } from './mcp.js';
+import { createAtlasMcpServer } from './mcp.js';
+import { objectStoreFromEnv } from './object-store.js';
 import { InMemoryStore } from './store.js';
+
+// Fail fast, before the port is bound: an issuer-less deployment would serve
+// every caller as the fully-scoped dev subject. Exiting non-zero (rather than
+// throwing) keeps the remedy readable in container logs instead of burying it
+// under an unhandled-rejection stack trace.
+try {
+  assertAuthSafeToBoot();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+}
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '0.0.0.0';
 
-const deps: AtlasDeps = {
+const deps: ApiDeps = {
   store: new InMemoryStore(),
   connectors: createConnectors(),
   viewerBaseUrl: process.env.ATLAS_VIEWER_BASE_URL ?? 'http://localhost:4173',
-  apiBaseUrl: process.env.ATLAS_API_BASE_URL ?? `http://localhost:${PORT}/api`
+  apiBaseUrl: process.env.ATLAS_API_BASE_URL ?? `http://localhost:${PORT}/api`,
+  // The one place the S3_* variables are read. Null when they are unset, which
+  // the upload routes report as "storage is not configured" with the missing
+  // variable names — the ordinary state on a developer machine, since MinIO
+  // exists only in docker-compose.yml.
+  objectStore: objectStoreFromEnv()
 };
 
 const app = buildApi(deps);
 
-// Mount the MCP API over Streamable HTTP (stateless).
+// Mount the MCP API over Streamable HTTP (stateless). The global auth
+// preHandler in buildApi() has already populated `req.auth`, so each
+// per-request MCP server is built scoped to the caller rather than unscoped.
 app.post('/mcp', async (req, reply) => {
-  const server = createAtlasMcpServer(deps);
+  const server = createAtlasMcpServer({ ...deps, auth: req.auth });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   reply.hijack();
   reply.raw.on('close', () => {
@@ -39,9 +64,23 @@ app.post('/mcp', async (req, reply) => {
   await transport.handleRequest(req.raw, reply.raw, req.body);
 });
 
+// Said out loud at boot, because a closed CORS policy fails in the *browser* —
+// the server log for a refused upload is a clean 200 on the preflight's absence
+// and nothing at all for the request that never came. An operator who cannot
+// see this line has no way to tell "not allowed from that origin" apart from
+// "the viewer is broken".
+const bootCors = corsPolicyFromEnv();
+
 app
   .listen({ port: PORT, host: HOST })
-  .then(() => app.log.info(`Companion Atlas API + MCP on http://${HOST}:${PORT} (MCP at /mcp)`))
+  .then(() => {
+    app.log.info(`Companion Atlas API + MCP on http://${HOST}:${PORT} (MCP at /mcp)`);
+    app.log.info(
+      bootCors.origins.length
+        ? `CORS: browser calls allowed from ${bootCors.origins.join(', ')}${bootCors.explicit ? '' : ' (development defaults)'}`
+        : 'CORS: no cross-origin browser calls allowed. The viewer is a separate origin in every shipped configuration — set ATLAS_CORS_ORIGINS to its origin, or uploads will fail at preflight.',
+    );
+  })
   .catch((err) => {
     app.log.error(err);
     process.exit(1);

@@ -130,6 +130,23 @@ export const TrackSample = z.object({
   time: Iso8601,
 });
 
+/**
+ * A drawn ring/path of vertices, for `line` and `polygon`.
+ *
+ * Deliberately `GeoPoint[]` — the same `{lat,lon,height}` objects every other
+ * placed item uses — and NOT GeoJSON's `[lon, lat]` tuples. Importers convert
+ * once, at the document boundary, so nothing downstream ever has to remember
+ * which of the two axis orders it is holding; silently swapped lat/lon is the
+ * single most common defect in geo code and it renders as "somewhere in the
+ * Gulf of Guinea" rather than as an error.
+ *
+ * Rings are stored UNCLOSED (no repeated final vertex). GeoJSON and KML both
+ * require the closing vertex on the wire, so the importers strip it and the
+ * exporter puts it back; Cesium's polygon hierarchy does not want it, and
+ * keeping it would leave a zero-length edge that breaks outline widths.
+ */
+export const GeoPath = z.array(GeoPoint);
+
 const itemBase = {
   id: z.string(),
   title: z.string().optional(),
@@ -162,6 +179,52 @@ export const Item = z.discriminatedUnion('type', [
   z.object({ ...itemBase, type: z.literal('marker'), position: GeoPoint, icon: z.string().optional(), color: z.string().optional() }),
   z.object({ ...itemBase, type: z.literal('note'), position: GeoPoint, text: z.string() }),
   z.object({ ...itemBase, type: z.literal('track'), path: z.array(TrackSample).min(1), color: z.string().optional() }),
+  // `line`/`polygon` are DRAWN geometry — a border, a route someone sketched, a
+  // parcel outline, anything imported from GeoJSON/KML. They are not `track`:
+  // a track's vertices each carry a timestamp and answer "where were you at
+  // 09:14?", which is why it renders as a moving Cesium entity with a path.
+  // A line's vertices carry no time at all and the whole feature shares one
+  // `time` from `itemBase`. Conflating the two (the obvious temptation, since
+  // both are polylines on screen) would either force fake timestamps onto
+  // drawn shapes or throw away the sampling that makes a track 4D.
+  //
+  // Style lives in flat, primitive fields rather than a nested `style` object,
+  // matching `marker.color`/`track.color` — and every field maps 1:1 onto a
+  // CZML `polyline`/`polygon` property, which is the constraint that keeps the
+  // model honest: if it can't render, it doesn't belong here. Colours are
+  // permissive strings (`#rgb`, `#rrggbb`, `#rrggbbaa`) like `marker.color`;
+  // `cssToRgba` in ./czml is the one place that has to parse them.
+  z.object({
+    ...itemBase,
+    type: z.literal('line'),
+    positions: GeoPath.min(2),
+    color: z.string().optional(),
+    /** Stroke width in screen pixels (CZML `polyline.width`), not metres. */
+    width: z.number().optional(),
+    /**
+     * Drape the line over terrain instead of drawing it at its vertices'
+     * heights. Defaults (in the renderer, not here) to true when no vertex
+     * carries a height: a 2D import drawn at h=0 sinks under any real terrain
+     * and reads as "my GeoJSON didn't load".
+     */
+    clampToGround: z.boolean().optional(),
+  }),
+  z.object({
+    ...itemBase,
+    type: z.literal('polygon'),
+    /** Outer ring, unclosed — see `GeoPath`. */
+    positions: GeoPath.min(3),
+    /** Inner rings punched out of the outer one (GeoJSON rings 1..n, KML `innerBoundaryIs`). */
+    holes: z.array(GeoPath.min(3)).optional(),
+    fillColor: z.string().optional(),
+    /** 0..1. `0` means outline-only — that is how KML's `<fill>0</fill>` arrives. */
+    fillOpacity: z.number().min(0).max(1).optional(),
+    outlineColor: z.string().optional(),
+    /** Screen pixels. `0` means no outline — how KML's `<outline>0</outline>` arrives. */
+    outlineWidth: z.number().optional(),
+    /** See `line.clampToGround`; for a polygon this also means "ignore per-vertex heights". */
+    clampToGround: z.boolean().optional(),
+  }),
   z.object({ ...itemBase, type: z.literal('model'), position: GeoPoint, gltf: z.string(), scale: z.number().optional() }),
   z.object({ ...itemBase, type: z.literal('splat'), position: GeoPoint.optional(), tileset: z.string().optional(), splatUrl: z.string().optional() }),
   z.object({ ...itemBase, type: z.literal('tileset'), position: GeoPoint.optional(), tileset: z.string() }),
@@ -188,13 +251,79 @@ export const MediaItem = z.object({
   sourceMemoryId: z.string().optional(),
 });
 
+/**
+ * The credit a layer's source requires, carried with the layer.
+ *
+ * This is a licence **condition**, not presentation polish. Nearly every open
+ * source a layer can point at is attribution-conditioned — OpenStreetMap
+ * (ODbL), EOX and CARTO (CC BY), OpenSeaMap (CC BY-SA) — so a story that
+ * carries the layer but drops the credit is a story that cannot lawfully be
+ * published. Publishing stories is what this document format exists for, which
+ * is why this lives on `Layer` itself rather than in the free-form `style` bag
+ * where a server round-trip or a renderer that ignores unknown style keys can
+ * silently lose it.
+ */
+export const LayerAttribution = z.object({
+  /** The credit line to display, e.g. "© OpenStreetMap contributors". */
+  text: z.string(),
+  /** Licence name or identifier, e.g. "ODbL-1.0", "CC BY 4.0", "CC BY-SA 2.0". */
+  licence: z.string().optional(),
+  /** Link for the credit — the source's page or the licence deed. */
+  url: z.string().optional(),
+  /**
+   * True when the licence requires the notice on the map itself rather than
+   * behind an attribution control (Mapbox's terms ask for this; Esri's do not).
+   */
+  onScreen: z.boolean().optional(),
+});
+
+/**
+ * How to actually fetch and decode a layer's `uri`.
+ *
+ * `kind` says what the layer *is* for the scene graph; it does not say how to
+ * load it, and it is lossy in both directions that matter. `kind: 'imagery'`
+ * spans four mutually incompatible tile protocols (XYZ, TMS, WMTS, WMS) that
+ * cannot be told apart from a URL at fetch time, and `kind: 'geojson'` is also
+ * where KML and CZML land. Guessing wrong produces no error — the requests are
+ * well-formed and simply address tiles that do not exist, so the globe stays
+ * blank with nothing logged to explain it (the same failure mode
+ * `viewer-react/src/renderers/basemaps.ts` documents for a mismatched tiling
+ * scheme). `format` is the non-lossy statement of what the endpoint speaks.
+ */
+export const LayerFormat = z.enum([
+  'xyz',
+  'tms',
+  'wmts',
+  'wms',
+  'geojson',
+  'kml',
+  'czml',
+  '3d-tiles',
+  'gaussian-splat',
+  'quantized-mesh',
+]);
+
 export const Layer = z.object({
   id: z.string(),
   kind: z.enum(['imagery', 'terrain', '3d-tiles', 'gaussian-splat', 'geojson', 'model', 'pin']),
+  /** Human label for a layer list; `id` is a key, not something to show. */
+  name: z.string().optional(),
   uri: z.string().optional(),
+  /** Wire format of `uri`. See `LayerFormat` — `kind` cannot stand in for it. */
+  format: LayerFormat.optional(),
+  /** Required credit for the layer's source. See `LayerAttribution`. */
+  attribution: LayerAttribution.optional(),
   style: z.record(z.unknown()).optional(),
   availability: z.object({ start: Iso8601, stop: Iso8601.optional(), end: Iso8601.optional() }).optional(),
   opacity: z.number().optional(),
+  /** Drawn state. Absent means visible — a layer in the document is shown. */
+  visible: z.boolean().optional(),
+  /**
+   * Draw order, low to high. Array position is not durable across a server
+   * round-trip (stores and JSON transports are free to reorder), and there was
+   * no z-order field at all, so overlay stacking could not be expressed.
+   */
+  order: z.number().optional(),
 });
 
 export const Basemap = z.object({
@@ -271,9 +400,12 @@ export type Media = z.infer<typeof Media>;
 export type Provenance = z.infer<typeof Provenance>;
 export type Derived3d = z.infer<typeof Derived3d>;
 export type TrackSample = z.infer<typeof TrackSample>;
+export type GeoPath = z.infer<typeof GeoPath>;
 export type Item = z.infer<typeof Item>;
 export type ItemType = Item['type'];
 export type MediaItem = z.infer<typeof MediaItem>;
+export type LayerAttribution = z.infer<typeof LayerAttribution>;
+export type LayerFormat = z.infer<typeof LayerFormat>;
 export type Layer = z.infer<typeof Layer>;
 export type Basemap = z.infer<typeof Basemap>;
 export type Scene = z.infer<typeof Scene>;

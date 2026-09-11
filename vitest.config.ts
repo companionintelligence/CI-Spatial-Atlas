@@ -11,14 +11,16 @@ process.env.VITE_GOOGLE_MAPS_API_KEY ??= 'test-maps-key';
 
 export default defineConfig({
   test: {
-    // `tests/visual` belongs to Playwright (see playwright.config.ts `testDir`).
-    // Without this, vitest's default spec glob collects those files and dies on
-    // `test.use()` — three permanently-red files that train everyone to ignore a
-    // red run, which is how a real failure gets missed.
+    // `viewer-react/tests` belongs to Playwright (see
+    // viewer-react/playwright.capture.config.js `testDir`); the Vitest suites
+    // live in `viewer-react/test`. Without this, vitest's default spec glob
+    // collects the capture scripts and dies on `test.use()` — permanently-red
+    // files that train everyone to ignore a red run, which is how a real
+    // failure gets missed.
     // `.claude/worktrees` holds other agents' checkouts of this same repo. The
     // default spec glob walks into them and runs a second, older copy of every
     // suite — locally that doubled the run and reported passes from code that
     // is not the working tree.
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/visual/**', '**/.claude/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'viewer-react/tests/**', '**/.claude/**'],
   },
 });

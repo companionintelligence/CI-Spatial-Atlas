@@ -30,7 +30,7 @@ can open via a link.
 
 | Capability | Today | Disposition |
 |---|---|---|
-| Renderer | **Done.** Cesium (`src/cesium/`) is the default; bespoke three.js (`src/systems/*`) remains for `?static=1` tests and WebXR | Project `Story` → CZML + `Clock` for full timeline scrubbing (open) |
+| Renderer | **Done.** One viewer: Resium/Cesium (`viewer-react/src/renderers/CesiumStoryViewer.tsx`) on desktop + mobile, R3F + `@react-three/xr` (`viewer-react/src/renderers/xr/`) in a headset | Project `Story` → CZML + `Clock` for full timeline scrubbing (open) |
 | 3D Tiles | NASA‑AMMOS `3d-tiles-renderer` (Google/Cesium ion) `tilesSystem.ts`, classic renderer only | Superseded by Cesium's native 3D Tiles/terrain support in the default renderer |
 | Scrapbook | localStorage pins per "account" `scrapbookSystem.ts` | **Generalize** into the `Story`/`Scene`/`MediaItem` schema |
 | Journeys | `setInterval` auto‑fly between pins (`main.ts`) | **Generalize** into a timeline‑driven clock |
@@ -136,8 +136,9 @@ Connectors (`server/src/connectors.ts`):
 
 ## 5. The 4D `Story` data model
 
-The portable unit, defined once in `src/atlas/schema.ts` (viewer types) and
-mirrored as a Zod runtime schema in `server/src/schema.ts`:
+The portable unit, defined once as Zod in `packages/story-schema/`
+(`@companion-atlas/story`) and mirrored as a runtime schema in
+`server/src/schema.ts`:
 
 - **`Story`** — id, title, basemap, `timeline`, `media[]`, `layers[]`,
   `scenes[]`, access, provenance.
@@ -187,17 +188,18 @@ path: a person adds scenes/layers and tweaks the timeline before publishing.
 - **Phase 0 — direction + scaffold (this branch).** `Story` schema (viewer +
   server), MCP API + REST + connectors + pipeline scaffold, Docker/compose,
   OIDC stub, and a backward‑compatible `?story=` loader on the existing globe.
-  Existing vibe loop stays green; no visual baselines change.
+  Existing test gates stay green.
 - **Phase 1 — live backend.** Real Postgres/Redis/MinIO, Companion OIDC
   verification, CI‑Server memory connector; viewer loads stories from the API.
-- **Phase 2 — CesiumJS viewer. Substantially delivered.** Cesium (ion World
-  Imagery + World Terrain + OSM Buildings, `src/cesium/`) is now the default
-  live renderer behind `?renderer=cesium|classic` — see
-  [`docs/architecture.md` §11](docs/architecture.md#11-cesium-renderer). Still
-  open: projecting `Story` → CZML + `Clock` for full timeline scrubbing, and
-  Gaussian‑splat layers. three.js remains — not as a deprecated fallback, but
-  because `?static=1` visual regression needs a pixel‑diffable renderer and
-  WebXR has no Cesium equivalent yet.
+- **Phase 2 — CesiumJS viewer. Delivered.** Resium/Cesium (ion World Imagery +
+  World Terrain + OSM Buildings) is the viewer, in `viewer-react/`; the bespoke
+  three.js renderer has been removed. three.js remains only *inside* the WebXR
+  path (`viewer-react/src/renderers/xr/`, via React-Three-Fiber), because Cesium
+  still has no WebXR equivalent — see
+  [`docs/architecture.md` §3](docs/architecture.md#3-renderer-selection). Still
+  open: projecting `Story` → CZML + `Clock` for full timeline scrubbing,
+  Gaussian‑splat layers, and re-establishing visual regression baselines against
+  Resium (the pixel‑diffable `?static=1` renderer went with the old viewer).
 - **Phase 3 — reconstruction at scale.** GPU worker live (COLMAP + ODM +
   Nerfstudio), splat → 3D Tiles, `auto_compose`, sharing + Hermes delivery.
 

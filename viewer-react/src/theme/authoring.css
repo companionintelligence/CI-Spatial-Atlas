@@ -1,0 +1,451 @@
+/* ————————————————————————————————————————————————————————————————
+   Drawing tools — the create/edit/delete panel over the globe.
+
+   Lives beside `atlas.css` rather than inside it because it belongs to the
+   authoring feature and is imported by `authoring/Toolbar.tsx`; the shell's
+   stylesheet stays the shell's. It reuses the shell's grammar deliberately —
+   the mode switcher is `.switch`'s pill, the panel is the inspector's glass,
+   the focus ring is the one every other control uses — so the tools read as
+   part of the app rather than as a plugin bolted onto it.
+
+   Every colour is a custom property from `theme/atlas.css`. Where a translucent
+   fill is wanted, `color-mix` dilutes a token and the solid token is repeated
+   as the preceding declaration, so a browser without `color-mix` still gets a
+   readable panel instead of a transparent one. The ONE place a literal colour
+   appears in the whole feature is a style swatch's `background`, set inline
+   from the item's own `color` field — that is the value being edited, not
+   chrome.
+   ———————————————————————————————————————————————————————————————— */
+
+.atlas-draw {
+  position: absolute;
+  grid-area: stage;
+  z-index: var(--z-panel);
+  /* Below `.atlas-stats` (top: 16px, ~62px tall), left-aligned with it and
+     with `.atlas-legend`, so the stage's left gutter reads as one column. */
+  left: 18px;
+  top: 92px;
+  /* The same column as the stats ribbon above and the legend below — see
+     `--atlas-gutter` in atlas.css. Hard-coding 264px here left a visible step
+     in the gutter and, once the measure tool made six, clipped the last one. */
+  width: var(--atlas-gutter, 296px);
+  max-height: calc(100% - 92px - 130px); /* clear of the time machine */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--atlas-line-2);
+  background: var(--atlas-card);
+  background: var(--atlas-glass);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--atlas-shadow);
+  /* The panel may be mounted inside `.atlas-overlay`, which is
+     `pointer-events: none` so the globe stays draggable underneath it. Every
+     control in here is interactive, so it opts back in — the same thing
+     `.atlas-scrap` does. */
+  pointer-events: auto;
+  font-size: 12px;
+  color: var(--atlas-fg);
+}
+.atlas-draw::-webkit-scrollbar { width: 8px; }
+.atlas-draw::-webkit-scrollbar-thumb { background: var(--atlas-line-2); border-radius: 8px; }
+
+/* ---- mode switcher ------------------------------------------------------- */
+/* Six tools now, not five: the measure tool joined the row because it is armed
+   and disarmed exactly like the others, and putting it anywhere else would make
+   "which tool is live" two questions instead of one. `1fr` columns keep the
+   pills equal; icon-only keeps six of them legible in the gutter's width, which
+   a 9px caption under each no longer was — "Measure" rendered clipped. */
+.draw-modes {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 55%, transparent);
+}
+/* Square, centred, no caption: the name is on `title` and `aria-label`, which
+   is where a pointer and a screen reader look for it anyway. `aspect-ratio`
+   rather than a fixed height so the row stays square at whatever width the
+   gutter gives it — at 296px that lands near 42px, already a real tap target
+   before the coarse-pointer floor below. */
+.draw-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--atlas-fg-dim);
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.draw-mode svg { width: 18px; height: 18px; }
+/* The measure tool is not a drawing tool, and its active state says so: dusk
+   rather than the teal→aqua gradient every shape tool lights up with. It is the
+   same signal `entities.ts` uses on the globe, so the pill and the geometry it
+   produces are recognisably the same thing. */
+.draw-mode.measure.active {
+  background: linear-gradient(135deg, var(--atlas-dusk), var(--atlas-coral));
+  box-shadow: 0 0 16px rgba(255, 178, 122, .26);
+}
+.draw-mode:hover { color: var(--atlas-fg); }
+.draw-mode.active {
+  color: var(--atlas-ink);
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light));
+  box-shadow: 0 0 16px rgba(114, 221, 212, .26);
+}
+
+/* ---- rows, actions ------------------------------------------------------- */
+.draw-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.draw-action {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--atlas-line-2);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  color: var(--atlas-fg);
+  font: 600 11.5px inherit;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.draw-action svg { width: 14px; height: 14px; }
+.draw-action:hover:not(:disabled) { border-color: var(--atlas-teal); color: var(--atlas-fg-hi); }
+.draw-action:disabled { opacity: .42; cursor: not-allowed; }
+.draw-action.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua));
+  color: var(--atlas-ink);
+  box-shadow: 0 6px 20px rgba(0, 169, 167, .26);
+}
+.draw-action.danger { color: var(--atlas-coral); border-color: var(--atlas-line); }
+.draw-action.danger:hover:not(:disabled) {
+  border-color: var(--atlas-coral);
+  background: color-mix(in srgb, var(--atlas-coral) 14%, transparent);
+  color: var(--atlas-coral);
+}
+/* Undo/Redo still carry their shortcut, because those two are the ones people
+   reach for by keyboard and the hint is the only place the binding is written
+   down. The draft row's hints are gone: Enter/Backspace/Esc while a shape is in
+   progress are guessable, and three chips across three buttons wrapped the row
+   onto two lines and pushed Finish out on its own. */
+.draw-action kbd {
+  font: 600 9px/1 var(--atlas-mono);
+  color: var(--atlas-fg-dim);
+  border: 1px solid var(--atlas-line-2);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+/* Buttons in a row are equals: `1 1 0` rather than `1 1 auto`, so all three
+   take a third each regardless of label length, and Finish sits in line with
+   the other two instead of claiming a row of its own. */
+.draw-history .draw-action,
+.draw-status .draw-row .draw-action { flex: 1 1 0; min-width: 0; }
+
+/* ---- measurement --------------------------------------------------------- */
+/* Bordered in dusk so the block that holds a reading is visibly not the block
+   that holds a selected shape — the two can be on screen together. */
+.draw-measure { border-color: color-mix(in srgb, var(--atlas-dusk) 40%, var(--atlas-line)); }
+.draw-measure .draw-count b { color: var(--atlas-dusk); font: 700 13px var(--atlas-mono); }
+
+/* `.draw-measure-mode` (Free draw / Click points) is styled identically to
+   `.draw-units` (Metric / Imperial) — both are two-button segmented toggles in
+   the same panel — so they share one ruleset rather than a copy that could
+   drift out of sync with it. */
+.draw-units, .draw-measure-mode { display: flex; gap: 5px; }
+.draw-unit, .draw-measure-mode-btn {
+  flex: 1;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  color: var(--atlas-fg-dim);
+  font: 600 10.5px var(--atlas-mono);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.draw-unit:hover, .draw-measure-mode-btn:hover { color: var(--atlas-fg); border-color: var(--atlas-line-2); }
+.draw-unit.active, .draw-measure-mode-btn.active {
+  color: var(--atlas-dusk);
+  border-color: var(--atlas-dusk);
+  background: color-mix(in srgb, var(--atlas-dusk) 12%, transparent);
+}
+
+/* ---- status, warnings ---------------------------------------------------- */
+.draw-status {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+  border-radius: 11px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 42%, transparent);
+}
+.draw-count { margin: 0; font-size: 11.5px; color: var(--atlas-fg); font-variant-numeric: tabular-nums; }
+.draw-count b { color: var(--atlas-fg-hi); }
+.draw-note { margin: 0; font-size: 10.5px; line-height: 1.4; color: var(--atlas-fg-dim); }
+.draw-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--atlas-dusk);
+}
+.draw-warning svg { width: 13px; height: 13px; flex: 0 0 13px; margin-top: 1px; }
+
+/* ---- fields -------------------------------------------------------------- */
+.draw-style { display: flex; flex-direction: column; gap: 10px; }
+.draw-field { display: flex; flex-direction: column; gap: 5px; }
+.draw-field > label,
+.draw-label {
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--atlas-fg-dim);
+  font-weight: 700;
+}
+.draw-value { font: 600 10px var(--atlas-mono); color: var(--atlas-teal); text-transform: none; letter-spacing: 0; }
+.draw-input {
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 55%, transparent);
+  color: var(--atlas-fg);
+  font: 500 12px inherit;
+}
+.draw-input::placeholder { color: var(--atlas-fg-dim); }
+
+/* ---- marker: find an address, and read back where the pin landed --------- */
+.draw-address { display: flex; flex-direction: column; gap: 6px; }
+.draw-address-row { display: flex; gap: 6px; }
+.draw-address-row .draw-input { flex: 1 1 auto; min-width: 0; }
+.draw-address-row .draw-action { flex: 0 0 auto; }
+.draw-address-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Five rows at most, and the sixth is reachable by scroll rather than by
+     pushing the Finish button off the panel. */
+  max-height: 148px;
+  overflow-y: auto;
+  border: 1px solid var(--atlas-line);
+  border-radius: 9px;
+  padding: 3px;
+}
+.draw-address-hit {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--atlas-fg);
+  cursor: pointer;
+  font: inherit;
+}
+.draw-address-hit:hover { background: color-mix(in srgb, var(--atlas-teal) 14%, transparent); }
+.draw-address-hit b { font: 600 11.5px inherit; color: var(--atlas-fg-hi); }
+.draw-address-hit span { font-size: 10.5px; color: var(--atlas-fg-dim); }
+
+.draw-place { display: flex; flex-direction: column; gap: 5px; }
+.draw-coords {
+  margin: 0;
+  font: 600 11.5px var(--atlas-mono);
+  color: var(--atlas-teal);
+  font-variant-numeric: tabular-nums;
+}
+.draw-place-name { margin: 0; font-size: 10.5px; line-height: 1.4; }
+.draw-place-name.dim { color: var(--atlas-fg-dim); }
+
+/* ---- swatches ------------------------------------------------------------ */
+.draw-swatches { display: flex; flex-wrap: wrap; gap: 5px; }
+.draw-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid var(--atlas-line-2);
+  cursor: pointer;
+  /* `background` is set inline from the item's own colour — see the header. */
+}
+.draw-swatch.active {
+  box-shadow: 0 0 0 2px var(--atlas-bg), 0 0 0 4px var(--atlas-mint);
+}
+.draw-swatch-custom {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+}
+/* A native colour input is a 22px control with a chrome-drawn border; scaling
+   it up and clipping it is the only cross-browser way to make it fill the
+   swatch instead of sitting in the middle of one as a grey rectangle. */
+.draw-swatch-custom input[type='color'] {
+  width: 200%;
+  height: 200%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* ---- line widths --------------------------------------------------------- */
+.draw-widths { display: flex; gap: 5px; }
+.draw-width {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 26px;
+  padding: 0 4px;
+  border-radius: 7px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  cursor: pointer;
+}
+.draw-width i { display: block; width: 100%; border-radius: 3px; background: var(--atlas-fg-dim); }
+.draw-width:hover { border-color: var(--atlas-line-2); }
+.draw-width.active { border-color: var(--atlas-teal); }
+.draw-width.active i { background: var(--atlas-teal); }
+
+/* ---- icon gallery -------------------------------------------------------- */
+.draw-icons { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.draw-icon {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 4px;
+  border-radius: 7px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+  color: var(--atlas-fg-dim);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.draw-icon svg { width: 100%; height: 100%; }
+.draw-icon:hover { color: var(--atlas-teal); border-color: var(--atlas-line-2); }
+.draw-icon.active {
+  color: var(--atlas-mint);
+  border-color: var(--atlas-mint);
+  background: color-mix(in srgb, var(--atlas-mint) 12%, transparent);
+}
+
+/* ---- range + checkbox ---------------------------------------------------- */
+.draw-range { width: 100%; accent-color: var(--atlas-teal); }
+.draw-check {
+  display: grid;
+  grid-template-columns: 15px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 11.5px;
+  color: var(--atlas-fg);
+  cursor: pointer;
+}
+.draw-check input { margin: 2px 0 0; accent-color: var(--atlas-teal); }
+.draw-check small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.35; color: var(--atlas-fg-dim); }
+
+/* ---- focus: the same ring the rest of the shell uses --------------------- */
+.draw-mode:focus-visible,
+.draw-action:focus-visible,
+.draw-swatch:focus-visible,
+.draw-swatch-custom:focus-within,
+.draw-width:focus-visible,
+.draw-unit:focus-visible,
+.draw-measure-mode-btn:focus-visible,
+.draw-icon:focus-visible,
+.draw-input:focus-visible,
+.draw-range:focus-visible,
+.draw-check input:focus-visible {
+  outline: 2px solid var(--atlas-aqua-light);
+  outline-offset: 2px;
+}
+
+/* Visually hidden, still announced. */
+.draw-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+
+/* ---- the globe's cursor while a tool is armed ---------------------------- */
+/* Set as a class on the Cesium widget container rather than as an inline style
+   on the canvas, because `CesiumStoryViewer`'s own MOUSE_MOVE handler writes
+   `canvas.style.cursor` on every pointer move for its hover-a-pin affordance.
+   Two writers to one inline style is a race decided by handler registration
+   order; a stylesheet rule with `!important` beats a non-important inline style
+   outright, so there is nothing to race. */
+.atlas-drawing .cesium-widget canvas,
+.atlas-drawing canvas { cursor: crosshair !important; }
+
+/* ---- narrow --------------------------------------------------------------
+ * Below 760px the shell reflows (rail → bottom tab bar, inspector → bottom
+ * sheet). A 264px panel pinned to the left gutter would then cover most of a
+ * phone's globe, so it becomes a full-width strip directly under the header
+ * with a capped height — the tools stay reachable, and the map stays visible
+ * enough to draw on.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .atlas-draw {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    width: auto;
+    max-height: 46vh;
+    padding: 10px;
+  }
+  .draw-icons { grid-template-columns: repeat(9, 1fr); }
+}
+
+/* Coarse pointers need real tap targets — matching `atlas.css`'s own rule. */
+@media (pointer: coarse) {
+  .draw-mode { min-height: 44px; }
+  .draw-action { min-height: 40px; }
+  .draw-swatch { width: 30px; height: 30px; }
+  .draw-unit, .draw-measure-mode-btn { min-height: 40px; }
+  .draw-width { min-height: 34px; }
+}
+
+/* The shell already blanket-disables animation under reduced motion for
+   `.atlas-app *`, but this panel can be mounted outside that subtree (as a
+   sibling overlay), so it states the rule for itself rather than depending on
+   where the consumer happens to put it. */
+@media (prefers-reduced-motion: reduce) {
+  .atlas-draw,
+  .atlas-draw * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

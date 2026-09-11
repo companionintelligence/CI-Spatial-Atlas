@@ -1,0 +1,170 @@
+/* ————————————————————————————————————————————————————————————————
+   Embedding — the share panel, the embed bar, and the layout an embed
+   needs once the rail and the top bar are gone.
+
+   Lives here rather than in `theme/atlas.css` because it belongs to this
+   feature: an Atlas built without embedding should not carry its CSS.
+
+   Every colour is a custom property from `theme/atlas.css`. Where a
+   translucent fill is needed the rgba() mirrors a token the same way
+   `layers.css` and `scenes.css` do — CSS has no way to add alpha to a
+   custom property that these browsers all agree on, and inventing a
+   second opaque colour instead would put a shade in the shell that the
+   theme does not know about.
+   ———————————————————————————————————————————————————————————————— */
+
+/* ---- Embed layout ---------------------------------------------------------
+ * `.atlas-app` reserves a 60px rail column and a 54px top-bar row by grid
+ * template. Hiding the two components without this leaves both tracks in
+ * place, so an embed would render the globe inset by an L-shaped band of
+ * empty background — the feature would look broken in exactly the screenshot
+ * everyone sees first. The panels position themselves with `grid-area: stage`,
+ * so the area has to keep that name.
+ * ------------------------------------------------------------------------- */
+.atlas-app.is-embed {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  grid-template-areas: "stage";
+}
+
+/* The stats ribbon sits at the stage's top-left, which is where the embed bar
+   now is. Move it below rather than hiding it: the counts are reading aids and
+   an embed is a reading surface. */
+.atlas-app.is-embed .atlas-stats { top: 70px; }
+
+/* ---- The embed bar -------------------------------------------------------- */
+.atlas-embedbar {
+  position: absolute; grid-area: stage; z-index: var(--z-panel);
+  top: 12px; left: 14px;
+  /* Clear of the inspector (320px wide at right: 14px). Below 980px the
+     inspector hides — see atlas.css — so the bar takes the full width. */
+  right: 348px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px 7px 8px;
+  background: var(--atlas-glass);
+  border: 1px solid var(--atlas-line-2);
+  border-radius: 14px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--atlas-shadow);
+}
+.embedbar-brand { display: grid; place-items: center; border-radius: 9px; }
+.embedbar-mark { width: 26px; height: 26px; display: block; }
+.embedbar-title {
+  font-size: 13px; font-weight: 700; color: var(--atlas-fg-hi);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 44%;
+}
+.embedbar-grow { flex: 1; }
+/* `.atlas-btn` is a flex:1 row button in the inspector; in the bar it must be
+   its own size. */
+.atlas-embedbar .atlas-btn { flex: 0 0 auto; padding: 7px 12px; }
+.embedbar-out {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .2px;
+  color: var(--atlas-fg-dim); text-decoration: none; white-space: nowrap;
+  padding: 6px 8px; border-radius: 9px; border: 1px solid transparent;
+}
+.embedbar-out svg { width: 13px; height: 13px; }
+.embedbar-out:hover { color: var(--atlas-teal); border-color: var(--atlas-line-2); }
+.embedbar-brand:focus-visible,
+.embedbar-out:focus-visible,
+.atlas-embedbar .atlas-btn:focus-visible {
+  outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px;
+}
+
+@media (max-width: 980px) { .atlas-embedbar { right: 14px; } }
+@media (max-width: 620px) {
+  /* Nothing but the identity and the way out survives at this width; the play
+     control stays because it is the only route into the story. */
+  .embedbar-title { max-width: 38%; }
+  .atlas-embedbar { gap: 6px; padding: 6px 8px; }
+}
+
+/* ---- The share panel ------------------------------------------------------
+ * Anchored under the top bar's share button. Above --z-chrome on purpose: it
+ * is a menu opened from the header, and the stacking scale in atlas.css exists
+ * because header-anchored popovers kept rendering under the panels.
+ * ------------------------------------------------------------------------- */
+.atlas-share {
+  position: fixed; z-index: var(--z-modal);
+  top: 60px; right: 14px;
+  width: min(420px, calc(100vw - 28px));
+  max-height: calc(100vh - 76px);
+  overflow: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 14px;
+  background: var(--atlas-glass);
+  border: 1px solid var(--atlas-line-2);
+  border-radius: 16px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--atlas-shadow);
+  color: var(--atlas-fg);
+}
+.share-head { display: flex; align-items: center; gap: 10px; }
+.share-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--atlas-fg-hi); flex: 1; }
+/* The heading takes focus when the panel opens; it must show that it has it. */
+.share-title:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 3px; border-radius: 6px; }
+.share-close {
+  width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--atlas-fg-dim); cursor: pointer; font: inherit; font-size: 13px;
+}
+.share-close:hover { color: var(--atlas-fg-hi); border-color: var(--atlas-line-2); }
+
+.share-section { display: flex; flex-direction: column; gap: 8px; }
+.share-label { font-size: 11px; font-weight: 700; letter-spacing: .32px; text-transform: uppercase; color: var(--atlas-fg-dim); }
+.share-row { display: flex; align-items: stretch; gap: 8px; }
+
+.share-field {
+  flex: 1; min-width: 0;
+  padding: 9px 10px; border-radius: 10px;
+  border: 1px solid var(--atlas-line);
+  background: rgba(4, 18, 26, .6); /* --atlas-ink at 60% */
+  color: var(--atlas-fg);
+  font: 500 12px/1.5 var(--atlas-mono);
+}
+.share-snippet { width: 100%; resize: vertical; white-space: pre; overflow-x: auto; }
+.share-field:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
+/* A read-only field that looks disabled invites nobody to select it, and
+   selecting it by hand is the fallback when the clipboard is blocked. */
+.share-field::selection { background: var(--atlas-teal-600); color: var(--atlas-fg-hi); }
+
+.share-sizes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.share-size {
+  padding: 6px 10px; border-radius: 999px; cursor: pointer;
+  font: 600 11.5px Manrope, sans-serif;
+  color: var(--atlas-fg-dim);
+  background: rgba(4, 18, 26, .5); /* --atlas-ink at 50% */
+  border: 1px solid var(--atlas-line);
+}
+.share-size:hover { color: var(--atlas-fg); border-color: var(--atlas-line-2); }
+.share-size.active { color: var(--atlas-ink); background: linear-gradient(135deg, var(--atlas-teal), var(--atlas-aqua-light)); border-color: transparent; }
+.share-size:focus-visible, .share-close:focus-visible, .share-dim input:focus-visible {
+  outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px;
+}
+.share-dim { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--atlas-fg-dim); }
+.share-dim input {
+  width: 68px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--atlas-line);
+  background: rgba(4, 18, 26, .6); /* --atlas-ink at 60% */
+  color: var(--atlas-fg); font: 600 11.5px var(--atlas-mono);
+}
+
+.share-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--atlas-fg-dim); }
+/* The refusal is information, not an error the author caused — dusk rather
+   than coral, which the shell reserves for failures. */
+.share-refusal {
+  margin: 0; padding: 10px; border-radius: 10px;
+  font-size: 12px; line-height: 1.55; color: var(--atlas-dusk);
+  background: rgba(255, 178, 122, .09); /* --atlas-dusk at 9% */
+  border: 1px solid rgba(255, 178, 122, .34);
+}
+/* Reserves its line whether or not there is a message, so confirming a copy
+   does not shove the buttons the user is aiming at. */
+.share-status { margin: 0; min-height: 1.2em; font-size: 11.5px; font-weight: 600; color: var(--atlas-fg-dim); }
+.share-status.ok { color: var(--atlas-mint); }
+/* Not an error — the text is right there and selected — but it needs the
+   reader to do something, so it must not read as a success. */
+.share-status.warn { color: var(--atlas-dusk); }
+
+@media (max-width: 620px) {
+  .atlas-share { top: 8px; right: 8px; left: 8px; width: auto; max-height: calc(100vh - 16px); }
+}

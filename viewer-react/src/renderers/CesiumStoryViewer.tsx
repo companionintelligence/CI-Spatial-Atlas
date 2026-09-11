@@ -3,7 +3,11 @@ import * as Cesium from 'cesium';
 import { Viewer, CzmlDataSource, Cesium3DTileset, type CesiumComponentRef } from 'resium';
 import { storyToCzml, type Story, type Place } from '@companion-atlas/story';
 import type { AtlasMemory } from '../model/atlasModel.js';
-import { BASEMAPS, DEFAULT_BASEMAP, offlineImagery } from './basemaps.js';
+import { BASEMAPS, DEFAULT_BASEMAP, offlineImagery, resolveBasemap } from './basemaps.js';
+import { createTerrain } from './terrain.js';
+import { createLayerScene, isAtlasManagedImagery, type LayerScene } from '../layers/cesium.js';
+import type { AtlasLayer } from '../layers/model.js';
+import { keepForGlobe, type CzmlLike } from './globeCzml.js';
 
 const PLACEHOLDER_TOKEN = 'your_cesium_ion_token_here';
 type Located = AtlasMemory & { lat: number; lon: number };
@@ -60,6 +64,91 @@ function nudge(v: Cesium.Viewer | null | undefined): void {
   if (v && !v.isDestroyed()) v.scene.requestRender();
 }
 
+/**
+ * Give up on a terrain provider whose *root* tiles fail, because that is what
+ * actually turns the globe black.
+ *
+ * This is the answer to a bug that was twice diagnosed from screenshots and
+ * twice mis-fixed on the imagery side. With a valid ion token and tile hosts
+ * that cannot be reached, the imagery fallback below **does** engage: Cesium
+ * 1.143's `ImageryLayer._requestImagery` reports the first non-cancelled tile
+ * failure through `TileProviderError.reportError` on the *provider's own*
+ * `errorEvent` (and `IonImageryProvider` forwards its inner provider's), so our
+ * listener fires, the bundled Natural Earth raster is added at index 0 and the
+ * dead ion layer is removed. The globe stays black anyway — because by then
+ * there is no surface left to paint it on:
+ *
+ *   - A failed terrain request sets the tile's `terrainState` to FAILED. The
+ *     state machine's recovery for that is `upsample()` from the parent, and a
+ *     level-0 tile has no parent, so it takes the other path:
+ *     `tile.state = QuadtreeTileLoadState.FAILED`. Nothing in Cesium ever moves
+ *     a tile back out of FAILED, and the terrain machine only runs while the
+ *     tile is LOADING — so a root tile that fails once is unrenderable for as
+ *     long as that provider is installed.
+ *   - The fill-mesh pass that normally papers over missing geometry cannot
+ *     help: `TerrainFillMesh.updateFillTiles` seeds its traversal *only* with
+ *     rendered tiles that already have a `vertexArray`, and propagates outward
+ *     from them. With every root failed there is no seed, so no fill is built.
+ *
+ * Zero surface geometry, whatever the imagery underneath — a black ball of
+ * starfield. And note the trigger is us *succeeding*: `layer.json` loads, we
+ * install the provider, and Cesium throws away the perfectly good ellipsoid
+ * tiles it was drawing (see `invalidateAllTiles` below) to request tiles that
+ * never arrive.
+ *
+ * The recovery is simply to put a working provider back. Assigning
+ * `terrainProvider` runs `Globe` → `GlobeSurfaceTileProvider` →
+ * `QuadtreePrimitive.invalidateAllTiles()`, which frees the level-zero tiles
+ * and rebuilds them, and `EllipsoidTerrainProvider` answers every request
+ * synchronously and offline. The globe comes back flat, one frame later.
+ *
+ * Policy, and why it is this narrow:
+ *
+ *   - **Level 0 only.** A deeper tile that fails is survivable — it upsamples
+ *     from its parent, or gets a fill mesh from its neighbours — and the globe
+ *     still draws. Tearing down terrain globally for one bad tile in the Alps
+ *     would be a worse trade than the coarse geometry Cesium already falls back
+ *     to. Only the roots are fatal, and they are fatal permanently.
+ *   - **One retry per root tile.** A single 502 from a CDN should not cost the
+ *     session its terrain. Cesium's own `timesRetried` cannot express this: the
+ *     terrain path reuses one `TileProviderError` object per provider and never
+ *     calls `reportSuccess` to reset it, so that counter is "errors this
+ *     provider has had", not "times this tile failed". Hence our own key set.
+ *   - **Only while our provider is still installed.** `layers/cesium.ts` hands
+ *     the globe to a user's quantized-mesh layer when they add one; a late
+ *     error from the provider we installed must not stomp on that.
+ *
+ * Exported for the test suite, which drives it with a stub provider — there is
+ * no globe, and no network, in a unit test.
+ */
+export function watchTerrainFailure(
+  v: Cesium.Viewer,
+  provider: Cesium.TerrainProvider,
+): () => void {
+  const retried = new Set<string>();
+  let fellBack = false;
+  const onError = (err: Cesium.TileProviderError): void => {
+    if (fellBack || err.level !== 0) return;
+    const key = `${err.x}/${err.y}`;
+    if (!retried.has(key)) {
+      retried.add(key);
+      // Listeners own this flag; the reporter reads it after the last one runs.
+      err.retry = true;
+      return;
+    }
+    fellBack = true;
+    console.warn(
+      '[cesium] terrain root tile failed twice; falling back to the smooth ellipsoid',
+      err.message,
+    );
+    if (v.isDestroyed() || v.terrainProvider !== provider) return;
+    v.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    nudge(v);
+  };
+  provider.errorEvent.addEventListener(onError);
+  return () => provider.errorEvent.removeEventListener(onError);
+}
+
 function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number; in: number }): void {
   globe.enableLighting = on;
   globe.dynamicAtmosphereLighting = on;
@@ -85,10 +174,20 @@ function applySunLighting(globe: Cesium.Globe, on: boolean, stock: { out: number
  * from the memory pins above. It's off by default (pass `places={[]}`, the
  * default) so it never competes with the memory layer for attention.
  */
+const EMPTY_IDS: readonly string[] = [];
+
+/** The three projections Cesium can draw, named for the app rather than for
+ *  Cesium's enum — `SCENE2D` is not a phrase anyone says out loud. */
+export type SceneModeName = '3d' | '2d' | 'columbus';
+
+const SCENE_MORPH_SECONDS = 1.2;
+
 export function CesiumStoryViewer({
   story, memories, places = [], focusedId, basemap = DEFAULT_BASEMAP, sunLighting = false,
   buildings = false,
   onViewer, onPick, onPickPlace, onHover, onInteract,
+  layers = [], claimedUrls, timeMs = null, extraItemIds = EMPTY_IDS,
+  sceneMode = '3d', reduceMotion = false, hideJourneyRoute = false, showImages = false,
 }: {
   story: Story;
   memories: AtlasMemory[];
@@ -105,6 +204,54 @@ export function CesiumStoryViewer({
   onPickPlace?: (p: Place) => void;
   onHover?: (id: string | null) => void;
   onInteract?: () => void;
+  /** User-added data sources (see src/layers/). Drawn above the basemap and
+   *  below nothing — the story's own entities live in a CZML data source, which
+   *  Cesium renders separately from the imagery stack. */
+  layers?: readonly AtlasLayer[];
+  /**
+   * Source URLs the layer stack speaks for: the ones it is drawing, plus the
+   * story-supplied ones the user removed.
+   *
+   * Deriving this from `layers` alone made removing a story's 3D tileset
+   * impossible. The removal un-claimed the URL in the same commit that tore the
+   * stack's own tileset down, so this path remounted it — a flicker, and then
+   * the tileset was back on the globe with no panel row, no visibility toggle
+   * and no opacity control. A removal has to claim the URL too.
+   */
+  claimedUrls?: ReadonlySet<string>;
+  /** Clock position, so time-windowed layers hide themselves outside their
+   *  availability and `{Time}`-dimensioned sources (GIBS) follow the scrub. */
+  timeMs?: number | null;
+  /**
+   * Which projection the globe is drawn in. Google Earth offers 2D and 3D of
+   * the same project and Atlas offered only 3D — `sceneModePicker` was disabled
+   * and there was no other route, so a story that is really a map (a route, a
+   * boundary, a set of places) could only ever be read at an angle.
+   *
+   * Columbus view is offered too because it is the honest middle: a flat map
+   * that still has height, which is where a 3D tileset or a raised track still
+   * reads correctly and a plain 2D projection flattens it away.
+   */
+  sceneMode?: SceneModeName;
+  /** Morphs become cuts. A projection change is a large, whole-screen motion —
+   *  exactly what someone who asked for less of it meant. */
+  reduceMotion?: boolean;
+  /** Ids of story items that have no scene, and therefore no memory pin
+   *  standing in for them — imported KML/GeoJSON features, and anything drawn
+   *  by hand. Their CZML packets are rendered rather than filtered away. */
+  extraItemIds?: readonly string[];
+  /** Hide the "journey (time-ordered)" route arc and its traveler dot — the
+   *  glowing line `buildMemoryLayer` always draws between located memories.
+   *  Meant for the moment a note is being placed: the route line often runs
+   *  straight through wherever the next memory-worthy spot is, and unbroken it
+   *  reads as something the note tool just drew rather than a pre-existing
+   *  feature of the globe. */
+  hideJourneyRoute?: boolean;
+  /** A photo or video with no owning scene reaches the globe as a real image
+   *  billboard (see `globeCzml.ts`) rather than the plain point every other
+   *  sceneless passthrough gets. Off by default — an upload used to appear on
+   *  the globe the instant it landed, with no way to turn it back off. */
+  showImages?: boolean;
 }) {
   // Read inside the mount effect without making it a dependency (remounting
   // the viewer to change basemap would tear down the whole scene).
@@ -112,14 +259,30 @@ export function CesiumStoryViewer({
   basemapRef.current = basemap;
 
   const { czml, tilesets } = useMemo(() => storyToCzml(story), [story]);
-  // The interactive memory-pin layer is the canonical 2D representation of
-  // memories, so keep only the document (clock), authored tracks (`path`), and
-  // 3D models from the CZML — dropping the point/billboard packets the pins
-  // replace avoids drawing every located memory twice.
+  // `storyToCzml` turns a story's 3d-tiles and gaussian-splat layers into
+  // tilesets, and the layer stack now also adopts those same layers (AtlasApp
+  // merges `story.layers` into it, so they are toggleable and get an opacity
+  // control). Rendering both mounts every such tileset twice — two coincident
+  // surfaces that z-fight, two sets of tile requests, two copies in memory.
+  // The stack wins, because it is the one the user can operate; matching on URL
+  // rather than id, since the layer model regenerates ids on the way in.
+  const ownTilesets = useMemo(() => {
+    // `claimedUrls` also holds the URLs of story layers the user removed, so a
+    // removal keeps this path stood down instead of un-claiming the tileset and
+    // letting it reappear uncontrollably. The fallback keeps this component
+    // usable without a layer stack at all.
+    const claimed = claimedUrls ?? new Set(layers.map((l) => l.url));
+    if (!claimed.size) return tilesets;
+    return tilesets.filter((t) => !claimed.has(t.url));
+  }, [tilesets, layers, claimedUrls]);
+
+  // See globeCzml.ts for why this filter is narrower than it looks.
+  const passthroughIds = useMemo(() => new Set(extraItemIds), [extraItemIds]);
   const globeCzml = useMemo(
-    () => czml.filter((p) => p.id === 'document' || p.path !== undefined || p.model !== undefined),
-    [czml],
+    () => czml.filter((p) => keepForGlobe(p as CzmlLike, passthroughIds, { showImages })),
+    [czml, passthroughIds, showImages],
   );
+
   const ref = useRef<CesiumComponentRef<Cesium.Viewer>>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const [viewer, setViewerReady] = useState<Cesium.Viewer | null>(null);
@@ -149,6 +312,7 @@ export function CesiumStoryViewer({
     let disposed = false;
     let raf = 0;
     let cleanupImageryError: (() => void) | undefined;
+    let cleanupTerrainError: (() => void) | undefined;
     let handler: Cesium.ScreenSpaceEventHandler | undefined;
     let cleanupInteract: (() => void) | undefined;
 
@@ -196,9 +360,6 @@ export function CesiumStoryViewer({
           } catch {
             await loadOffline();
           }
-          void withTimeout(Cesium.createWorldTerrainAsync(), 8000, 'ion terrain')
-            .then((t) => { if (alive()) v.terrainProvider = t; })
-            .catch(() => {});
         } else {
           // No ion token. Two layers, deliberately:
           //
@@ -223,6 +384,37 @@ export function CesiumStoryViewer({
           await loadOffline();
         }
       })();
+
+      // Terrain, deliberately *outside* the ion branch and not chained behind
+      // the imagery await above.
+      //
+      // `createTerrain()` (renderers/terrain.ts) resolves in a defined order —
+      // the deployment's own quantized-mesh tileset from `VITE_TERRAIN_URL`,
+      // then ion World Terrain, then the ellipsoid — and only the middle rung
+      // needs a token. This used to call `createWorldTerrainAsync()` inline
+      // inside `if (hasIon)`, which made the one terrain option that works
+      // *without* an account unreachable for exactly the keyless deployments it
+      // exists for: `VITE_TERRAIN_URL` and `VITE_TERRAIN_CREDIT` were
+      // documented settings that no code read. It also sat after `await`ing the
+      // ion imagery, so a slow (or 8-second-timing-out) imagery handshake
+      // delayed terrain that has nothing to do with it.
+      //
+      // No `withTimeout` here: `createTerrain` carries the same 8 s budget on
+      // both of its remote rungs, and it resolves rather than rejects — the
+      // ellipsoid is a legitimate answer, not a failure.
+      void createTerrain()
+        .then((choice) => {
+          if (!alive()) return;
+          console.info(`[cesium] terrain: ${choice.detail}`);
+          // The ellipsoid is already what the Viewer mounts with. Assigning a
+          // second one would call `invalidateAllTiles` — throwing away every
+          // tile loaded so far — to arrive at the same globe.
+          if (choice.source === 'ellipsoid') return;
+          v.terrainProvider = choice.provider;
+          cleanupTerrainError = watchTerrainFailure(v, choice.provider);
+          nudge(v);
+        })
+        .catch((e) => console.warn('[cesium] terrain selection failed', e));
 
       // Apply the *current* lighting choice rather than a hard-coded `false`.
       // This runs a frame or more after mount (Resium hands the viewer over on a
@@ -343,6 +535,7 @@ export function CesiumStoryViewer({
       disposed = true;
       if (raf) cancelAnimationFrame(raf);
       cleanupImageryError?.();
+      cleanupTerrainError?.();
       cleanupInteract?.();
       handler?.destroy();
       setViewerReady(null);
@@ -354,7 +547,7 @@ export function CesiumStoryViewer({
   // ---- memory layer: pins + journey arc + traveler (rebuilt on memory change) ----
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    const ds = buildMemoryLayer(memories, focusedIdRef.current);
+    const ds = buildMemoryLayer(memories, focusedIdRef.current, !hideJourneyRoute);
     memLayerRef.current = ds;
     // The layer is rebuilt from scratch, so the pin the highlight was last
     // applied to no longer exists. Forget it, or the next focus change would
@@ -368,7 +561,7 @@ export function CesiumStoryViewer({
       if (memLayerRef.current === ds) memLayerRef.current = null;
       void added.then((d) => { if (!viewer.isDestroyed()) viewer.dataSources.remove(d ?? ds, true); });
     };
-  }, [viewer, memories]);
+  }, [viewer, memories, hideJourneyRoute]);
 
   // ---- focus highlight: repaint two pins, rather than all of them every frame ----
   useEffect(() => {
@@ -392,6 +585,58 @@ export function CesiumStoryViewer({
 
   // ---- basemap switching ----
   // Swap the imagery layer in place rather than remounting the viewer, so the
+  // User layers. `createLayerScene` owns everything it adds and diffs on a
+  // source fingerprint, so this effect can run on every clock tick without
+  // rebuilding providers.
+  const layerSceneRef = useRef<LayerScene | null>(null);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const scene = createLayerScene(viewer);
+    layerSceneRef.current = scene;
+    return () => {
+      scene.destroy();
+      layerSceneRef.current = null;
+    };
+  }, [viewer]);
+
+  useEffect(() => {
+    layerSceneRef.current?.sync(layers, timeMs);
+  }, [viewer, layers, timeMs, basemap]);
+
+  // Projection. Cesium morphs between the three rather than rebuilding, so the
+  // camera, every data source and the clock survive the change — which is why
+  // this is a scene call and not a remount.
+  //
+  // Guarded on the *current* mode: `morphTo*` restarts the animation even when
+  // the scene is already there, and this effect re-runs for reasons that have
+  // nothing to do with the projection.
+  const requestedModeRef = useRef<Cesium.SceneMode | null>(null);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const scene = viewer.scene;
+    const want =
+      sceneMode === '2d' ? Cesium.SceneMode.SCENE2D
+      : sceneMode === 'columbus' ? Cesium.SceneMode.COLUMBUS_VIEW
+      : Cesium.SceneMode.SCENE3D;
+    // Guard on the last mode we ASKED for, not on the scene's current mode.
+    //
+    // Those come apart, and when they do, guarding on `scene.mode` wedges the
+    // control: a morph that is interrupted, or that Cesium does not finish,
+    // leaves the scene in one projection while React holds another, and the
+    // next press computes the mode the scene is *already* in — so the guard
+    // returns and the button appears dead. Observed exactly that: the scene sat
+    // in 2D while the control read "3D", and no number of presses moved it.
+    //
+    // Re-issuing a morph the scene is already in is harmless; failing to issue
+    // one is not.
+    if (requestedModeRef.current === want) return;
+    requestedModeRef.current = want;
+    const seconds = reduceMotion ? 0 : SCENE_MORPH_SECONDS;
+    if (want === Cesium.SceneMode.SCENE2D) scene.morphTo2D(seconds);
+    else if (want === Cesium.SceneMode.COLUMBUS_VIEW) scene.morphToColumbusView(seconds);
+    else scene.morphTo3D(seconds);
+  }, [viewer, sceneMode, reduceMotion]);
+
   // camera, clock and entity layers all survive a basemap change.
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -400,13 +645,18 @@ export function CesiumStoryViewer({
     let cancelled = false;
     // Always keep the mounted base at index 0 and swap only what sits above it,
     // so the globe still has ground while a new basemap's tiles arrive.
+    // Only sweep away *our* basemap overlay. The user's layers sit in the same
+    // imagery collection, and the previous "remove everything above index 0"
+    // deleted all of them on the first basemap swap. The layer adapter tags
+    // what it owns for exactly this reason.
     const clearOverlay = () => {
-      while (viewer.imageryLayers.length > 1) {
-        viewer.imageryLayers.remove(viewer.imageryLayers.get(viewer.imageryLayers.length - 1), true);
+      for (let i = viewer.imageryLayers.length - 1; i >= 1; i--) {
+        const layer = viewer.imageryLayers.get(i);
+        if (!isAtlasManagedImagery(layer)) viewer.imageryLayers.remove(layer, true);
       }
     };
 
-    const entry = BASEMAPS.find((b) => b.id === basemap);
+    const entry = resolveBasemap(basemap);
     // Two ways the answer is "no overlay at all": an entry with no `create` is
     // the mounted base layer itself, and under ion the default choice already
     // *is* what is mounted — ion World Imagery is satellite imagery, so laying
@@ -414,7 +664,7 @@ export function CesiumStoryViewer({
     // ground. Every other choice applies whether or not ion is configured;
     // this effect used to bail outright when it was, which quietly turned the
     // whole picker into a no-op the moment the ion token was wired up.
-    if (!entry?.create || (hasIon && entry.id === DEFAULT_BASEMAP)) { clearOverlay(); return; }
+    if (!entry.create || (hasIon && entry.id === DEFAULT_BASEMAP)) { clearOverlay(); return; }
 
     try {
       const provider = entry.create();
@@ -499,7 +749,7 @@ export function CesiumStoryViewer({
         automaticallyTrackDataSourceClocks={false}
       >
         <CzmlDataSource data={globeCzml} />
-        {tilesets.map((t) => (
+        {ownTilesets.map((t) => (
           <Cesium3DTileset key={t.id} url={t.url} />
         ))}
       </Viewer>
@@ -536,8 +786,13 @@ function applyFocusHighlight(
   }
 }
 
-/** Build the interactive memory layer as a CustomDataSource. */
-function buildMemoryLayer(memories: AtlasMemory[], focusedId: string | null): Cesium.CustomDataSource {
+/** Build the interactive memory layer as a CustomDataSource. `showRoute` is
+ *  false while a note is being placed — see `hideJourneyRoute` above. */
+export function buildMemoryLayer(
+  memories: AtlasMemory[],
+  focusedId: string | null,
+  showRoute: boolean,
+): Cesium.CustomDataSource {
   const ds = new Cesium.CustomDataSource('atlas-memories');
   const teal = PIN_TEAL;
   const mint = PIN_MINT;
@@ -595,7 +850,7 @@ function buildMemoryLayer(memories: AtlasMemory[], focusedId: string | null): Ce
   }
 
   const route = [...located].sort((a, b) => a.timeMs - b.timeMs);
-  if (route.length > 1) {
+  if (showRoute && route.length > 1) {
     ds.entities.add({
       polyline: {
         positions: route.map((m) => Cesium.Cartesian3.fromDegrees(m.lon, m.lat, 0)),

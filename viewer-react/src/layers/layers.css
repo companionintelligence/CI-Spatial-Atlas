@@ -1,0 +1,210 @@
+/* ————————————————————————————————————————————————————————————————
+   Layer manager — the panel that turns the basemap popover into a real
+   layer switcher (stack, add-by-URL, catalog).
+
+   Lives here rather than in `theme/atlas.css` because it belongs to this
+   feature and is imported by `ui/MapLayers.tsx`; the shell's stylesheet stays
+   the shell's. It extends the existing `.atlas-layers-pop` / `.lay-*` classes
+   instead of restating them, so the panel is visibly the same object it was
+   before it grew tabs.
+
+   Every colour is a token from `theme/atlas.css` — no literals. Where a
+   translucent fill is needed, `color-mix` dilutes a token rather than
+   introducing a private rgba(), with the solid token as the fallback
+   declaration for anything that cannot mix.
+   ———————————————————————————————————————————————————————————————— */
+
+/* The popover is sized for five basemap swatches. A stack of layers with
+   sliders needs more room, and enough height to scroll rather than run off
+   the bottom of the window. */
+.atlas-layers-pop.has-manager {
+  width: min(352px, calc(100vw - 24px));
+  max-height: min(72vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---- tabs ---------------------------------------------------------------- */
+.laym-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 45%, transparent);
+}
+.laym-tab {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 10px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--atlas-fg-dim);
+  font: 700 11px/1 inherit; letter-spacing: .02em; cursor: pointer;
+}
+.laym-tab svg { width: 14px; height: 14px; }
+.laym-tab:hover { color: var(--atlas-fg); }
+.laym-tab[aria-selected='true'] {
+  background: color-mix(in srgb, var(--atlas-teal) 18%, transparent);
+  color: var(--atlas-fg-hi);
+  box-shadow: 0 0 0 1px var(--atlas-line-2) inset;
+}
+.laym-tab:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
+.laym-tab .laym-count {
+  padding: 1px 5px; border-radius: 999px; font-size: 9px; font-weight: 800;
+  background: var(--atlas-teal-600); color: var(--atlas-ink);
+}
+
+/* ---- search -------------------------------------------------------------- */
+.laym-search { position: relative; display: flex; align-items: center; }
+.laym-search svg {
+  position: absolute; left: 9px; width: 13px; height: 13px;
+  color: var(--atlas-fg-dim); pointer-events: none;
+}
+.laym-search input {
+  width: 100%; padding: 7px 9px 7px 28px;
+  border-radius: 8px; border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 55%, transparent);
+  color: var(--atlas-fg); font: 500 12px inherit;
+}
+.laym-search input::placeholder { color: var(--atlas-fg-dim); }
+.laym-search input:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 1px; }
+
+/* ---- the stack ----------------------------------------------------------- */
+.laym-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.laym-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  grid-template-areas: 'eye name actions' 'eye meta actions' 'slider slider slider';
+  align-items: center; gap: 3px 8px; padding: 8px;
+  border-radius: 9px; border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 50%, transparent);
+}
+.laym-row.is-hidden { opacity: .58; }
+.laym-row.is-outside { border-color: var(--atlas-dusk); }
+.laym-eye {
+  grid-area: eye; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0;
+  border-radius: 6px; border: 1px solid var(--atlas-line);
+  background: transparent; color: var(--atlas-fg-dim); cursor: pointer;
+}
+.laym-eye svg { width: 14px; height: 14px; }
+.laym-eye[aria-pressed='true'] { color: var(--atlas-mint); border-color: var(--atlas-line-2); }
+.laym-name {
+  grid-area: name; font-size: 12px; font-weight: 600; color: var(--atlas-fg-hi);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.laym-meta {
+  grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--atlas-fg-dim); line-height: 1.35;
+}
+.laym-actions { grid-area: actions; display: inline-flex; gap: 2px; }
+.laym-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0;
+  border-radius: 6px; border: 1px solid transparent;
+  background: transparent; color: var(--atlas-fg-dim); cursor: pointer;
+}
+.laym-btn svg { width: 13px; height: 13px; }
+.laym-btn:hover:not(:disabled) { color: var(--atlas-fg-hi); border-color: var(--atlas-line-2); }
+.laym-btn:disabled { opacity: .3; cursor: default; }
+.laym-btn.is-danger:hover:not(:disabled) { color: var(--atlas-coral); border-color: var(--atlas-coral); }
+.laym-btn:focus-visible, .laym-eye:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 1px; }
+
+.laym-slider { grid-area: slider; display: flex; align-items: center; gap: 8px; padding-top: 2px; }
+.laym-slider input[type='range'] {
+  flex: 1; height: 3px; margin: 0; accent-color: var(--atlas-teal);
+  background: var(--atlas-line); border-radius: 999px;
+}
+.laym-slider input:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 4px; }
+.laym-slider span {
+  min-width: 30px; text-align: right;
+  font: 600 10px var(--atlas-mono); color: var(--atlas-fg-dim);
+}
+
+/* Small pills carrying the things a layer must say about itself: its format,
+   its time window, and — when the clock excludes it — why it is drawing
+   nothing. A layer that is "on" but invisible has to explain itself, or it
+   reads as broken. */
+.laym-pill {
+  padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--atlas-line); color: var(--atlas-fg-dim);
+  font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+.laym-pill.is-time { border-color: var(--atlas-teal-mid); color: var(--atlas-teal); text-transform: none; letter-spacing: 0; }
+.laym-pill.is-outside { border-color: var(--atlas-dusk); color: var(--atlas-dusk); text-transform: none; letter-spacing: 0; }
+
+/* ---- attribution --------------------------------------------------------- */
+/* Not decoration: ODbL, CC BY-SA and the OSM tile policy all make the credit a
+   condition of use, so it is always visible on the layer that owes it. */
+.laym-credit { font-size: 10px; color: var(--atlas-fg-dim); line-height: 1.4; }
+.laym-credit a { color: var(--atlas-teal); text-decoration: none; }
+.laym-credit a:hover { text-decoration: underline; }
+.laym-credit .laym-licence { color: var(--atlas-fg); }
+
+/* ---- add by URL ---------------------------------------------------------- */
+.laym-form { display: flex; flex-direction: column; gap: 6px; }
+.laym-form input[type='url'], .laym-form input[type='text'], .laym-form select {
+  width: 100%; padding: 7px 9px;
+  border-radius: 8px; border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 55%, transparent);
+  color: var(--atlas-fg); font: 500 12px inherit;
+}
+.laym-form select { appearance: auto; color-scheme: dark; }
+.laym-form input:focus-visible, .laym-form select:focus-visible {
+  outline: 2px solid var(--atlas-aqua-light); outline-offset: 1px;
+}
+.laym-form-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.laym-add {
+  padding: 7px 14px; border-radius: 8px;
+  border: 1px solid var(--atlas-teal); background: var(--atlas-teal-600);
+  color: var(--atlas-ink); font: 700 12px inherit; cursor: pointer;
+}
+.laym-add:hover:not(:disabled) { background: var(--atlas-teal); }
+.laym-add:disabled { opacity: .5; cursor: default; }
+.laym-add:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
+
+/* A rejected URL gets two lines: what was wrong, and what to try. One line of
+   "invalid URL" tells the user nothing they can act on. */
+.laym-error, .laym-warning {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 8px; border-radius: 8px; font-size: 11px; line-height: 1.4;
+}
+.laym-error {
+  border: 1px solid var(--atlas-coral); color: var(--atlas-fg);
+  background: color-mix(in srgb, var(--atlas-coral) 12%, transparent);
+}
+.laym-warning {
+  border: 1px solid var(--atlas-dusk); color: var(--atlas-fg);
+  background: color-mix(in srgb, var(--atlas-dusk) 12%, transparent);
+}
+.laym-error b, .laym-warning b { color: var(--atlas-fg-hi); font-weight: 700; }
+.laym-error span, .laym-warning span { color: var(--atlas-fg-dim); }
+
+/* ---- catalog ------------------------------------------------------------- */
+.laym-cat { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.laym-cat-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+  grid-template-areas: 'name add' 'desc add' 'credit credit';
+  padding: 8px; border-radius: 9px;
+  border: 1px solid var(--atlas-line);
+  background: var(--atlas-card);
+  background: color-mix(in srgb, var(--atlas-ink) 50%, transparent);
+}
+.laym-cat-row:hover { border-color: var(--atlas-line-2); }
+.laym-cat-row .laym-name { grid-area: name; }
+.laym-cat-row .laym-desc { grid-area: desc; font-size: 10px; color: var(--atlas-fg-dim); line-height: 1.4; }
+.laym-cat-row .laym-credit { grid-area: credit; padding-top: 4px; }
+.laym-cat-row .laym-add { grid-area: add; align-self: center; padding: 5px 10px; font-size: 11px; }
+.laym-cat-row.is-added .laym-add {
+  background: transparent; border-color: var(--atlas-line-2); color: var(--atlas-fg-dim);
+}
+
+.laym-empty {
+  padding: 14px 8px; text-align: center;
+  font-size: 11px; color: var(--atlas-fg-dim); line-height: 1.5;
+}
+.laym-note { font-size: 10px; color: var(--atlas-fg-dim); line-height: 1.45; }

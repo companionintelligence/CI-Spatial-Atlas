@@ -9,7 +9,7 @@
     "atlas-mcp": "dist/mcp-stdio.js"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
     "mcp:stdio": "tsx src/mcp-stdio.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
@@ -18,15 +18,18 @@
   },
   "dependencies": {
     "@companion-atlas/story": "file:../packages/story-schema",
+    "@fastify/cors": "^11.3.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "exiftool-vendored": "^28.3.0",
     "fastify": "^5.2.0",
     "jose": "^5.9.6",
+    "minio": "^8.0.7",
     "openid-client": "^6.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "cross-env": "^10.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"

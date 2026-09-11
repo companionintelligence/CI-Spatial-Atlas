@@ -8,7 +8,12 @@
 ## Status legend
 
 - ✅ **implemented + tested** in this repo
-- 🟡 **scaffolded** (real code, not yet built/run — part of `viewer-react`)
+- 🟡 **written, not exercised** — real code that either has no caller in this
+  repo or has never been run against the live service it targets. Every 🟡 row
+  says which of the two it is, because the difference decides who unblocks it.
+  (It used to read "not yet built/run — part of `viewer-react`", which implied
+  the viewer was unbuilt. It is not: it has a Dockerfile, a service in
+  `docker-compose.yml`, and the `npm run dev` in §1 below.)
 - 🔧 **pending** (needs a change in another repo or a live service)
 
 ---
@@ -27,7 +32,17 @@ cd viewer-react && npm install && npm run dev    # :4174
 The API runs every request as `ATLAS_DEV_SUBJECT` with `*` scope (auth disabled);
 memory queries return nothing. Good for UI/renderer work.
 
-**Mode B — CONNECTED (real Portal + CI-Server)** 🟡
+Because that bypass would give any caller full ownership of every story, the
+server refuses to boot into it unless the environment says it is not a
+deployment. The `dev` tasks set `NODE_ENV=development` and
+`docker-compose.dev.yml` sets `ATLAS_ALLOW_DEV_AUTH=1`, so the command above
+just works; if you start the API some other way and it exits with "Refusing to
+start", set `ATLAS_ALLOW_DEV_AUTH=1` (see `.env.dev.example`).
+
+**Mode B — CONNECTED (real Portal + CI-Server)** 🟡 *(code paths exist and are
+unit-tested; never run against a live Portal + CI-Server — the two 🔧 items in
+§5 are what stands in the way, not missing code here)*
+
 Set in `.env.dev`:
 ```sh
 COMPANION_OIDC_ISSUER=https://hub.ci.localhost/api/auth   # local Portal dev
@@ -40,7 +55,7 @@ Requires the two cross-repo prerequisites in §5.
 
 ---
 
-## 2. CI-Portal OIDC ✅ (backend) / 🟡 (SPA)
+## 2. CI-Portal OIDC ✅ (backend) / 🟡 (SPA — written, nothing calls it)
 
 CI-Portal is **better-auth `oidcProvider`**. Issuer = `<portal-origin>/api/auth`;
 endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
@@ -53,11 +68,36 @@ endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
   Replaces the previous decode-only stub. Empty issuer ⇒ dev subject. Tested with a
   local keypair (signature/issuer/audience/expiry) in `server/test/auth-oidc.test.ts`.
 - **SPA login** 🟡 — [`viewer-react/src/auth/portal.ts`](../viewer-react/src/auth/portal.ts):
-  Authorization Code + PKCE (S256), public client. The module mirrors the Hub
-  RP flow but is not yet wired into the viewer shell. The viewer does provide a
-  separate embedded CI-Server sign-in/retry path for a connected Memory source;
-  it exchanges the server's CSRF-protected credentials for a scoped bearer kept
-  in the browser tab.
+  Authorization Code + PKCE (S256), public client. Mirrors the Hub RP flow.
+  **Complete, and called by nothing.** `beginLogin` / `completeLogin` /
+  `portalConfigFromEnv` have no importer in the app — only the test named
+  below — so none of this reaches the bundle: there is no
+  `/auth/callback` handling at boot, no sign-in control in the shell, and no
+  consumer for the token if one were obtained. The app being unbuilt was never
+  what stood in the way; three other things do, and only the first is a code
+  change here:
+  1. no caller — plus an Atlas-API client to spend the bearer on
+     (`VITE_ATLAS_API` has no reader in `viewer-react` today, so a completed
+     login would change nothing about what the viewer can fetch);
+  2. `companion-atlas` is not in CI-Portal `PUBLIC_CLIENTS` (§5.1 — another
+     repo's PR; local/`.ts.net`/`.local` redirect URIs are auto-allowed, so dev
+     alone needs no Portal record);
+  3. `.env.default` ships `VITE_OIDC_ISSUER`/`VITE_OIDC_REDIRECT_URI` empty, so
+     `portalConfigFromEnv()` returns `null` in every configuration checked in.
+
+  Its failure paths *are* covered — `viewer-react/test/portal-auth.test.ts`
+  pins that an `?error=…` callback reports Portal's own error (blocker 2 above
+  arrives that way) rather than "missing authorization code", and that the PKCE
+  verifier is consumed on every path.
+
+  Separately, the viewer now has an embedded **CI-Server Memory sign-in** path
+  that *is* wired in —
+  [`viewer-react/src/memory/auth.ts`](../viewer-react/src/memory/auth.ts). It
+  exchanges a connected Memory server's CSRF-protected credentials for a
+  scoped access token, kept in `sessionStorage` scoped to the Memory URL. This
+  is unrelated to the Portal OIDC flow above: it authenticates against
+  CI-Server directly rather than brokering through Portal, for the case where
+  a viewer is pointed at a Memory server with no Portal in front of it.
 
 ## 3. CI-Server Companion Memory ✅
 
@@ -78,7 +118,7 @@ CI-Server exposes **GraphQL** at `/graphql` (`:3030` direct, `/api/graphql` via 
   header for a scoped CI-Server key. Needs `PORTAL_OIDC_ENABLED=true` +
   `companion-atlas` in CI-Server `PORTAL_OIDC_AUDIENCE` when using Portal tokens.
 
-## 4. CI-Hub / Marketplace 🟡
+## 4. CI-Hub / Marketplace 🟡 *(manifests written; never installed into a Hub)*
 
 Register Atlas as a Hub app: [`hub/config.json`](../hub/config.json) (`AppInfo`) +
 [`hub/docker-compose.json`](../hub/docker-compose.json). Key blocks:
@@ -106,23 +146,62 @@ tokens itself (§6). No runtime CSS injection.
    `PORTAL_OIDC_AUDIENCE` (default allowlist omits it), or mint tokens with an
    allowed `aud` / use a scoped API key.
 
-## 6. Theming (CI-Common) ✅
+## 6. Theming (CI-Common) 🟡 — adopted in CSS, unresolvable in a single-repo build
 
-The small CI token contract used by Atlas is kept in the standalone
-[`viewer-react/src/theme/atlas-tokens.css`](../viewer-react/src/theme/atlas-tokens.css)
-bridge so a fresh checkout does not depend on a sibling CI-Common checkout or a
-private registry. `theme.css` imports the bridge and `theme/index.ts` exposes
-`primaryHex()` for Cesium/R3F colors. Manrope is self-hosted via `@fontsource`.
-`npm run lint:canon` remains the brand-color gate. CI-Common's `auth` package is
-a stub (contract only) — we implemented the verifier ourselves per §2.
+CI canonical tokens are `@companionintelligence/tokens` **v0.3** — phthalo
+`--primary` **#0a6358** (light) / **#c5e8dc** (dark), **Manrope** typography.
+
+They are **not vendored.** [`viewer-react/src/theme/theme.css`](../viewer-react/src/theme/theme.css)
+line 12 `@import`s the bare specifier `@companionintelligence/tokens/tokens.css`,
+which `package-lock.json` resolves to a `link:` on a sibling `../ci-common`
+checkout — the only such entry in the lockfile. Earlier editions of this section
+said the files had been copied into `viewer-react/src/theme/` and carried a ✅;
+they never were (that directory holds only `README.md`, `atlas.css`,
+`authoring.css`, `presenter.css`, `theme.css`), and the ✅ concealed what the
+missing copy costs: `vite build` and the viewer's Docker image cannot complete in
+a checkout with no sibling CI-Common. `npm install` / `npm ci`, `npm test` and
+`tsc --noEmit` are *not* affected — none of them reads that `@import`. See
+[`docs/architecture.md` §8](architecture.md) for the two ways to close it
+(publish to GitHub Packages, or vendor for real) and why they are not equivalent.
+
+Consumption is **CSS only**. There is no programmatic tokens import:
+`viewer-react/src/theme/index.ts` exported `primaryHex()`/`fontStack()` for the
+Cesium/R3F colors, but the three files that would have used it
+(`layers/cesium.ts`, `authoring/style.ts`, `authoring/entities.ts`) each ended up
+carrying hex literals mirroring `theme/atlas.css`, so it had no importers at all
+and has been deleted. Anything citing `primaryHex()` is describing a file that no
+longer exists.
+
+The shell is **committed dark** (`atlas.css` aliases `--atlas-*` onto the
+canonical teal ramp — `--teal-950`, `--teal-900`, `--teal-200`). tokens.css also
+ships a `.dark` block, but nothing in `viewer-react` ever adds that class, so it
+is not the mechanism here; there is no light/dark toggle to drive.
+
+`npm run lint:canon` (CI-Common's zero-dep gate) **fails** on a non-canon
+`--primary` declaration — including the retired pre-v0.3 teals #0f717a/#abd4d8,
+which is exactly what this section used to name as current. Stray hex literals
+elsewhere are reported as non-blocking **warnings** (`npm run lint:canon` exits 0
+with ~44 of them today), so the WebGL literals listed above are advisory, not
+gated — nothing mechanically stops them drifting from `atlas.css`.
+
+CI-Common's `auth` package is a stub (contract only) — we implemented the
+verifier ourselves per §2.
 
 ## 7. What's left
 
 - Adopt `@companion-atlas/story` in the server schema (delete the mirrored Zod) — a
   breaking migration; see `docs/CONSOLIDATION.md`.
-- Wire the Portal SPA login into the viewer shell and define token refresh/logout
-  semantics. The Cesium clock, React shell, scrapbook, and CI-Server sign-in
-  recovery are already implemented in `viewer-react`.
+- Wire the SPA login: give `viewer-react/src/auth/portal.ts` a caller — callback
+  handling at boot, a sign-in control, and an Atlas-API client that spends the
+  bearer (§2). Building the viewer is *not* part of this; it has been built and
+  run since the Resium spike landed. The separate embedded CI-Server Memory
+  sign-in (§2, `memory/auth.ts`) is already wired and does not depend on this.
+- Make `vite build` work in a single-repo checkout (§6) — the last thing between
+  this repo and a green Docker/CI image.
+- ~~Drive the Cesium `Viewer` clock from the CZML doc packet.~~ Done — `AtlasApp`
+  applies the story clock and `ui/TimeMachine.tsx` scrubs it; this line survived
+  here for as long as it did because "wire the SPA login + Cesium clock" was one
+  bullet and only half of it was still true.
 - Persistence (Postgres/Redis/MinIO) + GPU reconstruction — `docs/CONSOLIDATION.md`
   Phases 3–4.
 - Live end-to-end with populated located memories, Portal + CI-Server, physical

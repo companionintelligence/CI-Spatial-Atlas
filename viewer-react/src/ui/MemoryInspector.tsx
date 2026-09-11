@@ -61,7 +61,10 @@ export function MemoryInspector({ memory, related, place, weather, streetView, s
   onExpand: () => void;
   /** Whether this memory is already in the scrapbook draft. */
   collected: boolean;
-  onCollect: () => void;
+  /** Omitted when collecting is off — an embedded reader's scrapbook is
+   *  per-browser state they can never save, curate or open, so the button would
+   *  appear to work and go nowhere. */
+  onCollect?: () => void;
 }) {
   if (!memory) return null;
   const coord = memory.lat != null && memory.lon != null
@@ -175,14 +178,16 @@ export function MemoryInspector({ memory, related, place, weather, streetView, s
         )}
         <div className="atlas-insp-actions">
           <button className="atlas-btn primary" onClick={() => onFly(memory)}><PlaneIcon />Fly here</button>
-          <button
-            className={`atlas-btn${collected ? ' collected' : ''}`}
-            onClick={onCollect}
-            aria-pressed={collected}
-            title={collected ? 'Remove from your scrapbook' : 'Collect into your scrapbook'}
-          >
-            <PlusIcon />{collected ? 'Collected' : 'Collect'}
-          </button>
+          {onCollect && (
+            <button
+              className={`atlas-btn${collected ? ' collected' : ''}`}
+              onClick={onCollect}
+              aria-pressed={collected}
+              title={collected ? 'Remove from your scrapbook' : 'Collect into your scrapbook'}
+            >
+              <PlusIcon />{collected ? 'Collected' : 'Collect'}
+            </button>
+          )}
         </div>
       </div>
     </aside>

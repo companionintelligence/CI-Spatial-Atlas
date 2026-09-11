@@ -9,7 +9,36 @@ function endpointOf(url: string): { endpoint: string; origin: string } {
   return { endpoint, origin: endpoint.replace(/\/graphql$/, '') };
 }
 
-async function gql<T>(src: MemorySource, query: string, variables: Record<string, unknown>): Promise<T> {
+/**
+ * The CI-Server origin a `MemorySource` points at, without `/graphql` — what
+ * relative presigned media paths (`/companion/…?X-Amz-Signature=…`) resolve
+ * against. Exported so the import/export modules don't each re-derive it.
+ */
+export function memoryOrigin(src: MemorySource): string {
+  return endpointOf(src.url).origin;
+}
+
+/**
+ * Strip any query string / fragment before an endpoint goes into an error
+ * message. Operators do paste `…/graphql?token=<jwt>` into `?memory=`, and an
+ * error string ends up in the DOM, in a screenshot, and in whatever log the
+ * host collects. A token must never travel with a diagnostic.
+ */
+function redact(endpoint: string): string {
+  return endpoint.replace(/[?#].*$/, '');
+}
+
+/**
+ * POST one GraphQL operation to Companion Memory. The single transport for
+ * every memory call in the viewer — import, export, places — so the auth,
+ * CORS and GraphQL-error conventions below exist in exactly one place.
+ */
+export async function memoryGraphQL<T>(
+  src: MemorySource,
+  query: string,
+  variables: Record<string, unknown>,
+  opts: { signal?: AbortSignal } = {},
+): Promise<T> {
   const { endpoint } = endpointOf(src.url);
   let res: Response;
   try {
@@ -24,13 +53,18 @@ async function gql<T>(src: MemorySource, query: string, variables: Record<string
       // guarded GraphQL path still needs the bearer/API key the viewer supplies.
       credentials: 'include',
       body: JSON.stringify({ query, variables }),
+      signal: opts.signal,
     });
-  } catch {
+  } catch (e) {
+    // A caller that walked away (unmounted component, superseded import) is not
+    // a connectivity problem — reporting it as CORS would send someone chasing a
+    // server config over their own navigation.
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw e;
     // fetch only rejects on network/CORS failures — the response itself never
     // reaches JS when the preflight is refused, so this is the message a user
     // actually gets when CI-Server has no CORS allowlist for this origin.
     throw new Error(
-      `Couldn't reach Companion Memory at ${endpoint}. If the server is up, it's likely CORS: ` +
+      `Couldn't reach Companion Memory at ${redact(endpoint)}. If the server is up, it's likely CORS: ` +
       `CI-Server must allow this origin with credentials (a wildcard is invalid with cookies), ` +
       `or serve Atlas from the same origin.`,
     );
@@ -50,12 +84,12 @@ async function gql<T>(src: MemorySource, query: string, variables: Record<string
       : text ? ` — ${text.slice(0, 160)}` : ' — check the server URL.';
     throw new Error(`Companion Memory returned HTTP ${res.status}${hint}`);
   }
-  if (!json) throw new Error(`Companion Memory returned a non-JSON response from ${endpoint}.`);
+  if (!json) throw new Error(`Companion Memory returned a non-JSON response from ${redact(endpoint)}.`);
   return json.data as T;
 }
 
 /** CI-Server clamps `first` to this; asking for more silently returns 100. */
-const MAX_PAGE_SIZE = 100;
+export const MAX_PAGE_SIZE = 100;
 /** Stop runaway paging on a very large memory. */
 const HARD_CAP = 2000;
 
@@ -97,7 +131,7 @@ export async function fetchMemoryStory(src: MemorySource): Promise<Story> {
   let pages = 0;
 
   do {
-    const data = await gql<SearchEnvelope>(src, LOCATED_MEDIA_QUERY, { first, after });
+    const data = await memoryGraphQL<SearchEnvelope>(src, LOCATED_MEDIA_QUERY, { first, after });
     const search = data?.search;
     totalCount = search?.totalCount ?? totalCount;
     const page = Array.isArray(search?.edges) ? search.edges : [];
@@ -137,7 +171,7 @@ interface PlacesQueryEnvelope {
  * Fetch every named Place from Companion Memory — the room-to-planet
  * geographic entities memories happen *in*, distinct from the located
  * memories themselves (`fetchMemoryStory`). Same transport, same auth
- * (bearer/cookie via `gql()`); CI-Server's `places()` Paginator doesn't clamp
+ * (bearer/cookie via `memoryGraphQL()`); CI-Server's `places()` doesn't clamp
  * `first` server-side the way `search()` does, but page defensively anyway.
  */
 export async function fetchPlaces(src: MemorySource): Promise<Place[]> {
@@ -147,7 +181,7 @@ export async function fetchPlaces(src: MemorySource): Promise<Place[]> {
   let pages = 0;
 
   do {
-    const data = await gql<PlacesQueryEnvelope>(src, PLACES_QUERY, { first, after });
+    const data = await memoryGraphQL<PlacesQueryEnvelope>(src, PLACES_QUERY, { first, after });
     const page = Array.isArray(data?.places?.edges) ? data.places!.edges! : [];
     edges.push(...page);
     const info = data?.places?.pageInfo;
@@ -165,7 +199,7 @@ export async function saveStoryToMemory(
   opts: { shareUrl?: string } = {},
 ): Promise<{ id: string; title?: string }> {
   const input = createEventInputFromStory(story, { shareUrl: opts.shareUrl });
-  const data = await gql<{ createEvent?: { id?: string; title?: string } }>(src, SAVE_STORY_MUTATION, { input });
+  const data = await memoryGraphQL<{ createEvent?: { id?: string; title?: string } }>(src, SAVE_STORY_MUTATION, { input });
   const created = data?.createEvent;
   if (!created?.id) throw new Error('Companion Memory did not confirm the save.');
   return { id: created.id, title: created.title };

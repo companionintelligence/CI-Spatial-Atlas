@@ -7,6 +7,47 @@ pending a first tagged release).
 
 ## Unreleased
 
+### Removed
+- **The vanilla-TS viewer.** `viewer-react/` is now the only viewer;
+  `src/` (the three.js + Cesium control deck), the root `index.html`,
+  `vite.config.ts`, `tsconfig.json`, and `Dockerfile` are gone, along with the
+  texture pipeline (`scripts/generate-textures.ts`, `materials/`,
+  `public/textures`, `public/basis`), the Cesium asset copy
+  (`scripts/copy-cesium-assets.ts`), and the doc-screenshot capture
+  (`scripts/capture-doc-screenshots.ts`). This completes the
+  [`docs/CONSOLIDATION.md`](docs/CONSOLIDATION.md) Phase-1 item that kept the
+  vanilla viewer shipping until Resium reached parity.
+  - Root `npm run dev` / `build` / `preview` / `test` / `typecheck` (and their
+    `deno task` twins) now drive `viewer-react` + `packages/story-schema` +
+    `server`. The `vibe:*` scripts, `textures:build`, `cesium:assets`, and
+    `docs:screenshots` are gone.
+  - `docker-compose.yml`'s `viewer` service is now built from
+    `viewer-react/Dockerfile`, which serves on **8080** to match the port
+    `hub/config.json` and `hub/docker-compose.json` advertise to CI-Hub. The
+    separate `viewer-react` service is gone; host port is 4174.
+  - **The pixel-diff visual regression suite went with it.** `tests/visual/*`
+    and its baselines only ever covered the removed renderer's deterministic
+    `?static=1` path — Resium was never given baselines. Re-establishing them
+    is open work. `viewer-react/tests/*.capture.ts` (Playwright *capture*, not
+    assertions) is the remaining harness.
+  - `docs/ui-guide.md`, `docs/CESIUM-TESTING.md`, and `docs/screenshots/*`
+    documented the removed UI and were removed; `docs/architecture.md` was
+    rewritten around the one viewer.
+  - **CI no longer builds any image.** The root `viewer` and `image` jobs are
+    gone with the Dockerfile they built. `viewer-react`'s image cannot build in
+    a single-repo checkout because `@companionintelligence/tokens` resolves to
+    a path outside this repository, so `hub/docker-compose.json` currently
+    names an image nothing here produces. Publishing that package to GitHub
+    Packages is what unblocks it.
+
+### Changed
+- `3d-tiles-renderer` is now declared by `viewer-react` (it is imported by
+  `src/renderers/xr/worldTransform.ts`) instead of being picked up by hoisting
+  from the root viewer's dependencies.
+- `.env.default`'s viewer block is the `VITE_*` set the React viewer actually
+  reads; `ATLAS_VIEWER_BASE_URL` defaults to `http://localhost:4174`.
+
+
 ### Added
 - **Consolidation with CI-Earth-2** — Companion Atlas is now the single home for
   the product; the parallel CI-Earth-2 build is superseded and slated for archive.
