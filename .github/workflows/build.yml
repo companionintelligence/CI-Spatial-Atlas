@@ -22,6 +22,14 @@ on:
 
 permissions:
   contents: read
+  # Canon 1.0 (@companionintelligence/config, and its own transitive dep on
+  # @companionintelligence/content) is a real, resolvable dependency now —
+  # without this, GITHUB_TOKEN has no packages scope at all (an explicit
+  # `permissions:` block zeroes out everything not listed), so every job's
+  # `npm install` 403s on any @companionintelligence/* package with
+  # "Permission installation not allowed to Read organization package",
+  # regardless of the per-package repo grant already configured upstream.
+  packages: read
 
 concurrency:
   # push (branches-ignore: [main]) and pull_request both fire for the same
