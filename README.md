@@ -184,15 +184,13 @@ These files are configured to support continuous, scoped iterations gated on
 
 ## License
 
-Companion Atlas is proprietary software distributed under the **Commercial
-Standard License** (`CI-Commercial-1.0`) — see [`LICENSE.md`](LICENSE.md). It
-is **not** open source: the license does not grant rights to copy, redistribute,
-sublicense, or incorporate this software into other products without the
-licensor's prior written consent, and no source code rights are implied by
-having read access to this repository. The underlying research in
-[`REIMAGINE.md`](REIMAGINE.md) surveys open-source tools (CesiumJS, COLMAP,
-OpenDroneMap, Nerfstudio, etc.) that Companion Atlas integrates with or is
-inspired by — those third-party projects retain their own licenses.
+Companion Atlas uses the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
+— free to run, fork, and modify for personal or nonprofit use. See
+[`LICENSE.md`](LICENSE.md) and [`docs/License-FAQ.md`](docs/License-FAQ.md) for
+the specifics. The underlying research in [`REIMAGINE.md`](REIMAGINE.md) surveys
+open-source tools (CesiumJS, COLMAP, OpenDroneMap, Nerfstudio, etc.) that
+Companion Atlas integrates with or is inspired by — those third-party projects
+retain their own licenses.
 
 For licensing inquiries or support: [ci.computer/support-faqs](https://ci.computer/support-faqs)
 or **team@ci.computer**.
