@@ -6,10 +6,15 @@
 # server/wrangler.toml's header comment for what this deployment does and
 # does not cover.
 #
-# Requires two repository secrets that this workflow does not create:
+# Requires repository secrets that this workflow does not create:
 #   CLOUDFLARE_API_TOKEN    a token with Workers Scripts:Edit, D1:Edit,
 #                           Workers R2 Storage:Edit for this account
 #   CLOUDFLARE_ACCOUNT_ID
+#   CI_COMMON_ACCESS_TOKEN  a PAT (fine-grained, scoped to just this repo +
+#                           companionintelligence/CI-Common, Contents:Read
+#                           on both) — the default GITHUB_TOKEN cannot fetch
+#                           the private CI-Common submodule; see the
+#                           checkout step below and build.yml's "viewer" job.
 #
 # Runs only on push to main — never from a feature branch or a fork's pull
 # request — so a deploy happens once a change has actually merged, not on
@@ -41,9 +46,15 @@ jobs:
     name: Build viewer + deploy Worker
     runs-on: ubuntu-latest
     steps:
+      # `token:` matters here, not just `submodules: true`: GITHUB_TOKEN is
+      # scoped to this one repo and cannot fetch the private
+      # companionintelligence/CI-Common submodule ("Repository not found").
+      # Falls back to GITHUB_TOKEN, unchanged, if CI_COMMON_ACCESS_TOKEN
+      # isn't set — see the header comment above for what that secret needs.
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
