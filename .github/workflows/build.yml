@@ -52,9 +52,19 @@ jobs:
       # viewer-react's real `tsc --noEmit && vite build`. That needs the full
       # workspace tree installed, including the @companionintelligence/tokens
       # submodule viewer-react's theme imports.
+      #
+      # `token:` is required here, not just `submodules: true`: the default
+      # GITHUB_TOKEN is scoped to this one repo and cannot fetch the private
+      # companionintelligence/CI-Common submodule ("Repository not found"),
+      # so submodule checkout 404s on every run until CI_COMMON_ACCESS_TOKEN
+      # is set — see the repo's Settings → Secrets and variables → Actions.
+      # It needs Contents:Read on both this repo and CI-Common (a
+      # fine-grained PAT scoped to just those two repos is enough); falls
+      # back to GITHUB_TOKEN, unchanged, when unset.
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -184,9 +194,13 @@ jobs:
       # packages/story-schema and third_party/ci-common/packages/tokens,
       # resolved via the npm workspace). The submodule checkout is required
       # for that COPY to have real content.
+      #
+      # See the "viewer" job above for why `token:` is required for a
+      # private-submodule checkout, and what CI_COMMON_ACCESS_TOKEN needs.
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Build image
         run: docker build -f viewer-react/Dockerfile -t companion-atlas-viewer:ci .
