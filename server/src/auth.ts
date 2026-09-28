@@ -210,14 +210,20 @@ export function assertAuthSafeToBoot(env: NodeJS.ProcessEnv = process.env): void
   );
 }
 
-/** Verify an `Authorization: Bearer …` header and return its auth context. */
-export async function verifyBearer(authorization?: string): Promise<AuthContext> {
-  const cfg = oidcConfigFromEnv();
+/**
+ * Verify an `Authorization: Bearer …` header and return its auth context.
+ *
+ * `env` defaults to `process.env` for the Fastify entry point (index.ts);
+ * the Worker entry point (worker.ts) passes its own bindings object instead,
+ * since Workers has no populated `process.env` for these variables.
+ */
+export async function verifyBearer(authorization?: string, env: NodeJS.ProcessEnv = process.env): Promise<AuthContext> {
+  const cfg = oidcConfigFromEnv(env);
   const token = authorization?.replace(/^Bearer\s+/i, '') ?? '';
 
   if (!cfg) {
     // Auth disabled for local/dev — everything runs as a single dev subject.
-    return devSubjectContext(token);
+    return devSubjectContext(token, env);
   }
   if (!token) return ANONYMOUS;
 

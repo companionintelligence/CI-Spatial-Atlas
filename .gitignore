@@ -38,7 +38,12 @@ capture/
 /deno.lock
 /*/deno.lock
 /*/*/deno.lock
-.claude/
+# Personal/local Claude Code state — but the SessionStart hook and its
+# registration in settings.json are shared automation for Claude Code on the
+# web, not per-machine state, so those two are explicitly un-ignored below.
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 
 # macOS Finder per-directory view state (icon positions, sort order).
 # Per-user, per-machine UI metadata - never belongs in the repo.

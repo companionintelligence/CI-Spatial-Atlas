@@ -1,0 +1,62 @@
+# Companion Atlas — Cloudflare Worker (prod).
+#
+# One Worker serves both halves of the standalone Cloudflare deployment at
+# https://atlas.ci.computer:
+#   - the viewer-react production build, as static assets
+#   - the REST API surface it calls (src/worker.ts), for /api/* and /healthz
+#
+# Everything else — the SPA shell, JS/CSS, Cesium's static assets — never
+# reaches src/worker.ts at all; Cloudflare's assets layer answers those
+# requests directly. See src/worker.ts's header comment for what is
+# deliberately out of scope (the MCP tool surface, real 3D reconstruction).
+#
+# Deploy with `npm run deploy` (wrangler) from server/, after `npm run build`
+# in viewer-react/ has produced the dist/ this [assets] block points at.
+# Requires a Cloudflare API token with Workers + D1 + R2 edit permissions —
+# see .github/workflows/deploy-cloudflare.yml for the CI wiring.
+#
+# The custom domain (atlas.ci.computer) is not set here: Cloudflare Workers
+# custom domains/routes are DNS-zone changes, which this file cannot express
+# and this repo's automation cannot make on its own — attach
+# "atlas.ci.computer" to this Worker from the Cloudflare dashboard (Workers &
+# Pages -> ci-atlas-prod -> Settings -> Domains & Routes), once, by someone
+# with access to the ci.computer zone.
+
+name = "ci-atlas-prod"
+main = "src/worker.ts"
+compatibility_date = "2026-09-28"
+# node:crypto (object-store.ts's key derivation) needs this; nothing here
+# uses Node APIs beyond that.
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "../viewer-react/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/healthz"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ci-atlas-prod"
+database_id = "a630aa14-7df1-46ec-9cdf-7a45279b6bb2"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "ci-atlas-prod-media"
+
+[vars]
+# Both viewer and API are served from the one custom domain above.
+ATLAS_VIEWER_BASE_URL = "https://atlas.ci.computer"
+ATLAS_API_BASE_URL = "https://atlas.ci.computer/api"
+ATLAS_CORS_ORIGINS = "https://atlas.ci.computer"
+
+# ── Companion OIDC (required before this deployment will serve anything
+#    beyond /healthz — see the boot guard in src/worker.ts) ────────────────
+# COMPANION_OIDC_ISSUER = "https://<ci-portal-prod-origin>/api/auth"
+# COMPANION_OIDC_AUDIENCE = "companion-atlas"
+
+# ── Companion Intelligence suite connectors (optional; each is a no-op
+#    until its URL is set — see connectors.ts) ─────────────────────────────
+# CI_MEMORY_URL = ""
+# OPENCLAW_URL = ""
+# HERMES_URL = ""

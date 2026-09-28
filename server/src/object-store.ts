@@ -203,7 +203,16 @@ export function subjectPrefix(subject: string): string {
  * shared URL.
  */
 export function newObjectKey(subject: string, contentType: string): string {
-  return `u/${subjectPrefix(subject)}/${randomBytes(16).toString('hex')}${extensionFor(contentType)}`;
+  return `u/${subjectPrefix(subject)}/${hex(randomBytes(16))}${extensionFor(contentType)}`;
+}
+
+/** `Buffer#toString('hex')`, spelled without it: `@cloudflare/workers-types`'
+ *  `Buffer` shim (this module also compiles under the Worker's tsconfig, for
+ *  the key/validation helpers the Worker entry point reuses) doesn't model
+ *  that overload, so this iterates bytes instead — identical output, and
+ *  correct under both the Node and Workers `Buffer`. */
+function hex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
