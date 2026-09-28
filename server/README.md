@@ -64,3 +64,42 @@ See [`../.env.default`](../.env.default) for `CI_MEMORY_URL`, optional
 `HERMES_URL`, `COMPANION_OIDC_*`, `DATABASE_URL`, `REDIS_URL`, and `S3_*`.
 With no OIDC issuer set, auth is disabled and everything runs as a single dev
 subject.
+
+## Cloudflare deployment (prod)
+
+`wrangler.toml` + `src/worker.ts` are a **second, parallel entry point** —
+not a replacement for the Fastify server above — for a standalone deployment
+at `https://atlas.ci.computer`. One Worker (`ci-atlas-prod`) serves the
+`viewer-react` build as static assets and this REST API surface at `/api/*`,
+against D1 (`src/store-d1.ts`) and R2 (`src/object-store-r2.ts`) instead of
+Postgres/Redis/MinIO.
+
+**Deliberately out of scope** — see `wrangler.toml` and `worker.ts`'s header
+comments for the full reasoning:
+- The MCP tool surface (`mcp.ts`) — OpenClaw/Hermes/agents keep using the
+  containerized Fastify server's `/mcp`.
+- Real 3D reconstruction (`pipeline.ts`'s `reconstruct()`) — COLMAP,
+  OpenDroneMap, and Nerfstudio need a GPU worker container Workers cannot
+  run. Reconstruct jobs enqueue here but nothing drains them.
+
+**Before this deployment serves anything but `/healthz`**, `COMPANION_OIDC_ISSUER`
+must be set (in `wrangler.toml`'s `[vars]`, or as a secret) — the Worker
+refuses every other request with a 500 otherwise, the same rule
+`assertAuthSafeToBoot()` enforces once at process boot for the Fastify
+server, applied per-request since a Worker has no boot phase.
+
+```sh
+npm run build          # from the repo root — builds viewer-react/dist
+cd server
+npm run deploy         # wrangler deploy
+```
+
+CI does this automatically on push to `main`
+(`.github/workflows/deploy-cloudflare.yml`), given `CLOUDFLARE_API_TOKEN` +
+`CLOUDFLARE_ACCOUNT_ID` repository secrets.
+
+**One manual step this repo cannot do for you:** attaching the
+`atlas.ci.computer` custom domain to the `ci-atlas-prod` Worker is a
+Cloudflare-dashboard, DNS-zone change (Workers & Pages → `ci-atlas-prod` →
+Settings → Domains & Routes), not something `wrangler.toml` or CI can express
+— do this once, as someone with access to the `ci.computer` zone.

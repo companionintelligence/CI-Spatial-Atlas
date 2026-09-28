@@ -7,6 +7,26 @@ pending a first tagged release).
 
 ## Unreleased
 
+### Added
+- **Cloudflare deployment (prod).** A single Cloudflare Worker
+  (`server/wrangler.toml`, `ci-atlas-prod`) serves the `viewer-react`
+  production build as static assets and a REST API shim
+  (`server/src/worker.ts`) at `/api/*`, backed by D1 (`store-d1.ts`, in place
+  of Postgres) and R2 (`object-store-r2.ts`, in place of MinIO) instead of
+  the containerized stack's Postgres/Redis/MinIO. Deploys from
+  `.github/workflows/deploy-cloudflare.yml` on push to `main`. Out of scope,
+  deliberately: the MCP tool surface (agents keep using the containerized
+  Fastify server's `/mcp`) and real 3D reconstruction (COLMAP/OpenDroneMap/
+  Nerfstudio need a GPU worker container Workers cannot run) — see
+  `server/wrangler.toml` and `server/src/worker.ts` for the full scope note,
+  and `server/README.md` for the manual custom-domain step this needs.
+- **`.claude/hooks/session-start.sh`** — a Claude Code on the web SessionStart
+  hook that inits the `third_party/ci-common` submodule and runs `npm
+  install`, so a cloud dev session is immediately buildable/testable. Degrades
+  to an actionable warning (never a failed session start) when
+  `NODE_AUTH_TOKEN` isn't configured for the private `@companionintelligence/*`
+  GitHub Packages.
+
 ### Removed
 - **The vanilla-TS viewer.** `viewer-react/` is now the only viewer;
   `src/` (the three.js + Cesium control deck), the root `index.html`,

@@ -23,7 +23,7 @@ Companion OIDC).
 | [`docs/adr/0001-resium-viewer-r3f-xr.md`](docs/adr/0001-resium-viewer-r3f-xr.md) | Why one viewer: Resium/Cesium for desktop + mobile, R3F for WebXR |
 | [`docs/architecture.md`](docs/architecture.md) | Mermaid diagrams of the system and the viewer module map, renderer selection, the `Story` schema, and the processing server, plus reference tables and the known gaps |
 | [`docs/mcp-api.md`](docs/mcp-api.md) | The MCP tool reference for creating and publishing stories, manually or by an agent |
-| [`server/README.md`](server/README.md) | Running and extending the processing server |
+| [`server/README.md`](server/README.md) | Running and extending the processing server, and the [Cloudflare Worker deployment](server/README.md#cloudflare-deployment-prod) at atlas.ci.computer |
 | [`CHANGELOG.md`](CHANGELOG.md) | Notable changes by version |
 
 ## How it fits together
@@ -181,6 +181,12 @@ system (Companion OIDC, once wired into the viewer, will replace this; see
 
 These files are configured to support continuous, scoped iterations gated on
 `npm test` and `npm run build`.
+
+`.claude/hooks/session-start.sh` is Claude Code on the web's equivalent: a
+SessionStart hook that inits the private `third_party/ci-common` submodule
+and runs `npm install` so a cloud session is immediately buildable/testable,
+given a `NODE_AUTH_TOKEN` (GitHub PAT, `read:packages` on
+`companionintelligence`) configured in the environment's settings.
 
 ## License
 

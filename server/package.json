@@ -14,7 +14,10 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "worker:dev": "wrangler dev",
+    "worker:typecheck": "tsc -p tsconfig.worker.json --noEmit",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@companion-atlas/story": "file:../packages/story-schema",
@@ -22,17 +25,20 @@
     "@modelcontextprotocol/sdk": "^1.12.0",
     "exiftool-vendored": "^28.3.0",
     "fastify": "^5.2.0",
+    "hono": "^4.13.9",
     "jose": "^5.9.6",
     "minio": "^8.0.7",
     "openid-client": "^6.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
     "@types/node": "^22.10.0",
     "cross-env": "^10.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "wrangler": "^4.142.0"
   },
   "comments": {
     "note": "Heavy native reconstruction tools (COLMAP, OpenDroneMap/NodeODM, Nerfstudio, ffmpeg) are NOT npm dependencies. They run in the GPU worker container (docker/Dockerfile.worker) and are invoked by src/pipeline.ts over a job queue. This package only orchestrates them."
