@@ -14,10 +14,14 @@
 # Publishing the image and wiring a host are separate, reviewed decisions.
 name: build
 
+# >>> ci-local:gated original triggers below, restore with `ci-local restore`
+# on:
+#   push:
+#     branches-ignore: [main]
+#   pull_request:
+#   workflow_dispatch:
+# <<< ci-local:gated
 on:
-  push:
-    branches-ignore: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
