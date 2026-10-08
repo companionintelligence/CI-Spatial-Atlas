@@ -21,9 +21,13 @@
 # every push to an in-review branch.
 name: deploy-cloudflare
 
+# >>> ci-local:gated original triggers below, restore with `ci-local restore`
+# on:
+#   push:
+#     branches: [main]
+#   workflow_dispatch:
+# <<< ci-local:gated
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
