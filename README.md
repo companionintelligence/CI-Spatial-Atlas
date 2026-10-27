@@ -2,7 +2,16 @@
 
 <p align="center"><strong>Companion Atlas 3D XR Globe to review and plan your travels.</strong></p>
 
+[![release](https://img.shields.io/badge/release-not%20published-757575?style=flat-square)](https://github.com/companionintelligence/CI-Spatial-Atlas/releases)
+[![platform](https://img.shields.io/badge/platform-Web%20%C2%B7%20WebXR-0a6358?style=flat-square)](https://github.com/companionintelligence/CI-Spatial-Atlas)
+[![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0-0a6358?style=flat-square)](LICENSE.md)
+[![Discord](https://img.shields.io/badge/chat-Discord-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.com/invite/yQp9hwpzAa)
+
 <p align="center"><a href="#documentation">Documentation</a> · <a href="#license">License</a> · <a href="https://docs.ci.computer/docs/reference/open-source-systems">Systems map</a></p>
+
+<p align="center">
+  <a href="#quickstart-local-viewer"><img src="https://img.shields.io/badge/Start%20the%20viewer-Start%20the%20viewer-0a6358?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Start the viewer" height="30"></a>
+</p>
 
 *(formerly Companion Earth; the GitHub repository was renamed from `CI-Earth`
 to [`Companion-Atlas`](https://github.com/companionintelligence/Companion-Atlas))*
@@ -15,7 +24,7 @@ Companion OIDC).
 
 | | |
 |---|---|
-| **License** | [Commercial Standard License](LICENSE.md) — proprietary, not open source (see [§ License](#license)) |
+| **License** | [PolyForm Noncommercial License 1.0.0](LICENSE.md) — noncommercial terms; check the license before reuse (see [§ License](#license)) |
 | **Status** | Active reimagining — see [`REIMAGINE.md`](REIMAGINE.md) for the roadmap |
 | **Stack** | TypeScript · React + **Resium/CesiumJS** (desktop + mobile) · React-Three-Fiber + `@react-three/xr` (WebXR) · Fastify + MCP SDK (server) · Docker Compose |
 
@@ -48,6 +57,13 @@ media / memory ─▶ ingest ─▶ reconstruct (SfM → mesh | gaussian splat) 
   mirrored in [`server/src/schema.ts`](server/src/schema.ts) (runtime).
 
 ## Feature set
+
+| Feature | What it provides |
+|---|---|
+| **Shared Story model** | Render Story data as a Cesium globe or an XR scene. |
+| **Multiple inputs** | Load a URL, local draft or Memory query. |
+| **Processing status** | Separate shipped viewer from scaffolded API, worker, store and connectors. |
+
 
 - **One viewer, two renderers, one model.** `rendererForDevice()` picks the
   Resium/Cesium globe on desktop and mobile, and the React-Three-Fiber +
