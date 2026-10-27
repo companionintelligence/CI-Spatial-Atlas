@@ -1,4 +1,8 @@
-# Companion Atlas
+<h1 align="center">Companion Atlas</h1>
+
+<p align="center"><strong>Companion Atlas 3D XR Globe to review and plan your travels.</strong></p>
+
+<p align="center"><a href="#documentation">Documentation</a> · <a href="#license">License</a></p>
 
 *(formerly Companion Earth; the GitHub repository was renamed from `CI-Earth`
 to [`Companion-Atlas`](https://github.com/companionintelligence/Companion-Atlas))*
