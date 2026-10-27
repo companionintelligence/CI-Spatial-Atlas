@@ -198,5 +198,5 @@ open-source tools (CesiumJS, COLMAP, OpenDroneMap, Nerfstudio, etc.) that
 Companion Atlas integrates with or is inspired by — those third-party projects
 retain their own licenses.
 
-For licensing inquiries or support: [ci.computer/support-faqs](https://ci.computer/support-faqs)
+For licensing inquiries or support: [support documentation](https://docs.ci.computer/docs/troubleshooting/getting-help)
 or **team@ci.computer**.
