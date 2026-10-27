@@ -192,6 +192,27 @@ and runs `npm install` so a cloud session is immediately buildable/testable,
 given a `NODE_AUTH_TOKEN` (GitHub PAT, `read:packages` on
 `companionintelligence`) configured in the environment's settings.
 
+<!-- companion-hub-readme-deep-review -->
+
+## Processing and deployment requirements
+
+| Mode | Services | Additional requirement |
+|---|---|---|
+| Local viewer | Web viewer and its configured API | Browser with WebGL support |
+| Processing + MCP | Processing service and MCP API | Local agent configured to the MCP endpoint |
+| Reconstruction | Full stack plus reconstruction worker | NVIDIA GPU and compatible container GPU access |
+
+```mermaid
+flowchart LR
+  Input[Spatial source data] --> Process[Processing service]
+  Process --> Store[Project and scene artifacts]
+  Store --> Viewer[Web viewer]
+  Agent[Local agent] --> MCP[MCP API]
+  MCP --> Process
+```
+
+Use the repository's [documentation index](docs/README.md) for the viewer, processing server, MCP API, and reconstruction-specific setup. Reconstruction is an optional path and requires GPU access; the viewer-only path does not.
+
 ## License
 
 Companion Atlas uses the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
