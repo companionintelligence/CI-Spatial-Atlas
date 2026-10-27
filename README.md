@@ -2,7 +2,7 @@
 
 <p align="center"><strong>Companion Atlas 3D XR Globe to review and plan your travels.</strong></p>
 
-<p align="center"><a href="#documentation">Documentation</a> · <a href="#license">License</a></p>
+<p align="center"><a href="#documentation">Documentation</a> · <a href="#license">License</a> · <a href="https://docs.ci.computer/docs/reference/open-source-systems">Systems map</a></p>
 
 *(formerly Companion Earth; the GitHub repository was renamed from `CI-Earth`
 to [`Companion-Atlas`](https://github.com/companionintelligence/Companion-Atlas))*
