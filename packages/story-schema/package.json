@@ -2,7 +2,7 @@
   "name": "@companion-atlas/story",
   "version": "0.1.0",
   "description": "Canonical 4D Story schema + normalizers + CZML converter for Companion Atlas. Consolidates the Companion-Atlas Story and CI-Earth-2 Scrapbook data models into one Zod-sourced package.",
-  "license": "CI-Commercial-1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

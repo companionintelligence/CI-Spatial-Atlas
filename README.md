@@ -14,7 +14,7 @@
 </p>
 
 *(formerly Companion Earth; the GitHub repository was renamed from `CI-Earth`
-to [`Companion-Atlas`](https://github.com/companionintelligence/Companion-Atlas))*
+to `Companion-Atlas`, and is now [`CI-Spatial-Atlas`](https://github.com/companionintelligence/CI-Spatial-Atlas))*
 
 **Turn any image, set of images, or video into a shareable 4D (3D + time)
 scrapbook map.** Companion Atlas is a containerized 3D processing server + web
@@ -24,7 +24,7 @@ Companion OIDC).
 
 | | |
 |---|---|
-| **License** | [PolyForm Noncommercial License 1.0.0](LICENSE.md) — noncommercial terms; check the license before reuse (see [§ License](#license)) |
+| **License** | [PolyForm Noncommercial License 1.0.0](LICENSE.md) — free for noncommercial use, including personal, research, and nonprofit; see [§ License](#license) |
 | **Status** | Active reimagining — see [`REIMAGINE.md`](REIMAGINE.md) for the roadmap |
 | **Stack** | TypeScript · React + **Resium/CesiumJS** (desktop + mobile) · React-Three-Fiber + `@react-three/xr` (WebXR) · Fastify + MCP SDK (server) · Docker Compose |
 
@@ -232,7 +232,8 @@ Use the repository's [documentation index](docs/README.md) for the viewer, proce
 ## License
 
 Companion Atlas uses the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
-— free to run, fork, and modify for personal or nonprofit use. See
+— free to run, fork, and modify for personal, research, and other noncommercial
+use. Companion Atlas is a free, public Companion Intelligence app. See
 [`LICENSE.md`](LICENSE.md) and [`docs/License-FAQ.md`](docs/License-FAQ.md) for
 the specifics. The underlying research in [`REIMAGINE.md`](REIMAGINE.md) surveys
 open-source tools (CesiumJS, COLMAP, OpenDroneMap, Nerfstudio, etc.) that

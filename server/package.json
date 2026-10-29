@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Companion Atlas — containerized 3D processing server + MCP API that turns geodata, images, and video into shareable 4D scrapbook stories.",
-  "license": "CI-Commercial-1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "bin": {
     "atlas-mcp": "dist/mcp-stdio.js"
   },
