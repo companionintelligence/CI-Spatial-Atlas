@@ -1,0 +1,124 @@
+name: Publish viewer image
+
+# Builds viewer-react/Dockerfile, smoke-tests it, then pushes to GHCR as
+# ghcr.io/companionintelligence/companion-atlas-viewer (the image
+# hub/docker-compose.json tells CI-Hub to pull).
+#
+# PUBLISHING IS MANUAL (same pattern as CI-Spatial's docker-publish.yml): run
+# this workflow from main and give it a `tag` input naming the git tag or ref
+# to build, e.g. v0.1.0. The ref is checked out and published as
+# :<tag> and an immutable :sha-<short>. :latest moves only when the workflow
+# itself is dispatched from main.
+#
+# SECRET: the third_party/ci-common submodule points at the private
+# companionintelligence/CI-Common repo, which the default GITHUB_TOKEN cannot
+# clone. Set the repository secret CI_COMMON_ACCESS_TOKEN (fine-grained PAT
+# with Contents:Read on this repo and on CI-Common). Without it the checkout
+# step fails with "Repository not found". build.yml uses the same secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag or ref to build and publish (e.g. v0.1.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: publish-${{ github.workflow }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/companionintelligence/companion-atlas-viewer
+
+jobs:
+  publish:
+    name: Build, smoke-test, publish
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          submodules: true
+          fetch-depth: 0
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute tags
+        id: meta
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          short="$(git rev-parse --short HEAD)"
+          echo "sha_tag=${IMAGE_NAME}:sha-${short}" >> "$GITHUB_OUTPUT"
+          # Docker tags cannot contain '/', so sanitise a branch-style ref.
+          safe="$(printf '%s' "${INPUT_TAG}" | tr '/' '-')"
+          tags="${IMAGE_NAME}:sha-${short},${IMAGE_NAME}:${safe}"
+          # :latest only when this workflow was dispatched from main.
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            tags="${tags},${IMAGE_NAME}:latest"
+          else
+            echo "::notice::dispatched from ${GITHUB_REF}, not main - leaving :latest untouched"
+          fi
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image (load for testing)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: viewer-react/Dockerfile
+          load: true
+          tags: ${{ steps.meta.outputs.sha_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start container
+        run: docker run -d --name app -p 18080:8080 ${{ steps.meta.outputs.sha_tag }}
+
+      - name: "Gate: viewer and Cesium assets served"
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:18080/ && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/ | grep -q '<title>'
+          # SPA fallback returns 200 for unknown paths, so check content type.
+          ctype="$(curl -fsS -o /dev/null -w '%{content_type}' http://127.0.0.1:18080/cesium/Assets/approximateTerrainHeights.json)"
+          case "$ctype" in
+            application/json*) echo "cesium assets ok ($ctype)" ;;
+            *) echo "Cesium assets not served (got '$ctype')"; docker logs app; exit 1 ;;
+          esac
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: docker logs app || true
+
+      - name: Tear down container
+        if: always()
+        run: docker rm -f app || true
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: viewer-react/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
