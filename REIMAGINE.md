@@ -212,7 +212,7 @@ streamed as 3D Tiles.
 **Resolved:** Product name is **Companion Atlas** (the LICENSE separately lists
 Hub/Core/Memory/Scan as other suite products — Atlas joins that family). The
 GitHub repository itself has been renamed from `CI‑Earth` to
-[`Companion-Atlas`](https://github.com/companionintelligence/Companion-Atlas);
+`Companion-Atlas` (now [`CI-Spatial-Atlas`](https://github.com/companionintelligence/CI-Spatial-Atlas));
 the viewer H1, page title, and all agent-facing docs now read "Companion Atlas"
 and Playwright baselines are re‑generated against it in this branch.
 

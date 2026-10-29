@@ -2,7 +2,7 @@
 
 ### Can you summarize what Companion Atlas's license allows?
 
-The license grants free rights to use, modify, and redistribute Companion Atlas source code for personal or nonprofit purposes. The intent is to stay permissive for those uses while limiting commercial abuse of Companion Intelligence products.
+The license grants free rights to use, modify, and redistribute Companion Atlas source code for personal, research, or other noncommercial purposes. The intent is to stay permissive for those uses while limiting commercial abuse of Companion Intelligence products.
 
 Companion Atlas is a 3D XR memory globe for reviewing and planning your travels, built on your Companion Memory data.
 
@@ -10,7 +10,7 @@ Companion Atlas uses the [PolyForm Noncommercial License 1.0.0](https://polyform
 
 ### What freedoms do you have as a Companion Atlas user?
 
-If you use Companion Atlas for personal or nonprofit purposes, you can view, modify, and redistribute the source under the same license terms, subject to the PolyForm Noncommercial restrictions.
+If you use Companion Atlas for personal, research, or other noncommercial purposes, you can view, modify, and redistribute the source under the same license terms, subject to the PolyForm Noncommercial restrictions.
 
 ### Can I fork Companion Atlas?
 

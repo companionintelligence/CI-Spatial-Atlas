@@ -2,6 +2,7 @@
   "name": "@companion-atlas/viewer-react",
   "version": "0.1.0",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "description": "Consolidated Companion Atlas viewer — Resium (React+Cesium) for desktop/mobile, R3F for WebXR. Phase-1 scaffold (see README).",
   "scripts": {

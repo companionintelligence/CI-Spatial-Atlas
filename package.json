@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Companion Atlas — 4D spatial storytelling viewer for the Companion Intelligence suite (formerly Companion Earth).",
-  "license": "CI-Commercial-1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "workspaces": [
     "packages/*",
