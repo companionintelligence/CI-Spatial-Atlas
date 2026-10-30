@@ -125,9 +125,10 @@ pending a first tagged release).
   were corrected in `docs/ui-guide.md` and `docs/architecture.md`.
 - The two file pickers in the Import & export panel (KML/GeoJSON/story files,
   and photos/video) were unnamed, focusable inputs: axe `label` (critical) and
-  two silent tab stops before the real "Choose files" button. The hidden inputs
-  now carry `tabindex="-1"` and `aria-hidden="true"`; the buttons that open them
-  are the controls.
+  two redundant tab stops, one ahead of each picker button (Chromium named them
+  "Choose File" from its own default text, so a screen reader heard a duplicate
+  of the real button). The hidden inputs now carry `tabindex="-1"` and
+  `aria-hidden="true"`; the buttons that open them are the controls.
 
 ### Changed
 - Product renamed from **Companion Earth** to **Companion Atlas** throughout

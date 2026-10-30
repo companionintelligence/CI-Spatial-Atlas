@@ -51,10 +51,11 @@
 
 /* The real input is driven by the styled button beside it, which is the
    control (keyboard, screen reader and focus ring all live on the button; see
-   `.atlas-btn:focus-visible` in atlas.css). The input stays visually hidden
-   rather than display:none so the browser still treats `input.click()` as a
-   normal picker open, and carries tabindex="-1" + aria-hidden="true" in the
-   markup so it is neither a second tab stop nor an unnamed control. */
+   `.atlas-btn:focus-visible` in atlas.css). The input is clipped to 1px and
+   keeps visibility:visible: in that state `input.click()` opens the picker in
+   WebKit 26 and Chromium 145, while visibility:hidden did not in Chromium.
+   It carries tabindex="-1" + aria-hidden="true" in the markup so it is
+   neither a second tab stop nor an unnamed control. */
 .io-file {
   position: absolute; width: 1px; height: 1px;
   padding: 0; margin: -1px; overflow: hidden;
