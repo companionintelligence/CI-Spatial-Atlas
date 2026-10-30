@@ -25,7 +25,15 @@ COPY viewer-react/package.json viewer-react/
 # rather than just package.json because the build consumes its tokens.css
 # directly, and it is ~7KB.
 COPY third_party/ci-common/packages/tokens third_party/ci-common/packages/tokens
-RUN npm ci
+# @companionintelligence/* resolve to npm.pkg.github.com in package-lock.json, which
+# needs a token even for reads. The token comes in as a BuildKit secret (never an
+# ARG/ENV, so it is not in any layer) and the scope npmrc is written and removed in
+# the same RUN. The build still works without the secret for registries that need none.
+RUN --mount=type=secret,id=NODE_AUTH_TOKEN \
+    if [ -s /run/secrets/NODE_AUTH_TOKEN ]; then \
+      printf '@companionintelligence:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$(cat /run/secrets/NODE_AUTH_TOKEN)" > /root/.npmrc; \
+    fi; \
+    npm ci; rc=$?; rm -f /root/.npmrc; exit $rc
 COPY . .
 # packages/story-schema ships from its own dist/, which nothing builds
 # automatically (no root lifecycle hook does this — a `prepare` script here
