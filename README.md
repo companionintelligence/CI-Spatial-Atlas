@@ -208,11 +208,22 @@ certificate first.
 The worker is deliberately small. It never caches the app, Cesium, imagery, stories or
 anything from a Memory server or the API, and it never writes to a cache after install: all of
 that goes straight to the network. Its one job is to show `/offline/` when a page load cannot
-reach the network. To retire it, ship a `sw.js` that calls `self.registration.unregister()` and
-remove `registerServiceWorker()` from `viewer-react/src/main.tsx`. The tests assert the worker, so
-they go with it: delete `viewer-react/test/pwa-service-worker.test.ts` and the three checks in
-`viewer-react/test/pwa-manifest.test.ts` that read `sw.js` or `main.tsx` (otherwise 34 of the 61 PWA
-tests fail; the rest of `pwa-manifest.test.ts` only reads the manifest and `index.html`).
+reach the network.
+
+To retire it:
+
+1. Copy [`docs/service-worker-kill-switch.js`](docs/service-worker-kill-switch.js) over
+   `viewer-react/public/sw.js`. It has no fetch handler; when a browser installs it, it deletes
+   the `ci-atlas-offline-*` caches and unregisters itself.
+2. Delete the `registerServiceWorker()` call, and its import, from `viewer-react/src/main.tsx`.
+3. Deploy, and leave it deployed for weeks: a browser replaces its worker on a later visit.
+
+A plain revert is not enough: with `/sw.js` gone, a browser's update check gets a 404, the update
+fails, and the old worker stays installed. No test has to be deleted and nothing else has to
+change. The kill switch's first line, `// atlas:service-worker-kill-switch`, is a marker: while
+`viewer-react/public/sw.js` starts with it, `npm run build` (so the image build and the deploy
+workflow too) and the unit tests stop requiring the offline page, the precache list, the cache
+fingerprint and the registration in the bundle.
 
 **An installed Atlas starts at `/`, so it loses the URL parameters.** The manifest's
 `start_url` and `scope` are `/`, so every launch from the home screen or the app list opens

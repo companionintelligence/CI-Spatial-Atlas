@@ -1,8 +1,9 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import cesium from 'vite-plugin-cesium';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { assertPwa } from './scripts/check-pwa.mjs';
 
 // Resolve Cesium wherever it lives — under npm-workspace hoisting it lands in the
 // repo-root node_modules, not viewer-react/node_modules, and vite-plugin-cesium's
@@ -36,8 +37,37 @@ const devAllowedHosts = (process.env.VITE_DEV_ALLOWED_HOSTS ?? '')
   .map((host) => host.trim())
   .filter(Boolean);
 
+/**
+ * Fail the production build when the installable-app files disagree: public/sw.js against the
+ * files it precaches, and the worker, those files and the registration in the built output
+ * (scripts/check-pwa.mjs, which says what is checked and what the kill switch is excused from).
+ * It is a plugin so that every path to a build runs it: `npm run build`, the Docker image and
+ * the deploy workflow all go through `vite build`.
+ */
+function pwaCheck(): Plugin {
+  let publicDir = '';
+  let outDir: string | null = null;
+  let written = false;
+  return {
+    name: 'ci-atlas-pwa-check',
+    apply: 'build',
+    configResolved(config) {
+      publicDir = config.publicDir;
+      outDir = config.build.ssr ? null : path.resolve(config.root, config.build.outDir);
+    },
+    writeBundle() {
+      written = true;
+    },
+    closeBundle() {
+      // A build that failed has no output to check, and its own error is the one to show.
+      if (outDir && written) assertPwa({ publicDir, dist: outDir });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), cesium({ cesiumBuildRootPath, cesiumBuildPath })],
+  // pwaCheck() stays last so it checks the output after every other plugin has had its say.
+  plugins: [react(), cesium({ cesiumBuildRootPath, cesiumBuildPath }), pwaCheck()],
   server: {
     host: '127.0.0.1',
     port: Number(process.env.PORT) || 4174,

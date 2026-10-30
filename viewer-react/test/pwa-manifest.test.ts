@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { isKillSwitch } from '../scripts/check-pwa.mjs';
 
 const here = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
 const publicFile = (url: string) => here(`../public/${url.replace(/^\//, '')}`);
@@ -38,6 +39,12 @@ interface Manifest {
 
 const manifest: Manifest = JSON.parse(read(publicFile('manifest.webmanifest')));
 const indexHtml = read(here('../index.html'));
+/**
+ * With the kill switch as public/sw.js the worker has been retired on purpose (README: retire it):
+ * it has no offline page, precache list or registration, so what only the real worker needs is
+ * not required. The manifest and the head tags still are.
+ */
+const RETIRED = isKillSwitch(read(publicFile('sw.js')));
 
 /** Width and height from a PNG's IHDR chunk. */
 function pngSize(path: string) {
@@ -143,10 +150,13 @@ describe('the colours', () => {
 
   it('are the same in the page head, so the title bar does not change colour when the manifest loads', () => {
     expect(attr(meta(indexHtml, 'theme-color') ?? '', 'content')).toBe(manifest.theme_color);
+  });
+
+  it.skipIf(RETIRED)('are the same in the offline page', () => {
     expect(attr(meta(read(publicFile('offline/index.html')), 'theme-color') ?? '', 'content')).toBe(manifest.theme_color);
   });
 
-  it('are the canon dark values in the offline stylesheet too, which is copied to dist/ as it is and cannot import tokens', () => {
+  it.skipIf(RETIRED)('are the canon dark values in the offline stylesheet too, which is copied to dist/ as it is and cannot import tokens', () => {
     // offline.css has the dark theme written out, so read the same four values back from the
     // token layer: a token change then fails here instead of leaving the offline page behind.
     const dark = /\.dark\s*\{([^}]*)\}/.exec(tokens)?.[1] ?? '';
@@ -164,7 +174,7 @@ describe('the colours', () => {
   });
 });
 
-describe('public/sw.js and the offline page', () => {
+describe.skipIf(RETIRED)('public/sw.js and the offline page', () => {
   const source = read(publicFile('sw.js'));
   const offlineUrl = /const OFFLINE_URL = '([^']+)'/.exec(source)?.[1];
   const precache = (/const PRECACHE = \[([^\]]*)\]/.exec(source)?.[1] ?? '')
@@ -206,8 +216,12 @@ describe('public/sw.js and the offline page', () => {
 
 describe('where the viewer is served from', () => {
   it('registers the worker from the bundle, not from an inline script in the page', () => {
-    expect(read(here('../src/main.tsx'))).toMatch(/import \{ registerServiceWorker \} from '\.\/pwa\/registerServiceWorker\.js'/);
-    expect(read(here('../src/main.tsx'))).toMatch(/^registerServiceWorker\(\);$/m);
+    // Retiring the worker deletes the registration from main.tsx on purpose (README: retire it), so
+    // with the kill switch as public/sw.js the call may be there or not.
+    if (!RETIRED) {
+      expect(read(here('../src/main.tsx'))).toMatch(/import \{ registerServiceWorker \} from '\.\/pwa\/registerServiceWorker\.js'/);
+      expect(read(here('../src/main.tsx'))).toMatch(/^registerServiceWorker\(\);$/m);
+    }
     expect(indexHtml).not.toMatch(/serviceWorker/);
   });
 
