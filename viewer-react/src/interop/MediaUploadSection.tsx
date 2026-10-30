@@ -153,10 +153,16 @@ export function MediaUploadSection({
         <p className="io-note" role="status">{upload.reason}</p>
       )}
 
+      {/* Opened by the button below; see the same input in InteropPanel. Out of
+          the tab order and the accessibility tree, because here nothing even
+          drew a focus ring for it (the ring rule needs the button as the very
+          next sibling, and this one sits inside .io-actions). */}
       <input
         ref={input}
         type="file"
         className="io-file"
+        tabIndex={-1}
+        aria-hidden="true"
         accept={acceptAttribute(upload.capability)}
         onChange={(e) => void take(e.target.files)}
       />
