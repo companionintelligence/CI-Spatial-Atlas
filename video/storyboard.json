@@ -1,0 +1,256 @@
+{
+  "$schema": "https://raw.githubusercontent.com/companionintelligence/CI-Common/main/packages/video-kit/schema/storyboard.schema.json",
+  "app": {
+    "id": "ci-spatial-atlas",
+    "name": "Companion Atlas",
+    "repo": "companionintelligence/CI-Spatial-Atlas",
+    "marketplaceId": "ci-spatial-atlas",
+    "website": "ci.computer"
+  },
+  "meta": {
+    "fps": 30,
+    "transitionSeconds": 0.5,
+    "pacing": "fit",
+    "pacingTail": 0.2
+  },
+  "chapters": {
+    "viewer": "The viewer"
+  },
+  "media": {
+    "music": "assets/media/ci-campaign-bed-110.mp3",
+    "musicLufs": -22
+  },
+  "scenes": [
+    {
+      "id": "place-and-time",
+      "kind": "feature",
+      "reveal": "paced",
+      "title": "A photo knows where and when",
+      "caption": "Two facts that rarely share a screen.",
+      "narration": "A located photo or video carries a place and a time. Companion Atlas puts both on one map.",
+      "items": [
+        {
+          "label": "Where",
+          "value": "a place on the globe"
+        },
+        {
+          "label": "When",
+          "value": "a moment on a timeline"
+        }
+      ],
+      "seconds": 7.5
+    },
+    {
+      "id": "title-card",
+      "kind": "intro",
+      "reveal": "paced",
+      "transition": "hold",
+      "title": "Companion Atlas",
+      "caption": "Your memories in space and time.",
+      "mark": "brand:logo.mark",
+      "narration": "Companion Atlas draws your located memories on a globe, in time order.",
+      "seconds": 5.2
+    },
+    {
+      "id": "the-globe",
+      "kind": "screen",
+      "chapter": "viewer",
+      "transition": "cut",
+      "caption": "A bundled sample story: pins, a journey line and a timeline.",
+      "narration": "This is a bundled sample story, not anyone's memories. Each pin is a memory, a line joins the journey, and the timeline runs underneath.",
+      "shots": [
+        {
+          "id": "globe-story",
+          "url": "atlas.ci.computer",
+          "alt": "The Atlas viewer showing the bundled sample story 'Pacific Crossing, Spring 2026' on a Cesium globe, with a memory card, journey line and timeline.",
+          "motion": "push-in",
+          "focus": {
+            "landscape": {
+              "x": 0.05,
+              "y": 0.05,
+              "w": 0.9,
+              "h": 0.9
+            },
+            "portrait": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            }
+          },
+          "capture": {
+            "path": "/?renderer=cesium&story=/stories/sample-pacific-journey.json",
+            "waitUntil": "domcontentloaded",
+            "waitFor": "canvas",
+            "settle": 2500,
+            "before": [
+              {
+                "eval": "async () => { for (let i = 0; i < 300 && !document.querySelector('canvas'); i++) await new Promise((r) => setTimeout(r, 100)); if (!document.querySelector('canvas')) throw new Error('no globe canvas'); }"
+              },
+              {
+                "wait": 12000
+              },
+              {
+                "eval": "() => { const b = document.querySelector('button.tm-play[aria-label=\"Pause\"]'); if (b) b.click(); }"
+              }
+            ],
+            "mask": []
+          }
+        }
+      ],
+      "seconds": 9.8
+    },
+    {
+      "id": "flat-map",
+      "kind": "screen",
+      "chapter": "viewer",
+      "transition": "cut",
+      "caption": "The same story as a flat map, which suits routes.",
+      "narration": "Switch to the flat map and the same story reads as a route.",
+      "shots": [
+        {
+          "id": "flat-map",
+          "url": "atlas.ci.computer",
+          "alt": "The same sample story on the flat 2D map.",
+          "motion": "pull-back",
+          "focus": {
+            "landscape": {
+              "x": 0.05,
+              "y": 0.05,
+              "w": 0.9,
+              "h": 0.9
+            },
+            "portrait": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            }
+          },
+          "capture": {
+            "path": "/?renderer=cesium&story=/stories/sample-pacific-journey.json",
+            "waitUntil": "domcontentloaded",
+            "waitFor": "canvas",
+            "settle": 2500,
+            "before": [
+              {
+                "eval": "async () => { for (let i = 0; i < 300 && !document.querySelector('canvas'); i++) await new Promise((r) => setTimeout(r, 100)); if (!document.querySelector('canvas')) throw new Error('no globe canvas'); }"
+              },
+              {
+                "wait": 12000
+              },
+              {
+                "eval": "() => { const b = document.querySelector('button.tm-play[aria-label=\"Pause\"]'); if (b) b.click(); }"
+              },
+              {
+                "click": "button[data-mode=\"2d\"]"
+              },
+              {
+                "wait": 6000
+              }
+            ],
+            "mask": []
+          }
+        }
+      ],
+      "seconds": 5.6
+    },
+    {
+      "id": "scrapbook",
+      "kind": "screen",
+      "chapter": "viewer",
+      "transition": "cut",
+      "caption": "Collect pins into a scrapbook, then download it as a story file.",
+      "narration": "Collect memories into a scrapbook. Without a Companion Memory connection you can still play the journey and download it as a story file.",
+      "shots": [
+        {
+          "id": "scrapbook",
+          "url": "atlas.ci.computer",
+          "alt": "The Scrapbook drawer with one collected memory, a journey title field, and Play journey and Download story.json buttons.",
+          "motion": "push-in",
+          "focus": {
+            "landscape": {
+              "x": 0.05,
+              "y": 0.05,
+              "w": 0.9,
+              "h": 0.9
+            },
+            "portrait": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            }
+          },
+          "capture": {
+            "path": "/?renderer=cesium&story=/stories/sample-pacific-journey.json",
+            "waitUntil": "domcontentloaded",
+            "waitFor": "canvas",
+            "settle": 2500,
+            "before": [
+              {
+                "eval": "async () => { for (let i = 0; i < 300 && !document.querySelector('canvas'); i++) await new Promise((r) => setTimeout(r, 100)); if (!document.querySelector('canvas')) throw new Error('no globe canvas'); }"
+              },
+              {
+                "wait": 12000
+              },
+              {
+                "eval": "() => { const b = document.querySelector('button.tm-play[aria-label=\"Pause\"]'); if (b) b.click(); }"
+              },
+              {
+                "click": "text=Collect"
+              },
+              {
+                "wait": 500
+              },
+              {
+                "click": "button[title=\"Scrapbook\"]"
+              },
+              {
+                "waitFor": "aside[aria-label=\"Scrapbook\"]"
+              }
+            ],
+            "mask": []
+          }
+        }
+      ],
+      "seconds": 9.4
+    },
+    {
+      "id": "what-ships",
+      "kind": "feature",
+      "reveal": "paced",
+      "title": "What ships today",
+      "caption": "The viewer is shipped. The processing server is scaffolded.",
+      "narration": "Today the viewer is what ships. It loads a story from a link, a local draft or Companion Memory, and works on offline imagery without a token. The processing server is still being built.",
+      "items": [
+        {
+          "label": "Viewer",
+          "value": "shipped"
+        },
+        {
+          "label": "Inputs",
+          "value": "URL, draft or Memory"
+        },
+        {
+          "label": "Without a token",
+          "value": "offline imagery"
+        },
+        {
+          "label": "Processing server",
+          "value": "scaffolded"
+        }
+      ],
+      "seconds": 13.7
+    },
+    {
+      "id": "close",
+      "kind": "outro",
+      "cta": "UnCloud your life.",
+      "url": "ci.computer",
+      "mark": "brand:logo.full",
+      "narration": "Companion Atlas, from Companion Intelligence. UnCloud your life.",
+      "seconds": 3.7
+    }
+  ]
+}
