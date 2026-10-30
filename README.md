@@ -125,7 +125,10 @@ renderer.
 > `git submodule update --init` afterwards. The design tokens come from
 > [CI-Common](https://github.com/companionintelligence/CI-Common), pinned as a
 > submodule at `third_party/ci-common` and wired in as an npm workspace, so
-> `npm ci` and `npm run build` both work with nothing else on the machine.
+> `npm install` and `npm run build` both work with nothing else on the machine.
+> `npm ci` does not work yet: the committed `package-lock.json` is behind the
+> `server` workspace (it lacks `wrangler` and `@cloudflare/workers-types` and pins
+> an older `hono`), which is why CI runs `npm install`.
 > CI-Common is a private repository, so you need access to it.
 >
 > This used to resolve to a sibling `../ci-common` checkout outside the repo,
@@ -206,7 +209,10 @@ The worker is deliberately small. It never caches the app, Cesium, imagery, stor
 anything from a Memory server or the API, and it never writes to a cache after install: all of
 that goes straight to the network. Its one job is to show `/offline/` when a page load cannot
 reach the network. To retire it, ship a `sw.js` that calls `self.registration.unregister()` and
-remove `registerServiceWorker()` from `viewer-react/src/main.tsx`.
+remove `registerServiceWorker()` from `viewer-react/src/main.tsx`. The tests assert the worker, so
+they go with it: delete `viewer-react/test/pwa-service-worker.test.ts` and the three checks in
+`viewer-react/test/pwa-manifest.test.ts` that read `sw.js` or `main.tsx` (otherwise 34 of the 61 PWA
+tests fail; the rest of `pwa-manifest.test.ts` only reads the manifest and `index.html`).
 
 **An installed Atlas starts at `/`, so it loses the URL parameters.** The manifest's
 `start_url` and `scope` are `/`, so every launch from the home screen or the app list opens
