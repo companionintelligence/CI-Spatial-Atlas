@@ -97,8 +97,10 @@ describe('file inputs in the Import & export panel', () => {
   });
 
   it('still renders the visible buttons that open them', () => {
-    // The inputs are out of the way only because these are in it, so they have to be real, focusable
-    // <button> elements and not just text.
+    // The inputs are out of the way only because these are in it, so they have to be real <button> elements
+    // and not just text. That is all this pins: a button with tabindex="-1", or one that is always disabled,
+    // would still pass. Keyboard operation was checked by hand when the inputs left the tab order (a Tab
+    // walk, and Enter on each trigger opening the chooser), not by this test.
     const html = panel();
     expect(hasButton(html, 'Choose files')).toBe(true);
     expect(hasButton(html, 'Choose a file')).toBe(true);
