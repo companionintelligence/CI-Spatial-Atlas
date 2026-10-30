@@ -80,6 +80,17 @@ COPY --from=build /app/viewer-react/dist /usr/share/nginx/html
 # viewer; now that it is *the* viewer, a Hub install would route to a dead port.
 #
 # SPA fallback so deep links (and ?story=/?memory=… URLs) resolve to index.html.
-RUN printf 'server {\n  listen 8080;\n  root /usr/share/nginx/html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' \
+#
+# /sw.js (the service worker, public/sw.js) is the one file with a rule of its own: browsers
+# check it for changes on every page load, so a shared cache must not hold a stale copy. It
+# is an exact-match location, so it is served as the file it is (a missing one is a 404, not
+# the SPA's index.html) and every other path is untouched.
+#
+# /manifest.webmanifest is the other exact-match location. Stock nginx's mime.types has no
+# mapping for .webmanifest, so without it the manifest would be served as
+# application/octet-stream. default_type applies only when no extension matches, which is why
+# this is a location rule and not a `types { }` block: that would replace the whole inherited
+# table and every other file would lose its type.
+RUN printf 'server {\n  listen 8080;\n  root /usr/share/nginx/html;\n  location = /sw.js { add_header Cache-Control "no-cache"; }\n  location = /manifest.webmanifest { default_type application/manifest+json; }\n  location / { try_files $uri $uri/ /index.html; }\n}\n' \
     > /etc/nginx/conf.d/default.conf
 EXPOSE 8080

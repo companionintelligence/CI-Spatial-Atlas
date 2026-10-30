@@ -55,6 +55,9 @@
   in-viewer sign-in flow and keeps it scoped to the browser tab and Memory URL.
 - `src/ui/StoryLoadError.tsx` — separates authentication failures from empty and
   unavailable stories and provides sign-in/retry recovery.
+- `src/pwa/registerServiceWorker.ts`, `public/sw.js`, `public/manifest.webmanifest`,
+  `public/offline/` — installable-app support: a manifest, and a service worker that
+  caches nothing but its own offline page (see "Install as a web app" in the root README).
 
 ## Open work
 
