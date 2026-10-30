@@ -1,0 +1,28 @@
+# rendered videos — regenerate with `ci-video render`
+out/
+
+# generated compositions — fully derived from storyboard.json + the kit version,
+# and rebuilt before every check and render. Committing them would put a
+# regenerated 19KB HTML file per format into the diff on every kit bump, across
+# every repo, for no review value. build/runtime/ (the kit's vendored Manrope
+# and GSAP) lands here too, for the same reason: copied verbatim from the kit.
+build/
+
+# belt and braces for kits at v0.7.0 or older, which wrote the kit's vendored
+# runtime into assets/ instead of build/runtime/. Named exactly, never as
+# assets/fonts/ — that directory also holds montserrat-latin-var.woff2, which is
+# a committed asset in most product repos and must stay visible.
+assets/fonts/manrope-latin-var.woff2
+assets/fonts/LICENSE-Manrope.txt
+assets/vendor/gsap.min.js
+assets/vendor/LICENSE-GSAP.txt
+
+# the click-tick track, mixed at build time from the kit's own tick.wav and the
+# storyboard's pointer cues. Derived, like build/ — and it moves whenever a
+# pointer time does, so committing it is churn nobody reads.
+assets/sfx/
+
+# playwright auth state
+.auth/
+
+node_modules/
