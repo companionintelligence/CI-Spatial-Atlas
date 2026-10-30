@@ -49,14 +49,17 @@
 .io-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--atlas-fg-dim); }
 .io-summary { margin: 0; font-size: 12px; font-weight: 600; color: var(--atlas-mint); }
 
-/* The real input is driven by the styled button; keeping it focusable but
-   visually hidden (rather than display:none) preserves keyboard access. */
+/* The real input is driven by the styled button beside it, which is the
+   control (keyboard, screen reader and focus ring all live on the button; see
+   `.atlas-btn:focus-visible` in atlas.css). The input stays visually hidden
+   rather than display:none so the browser still treats `input.click()` as a
+   normal picker open, and carries tabindex="-1" + aria-hidden="true" in the
+   markup so it is neither a second tab stop nor an unnamed control. */
 .io-file {
   position: absolute; width: 1px; height: 1px;
   padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.io-file:focus-visible + .atlas-btn { outline: 2px solid var(--atlas-teal); outline-offset: 2px; }
 
 .io-link {
   border: 0; background: transparent; padding: 0; cursor: pointer;

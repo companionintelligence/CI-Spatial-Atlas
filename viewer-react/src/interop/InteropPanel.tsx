@@ -170,10 +170,16 @@ export function InteropPanel({
           story files. Everything imported becomes part of the story, so it can be
           exported again, collected, and seen in a headset.
         </p>
+        {/* The button below is the control: it opens this picker. The input is
+            only the mechanism, so it is kept out of the tab order and the
+            accessibility tree. Left in, it was a second tab stop, with no name
+            and (here) a focus ring drawn on the button instead of on itself. */}
         <input
           ref={input}
           type="file"
           className="io-file"
+          tabIndex={-1}
+          aria-hidden="true"
           accept={INTEROP_ACCEPT}
           multiple
           onChange={(e) => void take(e.target.files)}

@@ -123,6 +123,11 @@ pending a first tagged release).
   (wrong diagram precedence, mislabeled file paths, incorrect ER cardinality,
   misattributed sequence-diagram participants, and an understated auth gap)
   were corrected in `docs/ui-guide.md` and `docs/architecture.md`.
+- The two file pickers in the Import & export panel (KML/GeoJSON/story files,
+  and photos/video) were unnamed, focusable inputs: axe `label` (critical) and
+  two silent tab stops before the real "Choose files" button. The hidden inputs
+  now carry `tabindex="-1"` and `aria-hidden="true"`; the buttons that open them
+  are the controls.
 
 ### Changed
 - Product renamed from **Companion Earth** to **Companion Atlas** throughout
