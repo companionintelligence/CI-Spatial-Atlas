@@ -11,18 +11,24 @@
  * write to a cache after install, because a cached copy of any of those is how an installed
  * app ends up on a stale build or holds a bearer token.
  */
-import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
+import { isKillSwitch, precacheFingerprint, serviceWorkerFiles } from '../scripts/check-pwa.mjs';
 import { registerServiceWorker, SERVICE_WORKER_URL, type PwaWindow } from '../src/pwa/registerServiceWorker.js';
 
 const ORIGIN = 'https://atlas.ci.computer';
 const SW_SOURCE = readFileSync(fileURLToPath(new URL('../public/sw.js', import.meta.url)), 'utf8');
+const KILL_SWITCH_SOURCE = readFileSync(fileURLToPath(new URL('../../docs/service-worker-kill-switch.js', import.meta.url)), 'utf8');
 /** The name the worker gives its cache, read from its source (`const CACHE = '…'`). */
 const CACHE_NAME = /const CACHE = '([^']+)'/.exec(SW_SOURCE)?.[1] ?? '';
+/**
+ * With the kill switch as public/sw.js the worker has been retired on purpose (README: retire it),
+ * and the tests of the worker's own behaviour have nothing to run against.
+ */
+const RETIRED = isKillSwitch(SW_SOURCE);
 
 // ---- registration (src/pwa/registerServiceWorker.ts) --------------------------
 
@@ -298,7 +304,7 @@ const SITE = {
 
 const PRECACHED = ['/offline/', '/offline/offline.css', '/offline/mark.svg'];
 
-describe('public/sw.js: lifecycle', () => {
+describe.skipIf(RETIRED)('public/sw.js: lifecycle', () => {
   it('precaches the offline page, its stylesheet and the mark, straight from the network, and takes over at once', async () => {
     const worker = loadWorker({ network: SITE });
     await worker.lifecycle('install');
@@ -327,7 +333,7 @@ describe('public/sw.js: lifecycle', () => {
   });
 });
 
-describe('public/sw.js: page loads', () => {
+describe.skipIf(RETIRED)('public/sw.js: page loads', () => {
   it('is network first: an online page load is the network answer, and is not stored', async () => {
     const worker = loadWorker({ network: SITE });
     await worker.lifecycle('install');
@@ -384,7 +390,7 @@ describe('public/sw.js: page loads', () => {
   });
 });
 
-describe('public/sw.js: everything else is left to the browser', () => {
+describe.skipIf(RETIRED)('public/sw.js: everything else is left to the browser', () => {
   it('serves the files the offline page needs from the cache, and from the network if they are not there', async () => {
     const worker = loadWorker({ network: SITE });
     await worker.lifecycle('install');
@@ -464,43 +470,24 @@ describe('public/sw.js: everything else is left to the browser', () => {
   });
 });
 
-describe('public/sw.js: cache name', () => {
+describe.skipIf(RETIRED)('public/sw.js: cache name', () => {
   // A browser re-fetches the precached files only when sw.js itself changes, and the offline
   // page is not fingerprinted. So the cache name carries a fingerprint of those files, and
-  // editing one without touching sw.js fails here instead of reaching no one.
-  const offlineUrl = /const OFFLINE_URL = '([^']+)'/.exec(SW_SOURCE)?.[1] ?? '';
-  const precache = (/const PRECACHE = \[([^\]]*)\]/.exec(SW_SOURCE)?.[1] ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => (item === 'OFFLINE_URL' ? offlineUrl : (/^'([^']+)'$/.exec(item)?.[1] ?? item)));
+  // editing one without touching sw.js fails here instead of reaching no one. The build fails on
+  // the same thing (scripts/check-pwa.mjs, which holds the one implementation of the fingerprint
+  // and is what this imports), so a deploy cannot get that far either.
+  const { precache } = serviceWorkerFiles(SW_SOURCE);
 
   const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
   /** Where a precached url lives under public/: a path that ends in / is that folder's index.html. */
   const pathFor = (url: string) => (url.endsWith('/') ? `${url}index.html` : url).replace(/^\//, '');
-
-  /** A file's bytes without any CR (0x0D), so a checkout with CRLF line endings hashes like one with LF. */
-  const withoutCr = (bytes: Buffer) => Buffer.from(bytes.filter((byte) => byte !== 0x0d));
-
-  /**
-   * The first 12 hex digits of a sha256 over each precached url and its bytes with the CRs
-   * removed, NUL-separated (the recipe at the top of public/sw.js). `root` is the folder the
-   * files are read from: public/ unless a test hands it a copy.
-   */
-  const fingerprint = (root = publicDir) => {
-    const hash = createHash('sha256');
-    for (const url of precache) {
-      hash.update(url).update('\0').update(withoutCr(readFileSync(join(root, pathFor(url))))).update('\0');
-    }
-    return hash.digest('hex').slice(0, 12);
-  };
 
   it('fingerprints the files the worker precaches', () => {
     expect(precache).toEqual(PRECACHED);
   });
 
   it('is the worker’s prefix plus that fingerprint, so a changed file cannot ship under the old name', () => {
-    const expected = `ci-atlas-offline-${fingerprint()}`;
+    const expected = `ci-atlas-offline-${precacheFingerprint(publicDir, precache)}`;
     expect(CACHE_NAME, `a precached file changed: set CACHE to '${expected}' in public/sw.js`).toBe(expected);
   });
 
@@ -517,10 +504,10 @@ describe('public/sw.js: cache name', () => {
         writeFileSync(target, lf.replace(/\r?\n/g, '\r\n'), 'latin1');
       }
       expect(readFileSync(join(copy, 'offline/offline.css')).includes(0x0d), 'the copies should have CRLF line endings').toBe(true);
-      expect(`ci-atlas-offline-${fingerprint(copy)}`, 'a CRLF checkout computes the committed name').toBe(CACHE_NAME);
+      expect(`ci-atlas-offline-${precacheFingerprint(copy, precache)}`, 'a CRLF checkout computes the committed name').toBe(CACHE_NAME);
 
       appendFileSync(join(copy, 'offline/offline.css'), '/* edited */\r\n');
-      expect(fingerprint(copy)).not.toBe(fingerprint());
+      expect(precacheFingerprint(copy, precache)).not.toBe(precacheFingerprint(publicDir, precache));
     } finally {
       rmSync(copy, { recursive: true, force: true });
     }
@@ -529,5 +516,64 @@ describe('public/sw.js: cache name', () => {
   it('keeps the prefix the activate step deletes old caches by', () => {
     expect(CACHE_NAME).toMatch(/^ci-atlas-offline-[0-9a-f]{12}$/);
     expect(SW_SOURCE).toContain("key.startsWith('ci-atlas-offline-')");
+  });
+});
+
+// ---- the kill switch (docs/service-worker-kill-switch.js) -----------------------------------------
+
+describe('docs/service-worker-kill-switch.js', () => {
+  function loadKillSwitch(cacheNames: string[]) {
+    const handlers: Record<string, (event?: unknown) => void> = {};
+    const deleted: string[] = [];
+    const self = {
+      addEventListener: (type: string, handler: (event?: unknown) => void) => {
+        handlers[type] = handler;
+      },
+      skipWaiting: vi.fn(),
+      registration: { unregister: vi.fn(() => Promise.resolve(true)) },
+    };
+    const caches = {
+      keys: async () => cacheNames,
+      delete: async (name: string) => {
+        deleted.push(name);
+        return true;
+      },
+    };
+    new Function('self', 'caches', KILL_SWITCH_SOURCE)(self, caches);
+    return { handlers, deleted, self };
+  }
+
+  it('takes over at once, deletes the offline caches and only those, then unregisters itself', async () => {
+    // Fixed names, not the real worker's: when the kill switch IS public/sw.js there is no CACHE to read.
+    const offline = ['ci-atlas-offline-aaaaaaaaaaaa', 'ci-atlas-offline-111111111111', 'ci-atlas-offline-v1'];
+    const { handlers, deleted, self } = loadKillSwitch([...offline, 'some-other-apps-cache']);
+
+    handlers.install();
+    expect(self.skipWaiting).toHaveBeenCalledTimes(1);
+
+    const pending: Promise<unknown>[] = [];
+    handlers.activate({ waitUntil: (promise: Promise<unknown>) => pending.push(promise) });
+    await Promise.all(pending);
+
+    expect(deleted.sort()).toEqual([...offline].sort());
+    expect(self.registration.unregister).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no fetch handler, so pages load straight from the network while it is installed', () => {
+    const { handlers } = loadKillSwitch([]);
+    expect(Object.keys(handlers).sort()).toEqual(['activate', 'install']);
+  });
+
+  // scripts/check-pwa.mjs and these tests stop requiring the real worker's offline page, precache
+  // list, cache fingerprint and registration when public/sw.js starts with this line.
+  it('starts with the line that tells the build and the tests it is the kill switch', () => {
+    expect(isKillSwitch(KILL_SWITCH_SOURCE)).toBe(true);
+    expect(KILL_SWITCH_SOURCE.split('\n')[0]).toBe('// atlas:service-worker-kill-switch');
+  });
+
+  it('deletes the caches by the prefix the worker names them with', () => {
+    // The worker's CACHE is not read here (public/sw.js may already be this file), so pin the prefix.
+    expect(KILL_SWITCH_SOURCE).toContain("key.startsWith('ci-atlas-offline-')");
+    expect(serviceWorkerFiles("const CACHE = 'ci-atlas-offline-0123456789ab';").cache).toMatch(/^ci-atlas-offline-/);
   });
 });

@@ -8,6 +8,15 @@ pending a first tagged release).
 ## Unreleased
 
 ### Added
+- **PWA build check and kill switch.** `npm run build` (so the image build and the deploy
+  workflow too) now fails when the service worker's files drift: a precached file that is
+  missing or outside `/offline/`, a `CACHE` name that no longer matches the fingerprint of the
+  precached files (the message names the value to use), or a bundle that no longer registers
+  `/sw.js`. `viewer-react/scripts/check-pwa.mjs` does it, from a Vite plugin, and the unit
+  tests import the same fingerprint. `docs/service-worker-kill-switch.js` retires the worker
+  from the browsers that installed it: copy it over `viewer-react/public/sw.js`, delete the
+  `registerServiceWorker()` call, deploy. Its first line tells the build and the tests to stop
+  requiring what it has none of — see "Install as a web app (PWA)" in the README.
 - **Installable web app (PWA).** `viewer-react` ships a web app manifest
   (standalone, `#041620`, 192 / 512 / maskable icons copied from
   `@companionintelligence/assets` 1.5.1), the head tags that point at it, and a
