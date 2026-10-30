@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Atlas night-space background (the teal-950 token in CI-Common). Painted behind the
+         WebView: with targetSdk 36 the system bars are transparent and
+         adjustMarginsForEdgeToEdge insets the WebView from them, so whatever the window
+         background is shows in the status-bar and navigation-bar strips. -->
+    <color name="atlasBackground">#041620</color>
+</resources>

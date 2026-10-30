@@ -36,6 +36,7 @@ Companion OIDC).
 | [`docs/adr/0001-resium-viewer-r3f-xr.md`](docs/adr/0001-resium-viewer-r3f-xr.md) | Why one viewer: Resium/Cesium for desktop + mobile, R3F for WebXR |
 | [`docs/architecture.md`](docs/architecture.md) | Mermaid diagrams of the system and the viewer module map, renderer selection, the `Story` schema, and the processing server, plus reference tables and the known gaps |
 | [`docs/mcp-api.md`](docs/mcp-api.md) | The MCP tool reference for creating and publishing stories, manually or by an agent |
+| [`viewer-react/mobile/README.md`](viewer-react/mobile/README.md) | The Capacitor iOS + Android shell: build commands, build-time configuration, how the native projects differ from a stock `cap add`, and what a store submission still needs |
 | [`server/README.md`](server/README.md) | Running and extending the processing server, and the [Cloudflare Worker deployment](server/README.md#cloudflare-deployment-prod) at atlas.ci.computer |
 | [`CHANGELOG.md`](CHANGELOG.md) | Notable changes by version |
 
@@ -160,6 +161,27 @@ docker compose up viewer atlas-api minio postgres redis
 # add reconstruction (requires an NVIDIA GPU):
 docker compose --profile gpu up worker
 ```
+
+## Quickstart — iOS and Android apps
+
+[`viewer-react/mobile/`](viewer-react/mobile) wraps the viewer's production build in a
+[Capacitor](https://capacitorjs.com) shell (`com.companionintelligence.atlas`). There is
+no separate mobile UI: the app ships `viewer-react/dist`. It is a standalone npm
+project, not a root workspace, so the web install and the Docker image are unaffected.
+
+```sh
+npm install                  # repo root: the web app
+cd viewer-react/mobile
+npm install                  # Capacitor, own lockfile
+npm run build                # web build, then `cap sync` into ios/ and android/
+npm run open:ios             # Xcode  (or: npm run open:android)
+```
+
+Unsigned debug builds (Android APK, iOS Simulator `.app`) also run from the manual-dispatch
+[`mobile-build.yml`](.github/workflows/mobile-build.yml) workflow. The `VITE_*` settings above
+are baked in when the web bundle is built (there is no `?memory=` inside the app).
+The shell is a working, unsigned build; icons, signing, and privacy/store answers are
+still open — see [`viewer-react/mobile/README.md`](viewer-react/mobile/README.md).
 
 ## Developing the viewer
 

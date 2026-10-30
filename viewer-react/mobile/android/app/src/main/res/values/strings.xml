@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Companion Atlas</string>
+    <string name="title_activity_main">Companion Atlas</string>
+    <string name="package_name">com.companionintelligence.atlas</string>
+    <string name="custom_url_scheme">com.companionintelligence.atlas</string>
+</resources>

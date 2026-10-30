@@ -1,0 +1,181 @@
+name: Mobile Build
+
+# Builds the native iOS + Android apps: the Capacitor shell in viewer-react/mobile
+# wrapping the viewer-react production bundle. Modelled on Companion-Memory's
+# mobile-build.yml.
+#
+# Runs on manual dispatch ONLY (org CI policy: no push, pull_request or schedule
+# triggers) — CI silence here means "nobody dispatched it", NOT "everything passed".
+# Run it deliberately:
+#   gh workflow run mobile-build.yml --ref <branch>
+#
+# It produces UNSIGNED artifacts that need no signing secrets:
+#   • Android — a debug APK (sideload-installable; not for store distribution)
+#   • iOS     — a Simulator .app, zipped (runs in the iOS Simulator; not device-installable)
+# Signed, store-ready artifacts (release AAB, signed .ipa) are deliberately not built
+# here; see viewer-react/mobile/README.md → "Before a store submission".
+#
+# This repository is PUBLIC, so the artifacts below are downloadable by any signed-in
+# GitHub user. The web bundle is therefore built with NO VITE_* tokens or keys
+# (no Cesium ion token, no Google Maps key, no Memory credentials): the apps open the
+# bundled sample story on the offline basemap. Do not add secrets to these jobs.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # @companionintelligence/* packages resolve from GitHub Packages; without this the
+  # explicit permissions block zeroes the packages scope and `npm install` 403s.
+  packages: read
+
+concurrency:
+  group: mobile-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  android:
+    name: Android (debug APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # `token:` for the private CI-Common submodule — see the `viewer` job in build.yml.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Root install + web build: the shell ships viewer-react/dist via webDir. `npm
+      # install`, not `npm ci`, to match build.yml (the committed lockfile is not in sync
+      # with every workspace manifest).
+      - name: Install root dependencies
+        run: npm install --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build web bundle
+        run: npm run build
+      - name: Verify web bundle
+        run: |
+          set -euo pipefail
+          test -f viewer-react/dist/index.html
+          test -f viewer-react/dist/cesium/Assets/approximateTerrainHeights.json
+
+      - name: JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          # v3 defaults `packages` to `tools platform-tools`, and Google has removed the
+          # obsolete `tools` package, so the default makes sdkmanager exit 1. Empty means
+          # "set up cmdline-tools and the env, install nothing" — the next step installs
+          # exactly what this build needs.
+          packages: ''
+      # compileSdk/targetSdk 36 live in viewer-react/mobile/android/variables.gradle;
+      # build-tools 35.0.0 is AGP 8.10's default (what the local debug build used).
+      - name: Install SDK components
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0"
+
+      # The shell is a STANDALONE npm project (not a root workspace) with its own lockfile.
+      - name: Install mobile dependencies
+        working-directory: viewer-react/mobile
+        run: npm ci --no-audit --no-fund
+
+      - name: Capacitor sync (Android)
+        working-directory: viewer-react/mobile
+        run: npx cap sync android
+
+      - name: Gradle assembleDebug
+        working-directory: viewer-react/mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 7
+          name: companion-atlas-android-debug-apk
+          path: viewer-react/mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS (Simulator .app)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install root dependencies
+        run: npm install --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build web bundle
+        run: npm run build
+      - name: Verify web bundle
+        run: |
+          set -euo pipefail
+          test -f viewer-react/dist/index.html
+          test -f viewer-react/dist/cesium/Assets/approximateTerrainHeights.json
+
+      - name: Install mobile dependencies
+        working-directory: viewer-react/mobile
+        run: npm ci --no-audit --no-fund
+
+      # `cap sync ios` runs `pod install` — CocoaPods ships on GitHub's macOS runners.
+      - name: Capacitor sync (iOS)
+        working-directory: viewer-react/mobile
+        run: npx cap sync ios
+
+      # Unsigned Simulator build: validates the project and produces a runnable .app
+      # with no Apple Developer credentials. This is the same command that was run
+      # locally against the iOS 27 simulator SDK. A device-installable, signed .ipa
+      # needs a team, certificates and a provisioning profile; none are configured.
+      - name: Build (iOS Simulator, unsigned)
+        working-directory: viewer-react/mobile/ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            build
+
+      - name: Package .app
+        working-directory: viewer-react/mobile/ios/App
+        run: |
+          set -euo pipefail
+          APP=$(find build/Build/Products -name 'App.app' -type d | head -1)
+          test -n "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$GITHUB_WORKSPACE/companion-atlas-ios-simulator.app.zip"
+
+      - name: Upload iOS app
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 7
+          name: companion-atlas-ios-simulator-app
+          path: companion-atlas-ios-simulator.app.zip
+          if-no-files-found: error
