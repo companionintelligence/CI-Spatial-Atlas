@@ -7,3 +7,6 @@ playwright-report
 .git
 .DS_Store
 *.log
+# Native iOS/Android shell (Capacitor): not part of the web image, and its
+# node_modules/Pods/Gradle output would only bloat the build context.
+viewer-react/mobile

@@ -1,0 +1,25 @@
+{
+  "name": "@companion-atlas/mobile-shell",
+  "version": "0.1.0",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "description": "Native iOS + Android shell (Capacitor) around the viewer-react build. Standalone npm project, deliberately NOT a root workspace: it ships the Vite bundle via webDir and never imports it.",
+  "scripts": {
+    "build:web": "cd ../.. && npm run build",
+    "sync": "cap sync",
+    "build": "npm run build:web && npm run sync",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.6.10",
+    "@capacitor/core": "^7.6.10",
+    "@capacitor/ios": "^7.6.10",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.10",
+    "typescript": "^5.9.3"
+  }
+}

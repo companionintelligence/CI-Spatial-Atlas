@@ -8,6 +8,14 @@ pending a first tagged release).
 ## Unreleased
 
 ### Added
+- **iOS + Android shell (Capacitor).** `viewer-react/mobile/` wraps the
+  viewer-react production build for iOS and Android
+  (`com.companionintelligence.atlas`, Capacitor 7). It is a standalone npm
+  project, not a root workspace, and is excluded from the Docker context.
+  `.github/workflows/mobile-build.yml` (manual dispatch only) builds an unsigned
+  debug APK and an unsigned iOS Simulator `.app`. Not store-ready: placeholder
+  icons and splash, no signing, no privacy declarations — see
+  `viewer-react/mobile/README.md`.
 - **Cloudflare deployment (prod).** A single Cloudflare Worker
   (`server/wrangler.toml`, `ci-atlas-prod`) serves the `viewer-react`
   production build as static assets and a REST API shim
