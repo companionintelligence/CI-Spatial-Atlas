@@ -172,8 +172,9 @@ export function InteropPanel({
         </p>
         {/* The button below is the control: it opens this picker. The input is
             only the mechanism, so it is kept out of the tab order and the
-            accessibility tree. Left in, it was a second tab stop, with no name
-            and (here) a focus ring drawn on the button instead of on itself. */}
+            accessibility tree. Left in, it was a second tab stop with no name of
+            its own (browsers read it as "Choose File") and (here) a focus ring
+            drawn on the button instead of on itself. */}
         <input
           ref={input}
           type="file"
