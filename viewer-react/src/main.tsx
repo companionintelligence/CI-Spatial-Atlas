@@ -6,6 +6,7 @@ import './theme/atlas.css';
 import { AtlasApp } from './AtlasApp.js';
 import { maybeInstallXREmulator } from './renderers/xr/devEmulator.js';
 import { rendererForDevice } from './renderers/rendererForDevice.js';
+import { registerServiceWorker } from './pwa/registerServiceWorker.js';
 
 // Use the configured Cesium ion token for real World Imagery / World Terrain.
 // Without one, clear Cesium's *bundled* default token (a short-lived shared JWT)
@@ -21,6 +22,10 @@ Ion.defaultAccessToken = ionToken ?? '';
 const googleKey = (import.meta as unknown as { env: Record<string, string | undefined> }).env
   .VITE_GOOGLE_MAPS_API_KEY;
 if (googleKey) GoogleMaps.defaultApiKey = googleKey;
+
+// Installable as an app, with an offline page. Production builds only; see
+// src/pwa/registerServiceWorker.ts and public/sw.js.
+registerServiceWorker();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

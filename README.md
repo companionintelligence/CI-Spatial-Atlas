@@ -183,6 +183,33 @@ are baked in when the web bundle is built (there is no `?memory=` inside the app
 The shell is a working, unsigned build; icons, signing, and privacy/store answers are
 still open — see [`viewer-react/mobile/README.md`](viewer-react/mobile/README.md).
 
+## Install as a web app (PWA)
+
+The viewer installs from Chrome, Edge and other Chromium browsers (a headset's included) with
+no store review: serve it over HTTPS (or `localhost`) and use the browser's install button. It
+opens in its own window with the canon dark background (`#041620`) behind the globe. Browsers
+offer service workers and installation only on a secure origin, so a plain-`http` LAN address
+stays an ordinary web page; put the appliance behind the Hub's Traefik TLS or a tailnet
+certificate first.
+
+| File | What it is |
+|---|---|
+| `viewer-react/public/manifest.webmanifest` | name, `display: standalone`, `#041620`, 192 / 512 / maskable icons |
+| `viewer-react/public/icons/` | copied byte for byte from `@companionintelligence/assets` 1.5.1 (`icons/png/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon-180.png`) |
+| `viewer-react/public/sw.js` | the service worker |
+| `viewer-react/public/offline/` | the page it shows when a page load cannot reach the network, served at `/offline/` (a folder, not `offline.html`: Cloudflare answers a `.html` URL with a redirect, which a navigation cannot use) |
+| `viewer-react/src/pwa/registerServiceWorker.ts` | registers it from the bundle in production builds; skipped in the Capacitor shells and inside iframes |
+
+The worker is deliberately small. It never caches the app, Cesium, imagery, stories or
+anything from a Memory server or the API, and it never writes to a cache after install: all of
+that goes straight to the network. Its one job is to show `/offline/` when a page load cannot
+reach the network. To retire it, ship a `sw.js` that calls `self.registration.unregister()` and
+remove `registerServiceWorker()` from `viewer-react/src/main.tsx`.
+
+To check installability against a production build, run `npm run build` and
+`npm run preview -w viewer-react`, then open DevTools → Application → Manifest, or call
+`Page.getInstallabilityErrors` over the Chrome DevTools Protocol.
+
 ## Developing the viewer
 
 ```sh

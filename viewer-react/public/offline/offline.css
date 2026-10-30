@@ -1,0 +1,60 @@
+/* The offline page (public/offline/index.html), shown by the service worker when a page
+   load cannot reach the network. It is copied to dist/ as it is, so it cannot import the
+   token layer; these are the canon dark values written out, the same ones the app paints:
+     --background (--teal-950) #041620, --foreground #e8f2f4,
+     --primary #c5e8dc, --primary-foreground #041620 */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  box-sizing: border-box;
+  background: #041620;
+  color: #e8f2f4;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 28rem;
+  text-align: center;
+}
+
+h1 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+p {
+  margin: 0.5rem 0;
+}
+
+.retry {
+  display: inline-block;
+  margin-top: 0.75rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.5rem;
+  background: #c5e8dc;
+  color: #041620;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.retry:hover {
+  background: #e8f2f4;
+}
+
+.retry:focus-visible {
+  outline: 2px solid #e8f2f4;
+  outline-offset: 3px;
+}

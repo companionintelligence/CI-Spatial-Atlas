@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Companion Atlas</title>
+    <!-- Installable as an app (public/manifest.webmanifest has display: standalone).
+         #041620 is the canon dark background the app paints (--teal-950): the colour of the
+         title bar or status bar around the globe, and of the splash screen before it. -->
+    <meta name="theme-color" content="#041620" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Atlas" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
   </head>
   <body>
     <div id="root"></div>
