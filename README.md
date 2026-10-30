@@ -209,7 +209,10 @@ The worker is deliberately small. It never caches the app, Cesium, imagery, stor
 anything from a Memory server or the API, and it never writes to a cache after install: all of
 that goes straight to the network. Its one job is to show `/offline/` when a page load cannot
 reach the network. To retire it, ship a `sw.js` that calls `self.registration.unregister()` and
-remove `registerServiceWorker()` from `viewer-react/src/main.tsx`.
+remove `registerServiceWorker()` from `viewer-react/src/main.tsx`. The tests assert the worker, so
+they go with it: delete `viewer-react/test/pwa-service-worker.test.ts` and the three checks in
+`viewer-react/test/pwa-manifest.test.ts` that read `sw.js` or `main.tsx` (otherwise 34 of the 61 PWA
+tests fail; the rest of `pwa-manifest.test.ts` only reads the manifest and `index.html`).
 
 **An installed Atlas starts at `/`, so it loses the URL parameters.** The manifest's
 `start_url` and `scope` are `/`, so every launch from the home screen or the app list opens
