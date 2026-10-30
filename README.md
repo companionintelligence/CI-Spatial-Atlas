@@ -185,11 +185,13 @@ still open — see [`viewer-react/mobile/README.md`](viewer-react/mobile/README.
 
 ## Install as a web app (PWA)
 
-The viewer installs from Chrome, Edge and other Chromium browsers (a headset's included) with
-no store review: serve it over HTTPS (or `localhost`) and use the browser's install button. It
-opens in its own window with the canon dark background (`#041620`) behind the globe. Browsers
-offer service workers and installation only on a secure origin, so a plain-`http` LAN address
-stays an ordinary web page; put the appliance behind the Hub's Traefik TLS or a tailnet
+The viewer installs as an app with no store review: serve it over HTTPS (or `localhost`) and
+use the browser's install button. It has been checked in desktop Chrome only (with a
+phone-sized window); other Chromium-based browsers should offer install too, but Edge, Quest
+Browser, real Android devices and iOS (Add to Home Screen) have not been tried. An installed
+copy opens in its own window with the canon dark background (`#041620`) behind the globe.
+Browsers offer service workers and installation only on a secure origin, so a plain-`http` LAN
+address stays an ordinary web page; put the appliance behind the Hub's Traefik TLS or a tailnet
 certificate first.
 
 | File | What it is |
@@ -205,6 +207,25 @@ anything from a Memory server or the API, and it never writes to a cache after i
 that goes straight to the network. Its one job is to show `/offline/` when a page load cannot
 reach the network. To retire it, ship a `sw.js` that calls `self.registration.unregister()` and
 remove `registerServiceWorker()` from `viewer-react/src/main.tsx`.
+
+**An installed Atlas starts at `/`, so it loses the URL parameters.** The manifest's
+`start_url` and `scope` are `/`, so every launch from the home screen or the app list opens
+the site root and drops `?memory=`, `?token=`, `?apiKey=` and `?story=`. The viewer reads
+those from the URL on every load (`viewer-react/src/story/useStory.ts`), and CI-Hub wires a
+per-install Companion Memory server into this static bundle through exactly those parameters
+(see the note in `hub/docker-compose.json`). The image is built with an empty `VITE_MEMORY_URL`
+by default, so an Atlas installed from a Hub install opens on the labelled demo story. To have
+an installed copy open on a Memory server, build the bundle with `VITE_MEMORY_URL` set (a build
+argument in `viewer-react/Dockerfile`). Remembering the Memory URL between launches (never the
+token) is the obvious remedy, but it is a product decision that has not been made, and it is
+not part of this change.
+
+The container image's nginx config (`viewer-react/Dockerfile`) gives `/sw.js` `Cache-Control:
+no-cache` and serves `/manifest.webmanifest` as `application/manifest+json`, a type stock nginx
+has no mapping for. These two rules have only been checked by reading the generated config:
+`nginx -t` and the image build were not run (no nginx on the machine this was written on, and
+the container runtime was not started). Build the image once and `curl -I` both URLs before
+relying on it.
 
 To check installability against a production build, run `npm run build` and
 `npm run preview -w viewer-react`, then open DevTools → Application → Manifest, or call

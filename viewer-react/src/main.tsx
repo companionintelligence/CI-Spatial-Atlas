@@ -24,7 +24,8 @@ const googleKey = (import.meta as unknown as { env: Record<string, string | unde
 if (googleKey) GoogleMaps.defaultApiKey = googleKey;
 
 // Installable as an app, with an offline page. Production builds only; see
-// src/pwa/registerServiceWorker.ts and public/sw.js.
+// src/pwa/registerServiceWorker.ts and public/sw.js. It never throws (it runs before the
+// viewer mounts, and the viewer works without the worker), so there is no try/catch here.
 registerServiceWorker();
 
 const root = document.getElementById('root');

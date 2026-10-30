@@ -29,9 +29,15 @@ export interface RegisterOptions {
 
 const isProductionBuild = (): boolean => (import.meta as unknown as { env: { PROD?: boolean } }).env.PROD === true;
 
+/** Not worth interrupting the viewer for: it is an ordinary web page without the worker. */
+const warn = (err: unknown): void => {
+  console.warn('Companion Atlas: could not register the service worker', err);
+};
+
 /**
  * Register the service worker once the page has loaded, so it never competes with the
- * globe's first render. Returns whether a registration was started.
+ * globe's first render. Returns whether it went on to ask the browser to register the
+ * worker (a refusal by the browser is logged, not returned).
  *
  * It does nothing:
  *   - outside a production build: the dev server would otherwise be served from a
@@ -43,26 +49,37 @@ const isProductionBuild = (): boolean => (import.meta as unknown as { env: { PRO
  *     bundled files for no gain;
  *   - when the viewer is embedded in another page (src/embed): a frame on someone else's
  *     site is not somewhere to install an app from.
+ *
+ * It never throws. src/main.tsx calls it before the viewer mounts, so an exception from an
+ * optional feature would leave a blank page. Even reading `navigator.serviceWorker` can
+ * throw (a SecurityError in some sandboxed or locked-down contexts), so every read sits
+ * inside the try, and a failure is logged and treated as "no worker".
  */
-export function registerServiceWorker({
-  production = isProductionBuild(),
-  win = window as unknown as PwaWindow,
-}: RegisterOptions = {}): boolean {
-  if (!production) return false;
+export function registerServiceWorker(options: RegisterOptions = {}): boolean {
+  try {
+    const { production = isProductionBuild(), win = window as unknown as PwaWindow } = options;
+    if (!production) return false;
 
-  const container = win.navigator.serviceWorker;
-  if (!container) return false;
-  if (win.Capacitor?.isNativePlatform?.()) return false;
-  if (win.self !== win.top) return false;
+    const container = win.navigator.serviceWorker;
+    if (!container) return false;
+    if (win.Capacitor?.isNativePlatform?.()) return false;
+    if (win.self !== win.top) return false;
 
-  const register = () => {
-    container.register(SERVICE_WORKER_URL, { scope: '/' }).catch((err: unknown) => {
-      // Not worth interrupting the viewer for: it is an ordinary web page without it.
-      console.warn('Companion Atlas: could not register the service worker', err);
-    });
-  };
+    // Also guarded on its own: when the page is still loading this runs later, from the
+    // load event, outside the try above.
+    const register = () => {
+      try {
+        container.register(SERVICE_WORKER_URL, { scope: '/' }).catch(warn);
+      } catch (err) {
+        warn(err);
+      }
+    };
 
-  if (win.document.readyState === 'complete') register();
-  else win.addEventListener('load', register, { once: true });
-  return true;
+    if (win.document.readyState === 'complete') register();
+    else win.addEventListener('load', register, { once: true });
+    return true;
+  } catch (err) {
+    warn(err);
+    return false;
+  }
 }

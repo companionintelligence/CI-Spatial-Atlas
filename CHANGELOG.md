@@ -8,6 +8,19 @@ pending a first tagged release).
 ## Unreleased
 
 ### Added
+- **Installable web app (PWA).** `viewer-react` ships a web app manifest
+  (standalone, `#041620`, 192 / 512 / maskable icons copied from
+  `@companionintelligence/assets` 1.5.1), the head tags that point at it, and a
+  small service worker (`viewer-react/public/sw.js`) that shows a static
+  `/offline/` page when a page load cannot reach the network. The worker caches
+  nothing but that page, its stylesheet and the mark, once at install; the app,
+  Cesium, imagery, stories and every Memory or API request go straight to the
+  network. It is registered from the bundle in production builds only, and
+  skipped in the Capacitor shells and in iframes. The container image's nginx
+  config gains `no-cache` for `/sw.js` and `application/manifest+json` for
+  `/manifest.webmanifest` (not run through nginx). An installed copy starts at
+  `/`, so it loses `?memory=` and `?token=` — see "Install as a web app (PWA)"
+  in the README. Checked in desktop Chrome only.
 - **iOS + Android shell (Capacitor).** `viewer-react/mobile/` wraps the
   viewer-react production build for iOS and Android
   (`com.companionintelligence.atlas`, Capacitor 7). It is a standalone npm

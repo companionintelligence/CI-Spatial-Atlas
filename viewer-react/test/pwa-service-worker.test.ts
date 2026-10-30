@@ -11,6 +11,7 @@
  * write to a cache after install, because a cached copy of any of those is how an installed
  * app ends up on a stale build or holds a bearer token.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,8 @@ import { registerServiceWorker, SERVICE_WORKER_URL, type PwaWindow } from '../sr
 
 const ORIGIN = 'https://atlas.ci.computer';
 const SW_SOURCE = readFileSync(fileURLToPath(new URL('../public/sw.js', import.meta.url)), 'utf8');
+/** The name the worker gives its cache, read from its source (`const CACHE = '…'`). */
+const CACHE_NAME = /const CACHE = '([^']+)'/.exec(SW_SOURCE)?.[1] ?? '';
 
 // ---- registration (src/pwa/registerServiceWorker.ts) --------------------------
 
@@ -111,6 +114,66 @@ describe('registerServiceWorker', () => {
     await Promise.resolve();
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
+  });
+
+  // src/main.tsx calls registerServiceWorker() before it mounts the viewer, so an exception
+  // here would leave a blank page for the sake of an optional feature.
+  describe('never throws', () => {
+    it('when merely reading navigator.serviceWorker throws a SecurityError', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const win = fakeWindow();
+      const error = new DOMException('The operation is insecure.', 'SecurityError');
+      Object.defineProperty(win.navigator, 'serviceWorker', {
+        get() {
+          throw error;
+        },
+      });
+
+      let started: boolean | undefined;
+      expect(() => (started = registerServiceWorker({ production: true, win: asWindow(win) }))).not.toThrow();
+      expect(started).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('service worker'), error);
+      warn.mockRestore();
+    });
+
+    it('when the Capacitor bridge it asks throws, and does not register without knowing it is outside a shell', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const win = fakeWindow({
+        capacitor: {
+          isNativePlatform: () => {
+            throw new Error('the bridge is not ready');
+          },
+        },
+      });
+
+      let started: boolean | undefined;
+      expect(() => (started = registerServiceWorker({ production: true, win: asWindow(win) }))).not.toThrow();
+      expect(started).toBe(false);
+      expect(win.navigator.serviceWorker!.register).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
+
+    it('when register() itself throws, whether the page has loaded or the call waits for the load event', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const register = vi.fn(() => {
+        throw new TypeError('the script URL is not valid');
+      });
+
+      const loaded = fakeWindow({ serviceWorker: { register } });
+      expect(() => registerServiceWorker({ production: true, win: asWindow(loaded) })).not.toThrow();
+
+      const loading = fakeWindow({ readyState: 'loading', serviceWorker: { register } });
+      loading.addEventListener.mockImplementation(() => {});
+      expect(() => registerServiceWorker({ production: true, win: asWindow(loading) })).not.toThrow();
+      const [, onLoad] = loading.addEventListener.mock.calls[0] as unknown as [string, () => void];
+      expect(() => onLoad()).not.toThrow();
+
+      expect(register).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+    });
   });
 });
 
@@ -252,11 +315,12 @@ describe('public/sw.js: lifecycle', () => {
     const worker = loadWorker({ network: SITE });
     await worker.lifecycle('install');
     worker.storeFor('ci-atlas-offline-v0');
+    worker.storeFor('ci-atlas-offline-000000000000');
     worker.storeFor('some-other-apps-cache');
 
     await worker.lifecycle('activate');
 
-    expect([...worker.stores.keys()].sort()).toEqual(['ci-atlas-offline-v1', 'some-other-apps-cache']);
+    expect([...worker.stores.keys()].sort()).toEqual([CACHE_NAME, 'some-other-apps-cache'].sort());
     expect(worker.self.clients.claim).toHaveBeenCalledTimes(1);
   });
 });
@@ -301,16 +365,16 @@ describe('public/sw.js: page loads', () => {
 
   it('never hands a navigation a redirected response, which the browser refuses', async () => {
     const worker = loadWorker({ offline: true });
-    worker.storeFor('ci-atlas-offline-v1').set('/offline/', {
+    // What a host that redirects /offline/ would have left in the cache at install.
+    const stored: FakeResponseLike = {
       redirected: true,
       body: 'offline page',
       status: 200,
       statusText: 'OK',
       headers: new Headers({ 'content-type': 'text/html' }),
-      clone() {
-        return this;
-      },
-    });
+      clone: () => stored,
+    };
+    worker.storeFor(CACHE_NAME).set('/offline/', stored);
 
     const response = await worker.dispatch('/', { mode: 'navigate' });
     expect(response!.redirected).toBe(false);
@@ -395,5 +459,42 @@ describe('public/sw.js: everything else is left to the browser', () => {
 
     expect(worker.writes).toHaveLength(afterInstall);
     expect(worker.writes.every((w) => w.via === 'addAll')).toBe(true);
+  });
+});
+
+describe('public/sw.js: cache name', () => {
+  // A browser re-fetches the precached files only when sw.js itself changes, and the offline
+  // page is not fingerprinted. So the cache name carries a fingerprint of those files, and
+  // editing one without touching sw.js fails here instead of reaching no one.
+  const offlineUrl = /const OFFLINE_URL = '([^']+)'/.exec(SW_SOURCE)?.[1] ?? '';
+  const precache = (/const PRECACHE = \[([^\]]*)\]/.exec(SW_SOURCE)?.[1] ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => (item === 'OFFLINE_URL' ? offlineUrl : (/^'([^']+)'$/.exec(item)?.[1] ?? item)));
+
+  /** A path that ends in / is that folder's index.html. */
+  const fileFor = (url: string) =>
+    fileURLToPath(new URL(`../public${url.endsWith('/') ? `${url}index.html` : url}`, import.meta.url));
+
+  /** The first 12 hex digits of a sha256 over each precached url and its bytes, NUL-separated. */
+  const fingerprint = () => {
+    const hash = createHash('sha256');
+    for (const url of precache) hash.update(url).update('\0').update(readFileSync(fileFor(url))).update('\0');
+    return hash.digest('hex').slice(0, 12);
+  };
+
+  it('fingerprints the files the worker precaches', () => {
+    expect(precache).toEqual(PRECACHED);
+  });
+
+  it('is the worker’s prefix plus that fingerprint, so a changed file cannot ship under the old name', () => {
+    const expected = `ci-atlas-offline-${fingerprint()}`;
+    expect(CACHE_NAME, `a precached file changed: set CACHE to '${expected}' in public/sw.js`).toBe(expected);
+  });
+
+  it('keeps the prefix the activate step deletes old caches by', () => {
+    expect(CACHE_NAME).toMatch(/^ci-atlas-offline-[0-9a-f]{12}$/);
+    expect(SW_SOURCE).toContain("key.startsWith('ci-atlas-offline-')");
   });
 });

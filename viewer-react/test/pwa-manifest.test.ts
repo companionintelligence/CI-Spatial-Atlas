@@ -53,6 +53,22 @@ const link = (html: string, rel: string) => tags(html, 'link').find((t) => attr(
 
 const purposes = (icon: Icon) => (icon.purpose ?? 'any').split(/\s+/);
 
+/** A flat stylesheet as selector → property → value, with comments dropped (enough for offline.css). */
+function rules(css: string) {
+  const out = new Map<string, Map<string, string>>();
+  for (const chunk of css.replace(/\/\*[\s\S]*?\*\//g, '').split('}')) {
+    const open = chunk.lastIndexOf('{');
+    if (open === -1) continue;
+    const declarations = new Map<string, string>();
+    for (const declaration of chunk.slice(open + 1).split(';')) {
+      const colon = declaration.indexOf(':');
+      if (colon > 0) declarations.set(declaration.slice(0, colon).trim(), declaration.slice(colon + 1).trim());
+    }
+    out.set(chunk.slice(0, open).trim().replace(/\s+/g, ' '), declarations);
+  }
+  return out;
+}
+
 describe('public/manifest.webmanifest', () => {
   it('is an installable standalone app named for the viewer', () => {
     expect(manifest.name).toBe('Companion Atlas');
@@ -129,6 +145,23 @@ describe('the colours', () => {
     expect(attr(meta(indexHtml, 'theme-color') ?? '', 'content')).toBe(manifest.theme_color);
     expect(attr(meta(read(publicFile('offline/index.html')), 'theme-color') ?? '', 'content')).toBe(manifest.theme_color);
   });
+
+  it('are the canon dark values in the offline stylesheet too, which is copied to dist/ as it is and cannot import tokens', () => {
+    // offline.css has the dark theme written out, so read the same four values back from the
+    // token layer: a token change then fails here instead of leaving the offline page behind.
+    const dark = /\.dark\s*\{([^}]*)\}/.exec(tokens)?.[1] ?? '';
+    const token = (name: string) => new RegExp(`(?<![\\w-])${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(dark)?.[1];
+    const offline = rules(read(publicFile('offline/offline.css')));
+
+    expect(token('--background')).toBe(tealDeepest);
+    expect(offline.get('body')?.get('background')).toBe(token('--background'));
+    expect(offline.get('body')?.get('color')).toBe(token('--foreground'));
+    expect(offline.get('.retry')?.get('background')).toBe(token('--primary'));
+    expect(offline.get('.retry')?.get('color')).toBe(token('--primary-foreground'));
+    // The hover and focus states reuse the foreground colour.
+    expect(offline.get('.retry:hover')?.get('background')).toBe(token('--foreground'));
+    expect(offline.get('.retry:focus-visible')?.get('outline')).toContain(token('--foreground'));
+  });
 });
 
 describe('public/sw.js and the offline page', () => {
@@ -178,9 +211,30 @@ describe('where the viewer is served from', () => {
     expect(indexHtml).not.toMatch(/serviceWorker/);
   });
 
+  // viewer-react/Dockerfile writes nginx's config with printf. None of this has been run
+  // through a real nginx (no nginx here, container runtime stopped), so these read the text.
+  const dockerfile = read(here('../Dockerfile'));
+  const nginxConf = (/^RUN printf '(server \{[^']*)'/m.exec(dockerfile)?.[1] ?? '').replace(/\\n/g, '\n');
+
   it('keeps shared caches from holding a stale worker in the container image', () => {
-    // viewer-react/Dockerfile writes nginx's config with printf; the one-line rule is
-    // `location = /sw.js { add_header Cache-Control "no-cache"; }`.
-    expect(read(here('../Dockerfile'))).toMatch(/location = \/sw\.js \{ add_header Cache-Control "no-cache"; \}/);
+    // The one-line rule is `location = /sw.js { add_header Cache-Control "no-cache"; }`.
+    expect(dockerfile).toMatch(/location = \/sw\.js \{ add_header Cache-Control "no-cache"; \}/);
+  });
+
+  it('serves the manifest as a manifest from the container image, which stock nginx would not', () => {
+    // nginx's stock mime.types has no .webmanifest entry, so the file would go out as
+    // application/octet-stream. default_type fills in only when no extension matches, and a
+    // `types { }` block would replace the whole inherited table, so it is a location rule.
+    expect(dockerfile).toMatch(/location = \/manifest\.webmanifest \{ default_type application\/manifest\+json; \}/);
+    expect(nginxConf).not.toMatch(/^\s*types\s*\{/m);
+  });
+
+  it('writes an nginx config with balanced braces and both exact-match rules ahead of the SPA fallback', () => {
+    expect(nginxConf).toContain('server {');
+    expect(nginxConf.split('{')).toHaveLength(nginxConf.split('}').length);
+    const at = (needle: string) => nginxConf.indexOf(needle);
+    expect(at('location = /sw.js')).toBeGreaterThan(-1);
+    expect(at('location = /manifest.webmanifest')).toBeGreaterThan(at('location = /sw.js'));
+    expect(at('location / {')).toBeGreaterThan(at('location = /manifest.webmanifest'));
   });
 });
