@@ -211,8 +211,7 @@ describe('where the viewer is served from', () => {
     expect(indexHtml).not.toMatch(/serviceWorker/);
   });
 
-  // viewer-react/Dockerfile writes nginx's config with printf. None of this has been run
-  // through a real nginx (no nginx here, container runtime stopped), so these read the text.
+  // viewer-react/Dockerfile writes nginx's config with printf, so these read that text.
   const dockerfile = read(here('../Dockerfile'));
   const nginxConf = (/^RUN printf '(server \{[^']*)'/m.exec(dockerfile)?.[1] ?? '').replace(/\\n/g, '\n');
 

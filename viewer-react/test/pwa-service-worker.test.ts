@@ -12,7 +12,9 @@
  * app ends up on a stale build or holds a bearer token.
  */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { registerServiceWorker, SERVICE_WORKER_URL, type PwaWindow } from '../src/pwa/registerServiceWorker.js';
@@ -473,14 +475,23 @@ describe('public/sw.js: cache name', () => {
     .filter(Boolean)
     .map((item) => (item === 'OFFLINE_URL' ? offlineUrl : (/^'([^']+)'$/.exec(item)?.[1] ?? item)));
 
-  /** A path that ends in / is that folder's index.html. */
-  const fileFor = (url: string) =>
-    fileURLToPath(new URL(`../public${url.endsWith('/') ? `${url}index.html` : url}`, import.meta.url));
+  const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
+  /** Where a precached url lives under public/: a path that ends in / is that folder's index.html. */
+  const pathFor = (url: string) => (url.endsWith('/') ? `${url}index.html` : url).replace(/^\//, '');
 
-  /** The first 12 hex digits of a sha256 over each precached url and its bytes, NUL-separated. */
-  const fingerprint = () => {
+  /** A file's bytes without any CR (0x0D), so a checkout with CRLF line endings hashes like one with LF. */
+  const withoutCr = (bytes: Buffer) => Buffer.from(bytes.filter((byte) => byte !== 0x0d));
+
+  /**
+   * The first 12 hex digits of a sha256 over each precached url and its bytes with the CRs
+   * removed, NUL-separated (the recipe at the top of public/sw.js). `root` is the folder the
+   * files are read from: public/ unless a test hands it a copy.
+   */
+  const fingerprint = (root = publicDir) => {
     const hash = createHash('sha256');
-    for (const url of precache) hash.update(url).update('\0').update(readFileSync(fileFor(url))).update('\0');
+    for (const url of precache) {
+      hash.update(url).update('\0').update(withoutCr(readFileSync(join(root, pathFor(url))))).update('\0');
+    }
     return hash.digest('hex').slice(0, 12);
   };
 
@@ -491,6 +502,28 @@ describe('public/sw.js: cache name', () => {
   it('is the worker’s prefix plus that fingerprint, so a changed file cannot ship under the old name', () => {
     const expected = `ci-atlas-offline-${fingerprint()}`;
     expect(CACHE_NAME, `a precached file changed: set CACHE to '${expected}' in public/sw.js`).toBe(expected);
+  });
+
+  it('is the same on a checkout with CRLF line endings, and still changes when a file’s content does', () => {
+    // core.autocrlf=true on Windows, or an editor that saves CRLF, must not make the failure
+    // above ask a developer to paste a name that is wrong for Linux and macOS CI.
+    const copy = mkdtempSync(join(tmpdir(), 'atlas-precache-'));
+    try {
+      for (const url of precache) {
+        const target = join(copy, pathFor(url));
+        mkdirSync(dirname(target), { recursive: true });
+        // latin1 round-trips every byte value, so only the line endings change.
+        const lf = readFileSync(join(publicDir, pathFor(url))).toString('latin1');
+        writeFileSync(target, lf.replace(/\r?\n/g, '\r\n'), 'latin1');
+      }
+      expect(readFileSync(join(copy, 'offline/offline.css')).includes(0x0d), 'the copies should have CRLF line endings').toBe(true);
+      expect(`ci-atlas-offline-${fingerprint(copy)}`, 'a CRLF checkout computes the committed name').toBe(CACHE_NAME);
+
+      appendFileSync(join(copy, 'offline/offline.css'), '/* edited */\r\n');
+      expect(fingerprint(copy)).not.toBe(fingerprint());
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
   });
 
   it('keeps the prefix the activate step deletes old caches by', () => {

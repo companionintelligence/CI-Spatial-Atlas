@@ -30,8 +30,10 @@
 //
 // A browser fetches the precached files again only when this file changes, and the offline
 // page is not fingerprinted, so CACHE carries a fingerprint of them: the first 12 hex digits
-// of a sha256 over, for each PRECACHE url in order, the url, a NUL byte, the file's bytes and
-// a NUL byte. test/pwa-service-worker.test.ts recomputes it and fails, naming the value to
+// of a sha256 over, for each PRECACHE url in order, the url, a NUL byte, the file's bytes with
+// every CR (0x0D) removed, and a NUL byte. The CRs are dropped so that a checkout with CRLF
+// line endings (core.autocrlf, an editor that saves them) computes the name Linux and macOS
+// CI compute. test/pwa-service-worker.test.ts recomputes it and fails, naming the value to
 // paste here, when a precached file changed and this line did not.
 
 const CACHE = 'ci-atlas-offline-301ce18a938e';

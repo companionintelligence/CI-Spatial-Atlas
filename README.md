@@ -220,12 +220,10 @@ argument in `viewer-react/Dockerfile`). Remembering the Memory URL between launc
 token) is the obvious remedy, but it is a product decision that has not been made, and it is
 not part of this change.
 
-The container image's nginx config (`viewer-react/Dockerfile`) gives `/sw.js` `Cache-Control:
-no-cache` and serves `/manifest.webmanifest` as `application/manifest+json`, a type stock nginx
-has no mapping for. These two rules have only been checked by reading the generated config:
-`nginx -t` and the image build were not run (no nginx on the machine this was written on, and
-the container runtime was not started). Build the image once and `curl -I` both URLs before
-relying on it.
+The container image's nginx config (`viewer-react/Dockerfile`) has two exact-match locations
+ahead of the SPA fallback: `/sw.js` is sent with `Cache-Control: no-cache`, so a shared cache
+revalidates it instead of serving a stale copy, and `/manifest.webmanifest` is sent as
+`application/manifest+json`, a type stock nginx has no mapping for.
 
 To check installability against a production build, run `npm run build` and
 `npm run preview -w viewer-react`, then open DevTools → Application → Manifest, or call

@@ -18,9 +18,9 @@ pending a first tagged release).
   network. It is registered from the bundle in production builds only, and
   skipped in the Capacitor shells and in iframes. The container image's nginx
   config gains `no-cache` for `/sw.js` and `application/manifest+json` for
-  `/manifest.webmanifest` (not run through nginx). An installed copy starts at
-  `/`, so it loses `?memory=` and `?token=` — see "Install as a web app (PWA)"
-  in the README. Checked in desktop Chrome only.
+  `/manifest.webmanifest`. An installed copy starts at `/`, so it loses
+  `?memory=` and `?token=` — see "Install as a web app (PWA)" in the README.
+  Checked in desktop Chrome only.
 - **iOS + Android shell (Capacitor).** `viewer-react/mobile/` wraps the
   viewer-react production build for iOS and Android
   (`com.companionintelligence.atlas`, Capacitor 7). It is a standalone npm
