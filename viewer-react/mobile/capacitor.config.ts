@@ -21,8 +21,10 @@ const config: CapacitorConfig = {
   appName: 'Companion Atlas',
   webDir: '../dist',
   server: {
-    // Android serves the bundle from https://localhost (iOS: capacitor://localhost). Those
-    // are the page origins a CI-Server's CORS_ALLOWED_ORIGINS has to allow.
+    // Android serves the bundle from https://localhost (iOS: capacitor://localhost).
+    // Companion-Memory allows both out of the box (nativeAppOrigins in
+    // backend/apps/api/src/main.ts, with credentials), so a Memory server needs no
+    // CORS_ALLOWED_ORIGINS entry for this shell.
     androidScheme: 'https',
   },
   // Atlas night-space background (--teal-950 in CI-Common tokens) behind the web view,
@@ -33,11 +35,14 @@ const config: CapacitorConfig = {
     // start BELOW the status bar / Dynamic Island. With the default ('never') the web
     // view runs under it and the top bar's controls are hidden behind the clock.
     contentInset: 'always',
+    // Capacitor defaults this to false, which switches pinch-zoom off for the whole web
+    // view and fails WCAG 1.4.4 (Resize text). Cesium's canvas keeps its own pinch
+    // gesture; this is what lets people enlarge the panels and text around it.
+    zoomEnabled: true,
   },
   android: {
-    // targetSdk 36 forces edge-to-edge; without this the WebView draws under the
-    // status bar and the navigation bar. Capacitor 8 makes 'auto' the default.
-    adjustMarginsForEdgeToEdge: 'auto',
+    // Same reason as ios.zoomEnabled: the Android default is false.
+    zoomEnabled: true,
   },
   plugins: {
     SplashScreen: {
@@ -51,9 +56,16 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
-      // Capacitor DARK = light glyphs, for a dark app.
+      // Capacitor DARK = light glyphs, for a dark app. (backgroundColor is gone on
+      // purpose: @capacitor/status-bar ignores it on Android 15+, which this app targets.
+      // What shows behind the bars is set in values/colors.xml and values/styles.xml.)
       style: 'DARK',
-      backgroundColor: '#041620',
+    },
+    SystemBars: {
+      // Core plugin in Capacitor 8 (Android). Same intent as StatusBar.style: light glyphs on
+      // the status and navigation bars. Without it the bars follow the phone's light/dark
+      // setting and a light-mode phone paints dark icons onto the dark app.
+      style: 'DARK',
     },
   },
 };
