@@ -55,8 +55,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       # Root install + web build: the shell ships viewer-react/dist via webDir. `npm
-      # install`, not `npm ci`, to match build.yml (the committed lockfile is not in sync
-      # with every workspace manifest).
+      # install`, not `npm ci`, to match build.yml.
       - name: Install root dependencies
         run: npm install --no-audit --no-fund
         env:
