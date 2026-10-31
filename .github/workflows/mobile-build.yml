@@ -82,8 +82,9 @@ jobs:
           # "set up cmdline-tools and the env, install nothing" — the next step installs
           # exactly what this build needs.
           packages: ''
-      # compileSdk/targetSdk 36 live in viewer-react/mobile/android/variables.gradle;
-      # build-tools 35.0.0 is AGP 8.10's default (what the local debug build used).
+      # compileSdk/targetSdk 36 live in viewer-react/mobile/android/variables.gradle.
+      # `assembleDebug` resolves no build-tools on AGP 8.13 (checked with --info);
+      # 35.0.0 stays installed for the release lane that is still to come.
       - name: Install SDK components
         run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0"
 
@@ -110,7 +111,9 @@ jobs:
 
   ios:
     name: iOS (Simulator .app)
-    runs-on: macos-latest
+    # Capacitor 8 needs Xcode 26+, so pin the macOS 26 image instead of macos-latest
+    # (CI-Planning's mobile build pins it for the same reason).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -140,7 +143,8 @@ jobs:
         working-directory: viewer-react/mobile
         run: npm ci --no-audit --no-fund
 
-      # `cap sync ios` runs `pod install` — CocoaPods ships on GitHub's macOS runners.
+      # The iOS project uses Swift Package Manager (Capacitor 8): no CocoaPods step, and
+      # xcodebuild fetches capacitor-swift-pm itself.
       - name: Capacitor sync (iOS)
         working-directory: viewer-react/mobile
         run: npx cap sync ios
@@ -153,7 +157,7 @@ jobs:
         working-directory: viewer-react/mobile/ios/App
         run: |
           xcodebuild \
-            -workspace App.xcworkspace \
+            -project App.xcodeproj \
             -scheme App \
             -configuration Debug \
             -sdk iphonesimulator \

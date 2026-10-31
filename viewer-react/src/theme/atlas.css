@@ -19,6 +19,14 @@
   --atlas-radius: 0.625rem;
   --atlas-mono: 'SFMono-Regular', 'JetBrains Mono', ui-monospace, monospace;
   --atlas-shadow: 0 18px 50px rgba(0,0,0,.55), 0 2px 0 rgba(114,221,212,.04) inset;
+
+  /* What the system bars and a camera cutout take at the top of the screen. The Android
+     app (Capacitor 8, viewer-react/mobile) runs this page edge-to-edge, because index.html
+     asks for viewport-fit=cover, and Capacitor's SystemBars plugin publishes the bar sizes
+     as --safe-area-inset-* on <html> (0 wherever it pads the web view itself). Nothing sets
+     them anywhere else, so in a browser, the installed PWA and the iOS app (which insets its
+     web view natively, ios.contentInset) this is 0px and nothing moves. */
+  --atlas-inset-top: var(--safe-area-inset-top, 0px);
 }
 
 /* ---- Stacking order -------------------------------------------------------
@@ -67,6 +75,13 @@ body { background: var(--atlas-bg); overflow: hidden; }
   -webkit-font-smoothing: antialiased;
   display: grid; grid-template-columns: 60px 1fr; grid-template-rows: 54px 1fr;
   grid-template-areas: "rail top" "rail stage";
+  /* Keep the whole grid, and so everything anchored in its stage, clear of the Android
+     system bars and cutouts (see --atlas-inset-top). Below 761px the tab bar and the time
+     machine already add env(safe-area-inset-bottom) themselves, so the bottom stays out. */
+  padding: var(--atlas-inset-top) var(--safe-area-inset-right, 0px) 0 var(--safe-area-inset-left, 0px);
+}
+@media (min-width: 761px) {
+  .atlas-app { padding-bottom: var(--safe-area-inset-bottom, 0px); }
 }
 
 /* backdrop layers (behind the globe) */
@@ -323,7 +338,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 
 /* ————— lightbox ————— */
 .atlas-lightbox { position: fixed; inset: 0; z-index: var(--z-lightbox); background: rgba(2,8,12,.92); display: grid; place-items: center; padding: 4vh; backdrop-filter: blur(4px); }
-.lb-close { position: absolute; top: 18px; right: 20px; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--atlas-line-2); background: rgba(9,32,43,.66); color: var(--atlas-fg-hi); font-size: 16px; cursor: pointer; }
+.lb-close { position: absolute; top: calc(18px + var(--atlas-inset-top)); right: 20px; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--atlas-line-2); background: rgba(9,32,43,.66); color: var(--atlas-fg-hi); font-size: 16px; cursor: pointer; }
 .lb-figure { margin: 0; max-width: min(1100px, 94vw); max-height: 90vh; display: flex; flex-direction: column; gap: 12px; }
 .lb-media { max-width: 100%; max-height: 76vh; object-fit: contain; border-radius: 14px; border: 1px solid var(--atlas-line-2); }
 .lb-media.lb-tint { width: min(900px, 90vw); height: 60vh; }
@@ -653,8 +668,8 @@ body { background: var(--atlas-bg); overflow: hidden; }
      its full list below the fold. A fixed, viewport-safe sheet keeps every
      basemap choice reachable without widening the page. */
   .atlas-layers-pop {
-    position: fixed; top: 60px; right: 8px; left: auto;
-    max-height: calc(100dvh - 68px); overflow-y: auto;
+    position: fixed; top: calc(60px + var(--atlas-inset-top)); right: 8px; left: auto;
+    max-height: calc(100dvh - 68px - var(--atlas-inset-top)); overflow-y: auto;
   }
   /* Scrapbook and People share the desktop 336px drawer. At 320px that
      desktop width made the drawer start 30px off the left edge; constrain the

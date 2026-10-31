@@ -12,14 +12,14 @@
     "open:android": "cap open android"
   },
   "dependencies": {
-    "@capacitor/android": "^7.6.10",
-    "@capacitor/core": "^7.6.10",
-    "@capacitor/ios": "^7.6.10",
-    "@capacitor/splash-screen": "^7.0.0",
-    "@capacitor/status-bar": "^7.0.0"
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.6.10",
+    "@capacitor/cli": "^8.6.0",
     "typescript": "^5.9.3"
   }
 }

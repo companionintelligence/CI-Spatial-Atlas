@@ -91,6 +91,16 @@ pending a first tagged release).
     Packages is what unblocks it.
 
 ### Changed
+- **Capacitor shell moved from 7.6.10 to 8.6.0** (`viewer-react/mobile`; 7.x loses extended
+  support on 2026-12-08). The iOS project builds with Swift Package Manager instead of
+  CocoaPods and uses Capacitor's own UIScene delegate in place of the hand-written one; the
+  Android project is on AGP 8.13.0 and Gradle 8.14.3. Pinch-zoom is on for both platforms
+  (`zoomEnabled`, WCAG 1.4.4). On Android the page now pads itself for the system bars with
+  Capacitor's `--safe-area-inset-*` variables (`atlas.css`, `embed.css`), because Capacitor 8
+  has no `adjustMarginsForEdgeToEdge`; nothing moves in a browser or in the iOS app.
+  `mobile-build.yml` builds the SPM project on `macos-26`. The shell README no longer tells
+  operators to add the shell's origins to `CORS_ALLOWED_ORIGINS`: Companion-Memory already
+  allows them.
 - `3d-tiles-renderer` is now declared by `viewer-react` (it is imported by
   `src/renderers/xr/worldTransform.ts`) instead of being picked up by hoisting
   from the root viewer's dependencies.
