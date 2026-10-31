@@ -86,9 +86,9 @@
  * ------------------------------------------------------------------------- */
 .atlas-share {
   position: fixed; z-index: var(--z-modal);
-  top: 60px; right: 14px;
+  top: calc(60px + var(--atlas-inset-top)); right: 14px;
   width: min(420px, calc(100vw - 28px));
-  max-height: calc(100vh - 76px);
+  max-height: calc(100vh - 76px - var(--atlas-inset-top));
   overflow: auto;
   display: flex; flex-direction: column; gap: 14px;
   padding: 14px;
