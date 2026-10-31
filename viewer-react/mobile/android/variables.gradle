@@ -1,21 +1,20 @@
 ext {
-    // 24, not Capacitor's default 23: Play refuses an App Bundle whose minSdk is below 24.
+    // 24 is Capacitor 8's floor; Play also refuses an App Bundle whose minSdk is below 24.
     minSdkVersion = 24
-    // Play requires target API 36 of every new upload (since 31 Aug 2026). Capacitor 7's
-    // documented matrix stops at 35, but @capacitor/android reads compileSdk/targetSdk from
-    // this file, so raising them here is what Play inspects. Same choice as
-    // Companion-Memory's Android shell. AGP must be >= 8.10.0 (see build.gradle).
+    // Play requires target API 36 of every new upload (since 31 Aug 2026). Capacitor 8's
+    // template already uses 36 for both; @capacitor/android reads them from this file, so
+    // this is what Play inspects. AGP must be >= 8.10.0 (see build.gradle).
     compileSdkVersion = 36
     targetSdkVersion = 36
-    androidxActivityVersion = '1.9.2'
-    androidxAppCompatVersion = '1.7.0'
-    androidxCoordinatorLayoutVersion = '1.2.0'
-    androidxCoreVersion = '1.15.0'
-    androidxFragmentVersion = '1.8.4'
-    coreSplashScreenVersion = '1.0.1'
-    androidxWebkitVersion = '1.12.1'
+    androidxActivityVersion = '1.11.0'
+    androidxAppCompatVersion = '1.7.1'
+    androidxCoordinatorLayoutVersion = '1.3.0'
+    androidxCoreVersion = '1.17.0'
+    androidxFragmentVersion = '1.8.9'
+    coreSplashScreenVersion = '1.2.0'
+    androidxWebkitVersion = '1.14.0'
     junitVersion = '4.13.2'
-    androidxJunitVersion = '1.2.1'
-    androidxEspressoCoreVersion = '3.6.1'
-    cordovaAndroidVersion = '10.1.1'
+    androidxJunitVersion = '1.3.0'
+    androidxEspressoCoreVersion = '3.7.0'
+    cordovaAndroidVersion = '14.0.1'
 }
