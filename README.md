@@ -126,9 +126,8 @@ renderer.
 > [CI-Common](https://github.com/companionintelligence/CI-Common), pinned as a
 > submodule at `third_party/ci-common` and wired in as an npm workspace, so
 > `npm install` and `npm run build` both work with nothing else on the machine.
-> `npm ci` does not work yet: the committed `package-lock.json` is behind the
-> `server` workspace (it lacks `wrangler` and `@cloudflare/workers-types` and pins
-> an older `hono`), which is why CI runs `npm install`.
+> `npm ci` works too: the committed `package-lock.json` covers every workspace,
+> `server` included. CI still runs `npm install`.
 > CI-Common is a private repository, so you need access to it.
 >
 > This used to resolve to a sibling `../ci-common` checkout outside the repo,
