@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// The version numbers come from ios/version.xcconfig, the one file both store builds read:
+// MARKETING_VERSION becomes versionName and CURRENT_PROJECT_VERSION becomes versionCode.
+def atlasVersionConfig = rootProject.file('../ios/version.xcconfig').text
+def atlasVersionName = (atlasVersionConfig =~ /(?m)^MARKETING_VERSION\s*=\s*(\S+)/)[0][1]
+def atlasVersionCode = Integer.parseInt((atlasVersionConfig =~ /(?m)^CURRENT_PROJECT_VERSION\s*=\s*(\d+)/)[0][1])
+
+// Upload signing. Each value comes from a Gradle property (-P, gradle.properties, or
+// ORG_GRADLE_PROJECT_<name> in the environment) or from an environment variable of the same name.
+// Nothing is committed. Without ATLAS_UPLOAD_STORE_FILE the release build is produced unsigned,
+// and that is what the CI debug job and the local checks use.
+def atlasSigning = { String name -> findProperty(name) ?: System.getenv(name) }
+def atlasUploadStore = atlasSigning('ATLAS_UPLOAD_STORE_FILE')
+def atlasUploadSigned = atlasUploadStore != null && atlasUploadStore.toString().trim() != ''
+
 android {
     namespace = "com.companionintelligence.atlas"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +21,8 @@ android {
         applicationId "com.companionintelligence.atlas"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode atlasVersionCode
+        versionName atlasVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +30,26 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (atlasUploadSigned) {
+                storeFile file(atlasUploadStore)
+                storePassword atlasSigning('ATLAS_UPLOAD_STORE_PASSWORD')
+                keyAlias atlasSigning('ATLAS_UPLOAD_KEY_ALIAS')
+                keyPassword atlasSigning('ATLAS_UPLOAD_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // R8 shrinks and obfuscates the release build. Capacitor's rules come in through its
+            // consumer ProGuard file; the app's own rules are in proguard-rules.pro.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (atlasUploadSigned) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

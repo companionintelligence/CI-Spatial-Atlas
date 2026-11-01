@@ -1,3 +1,14 @@
 node_modules/
 *.log
 .DS_Store
+
+# Signing material never goes in git: Android upload keystores, Apple certificates, private keys
+# and provisioning profiles. The owner or CI supplies them at build time (STORE_SUBMISSION.md).
+*.jks
+*.keystore
+keystore.properties
+*.p8
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision

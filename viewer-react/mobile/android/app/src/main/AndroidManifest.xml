@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- No cloud or device-transfer backup. The WebView keeps the scrapbook and layer lists in local
+         storage, and restoring them onto another device is a privacy decision (STORE_SUBMISSION.md)
+         that is not made yet. Cleartext HTTP is refused: every endpoint the app talks to is HTTPS. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
