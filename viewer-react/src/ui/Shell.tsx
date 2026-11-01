@@ -77,8 +77,9 @@ export function Rail({
       <div className="atlas-rail-spacer" />
       {/* A disabled "Settings (coming soon)" button sat here. Chrome that can
           only be clicked to discover it does nothing is worse than absent —
-          bring it back when there are settings. */}
-      <div className="atlas-rail-avatar" title="Liam Broza">LB</div>
+          bring it back when there are settings. The owner's initials sat here
+          too, shown to every visitor as if they were signed in; bring an avatar
+          back once there is a signed-in user to show. */}
     </nav>
   );
 }
