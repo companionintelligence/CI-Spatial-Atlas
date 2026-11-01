@@ -15,12 +15,11 @@
 # Requires a Cloudflare API token with Workers + D1 + R2 edit permissions —
 # see .github/workflows/deploy-cloudflare.yml for the CI wiring.
 #
-# The custom domain (atlas.ci.computer) is not set here: Cloudflare Workers
-# custom domains/routes are DNS-zone changes, which this file cannot express
-# and this repo's automation cannot make on its own — attach
-# "atlas.ci.computer" to this Worker from the Cloudflare dashboard (Workers &
-# Pages -> ci-atlas-prod -> Settings -> Domains & Routes), once, by someone
-# with access to the ci.computer zone.
+# The custom domain is declared in `routes` below. `wrangler deploy` attaches
+# atlas.ci.computer to this Worker and creates its DNS record in the ci.computer
+# zone, so the deploy token needs access to that zone. If it lacks that, attach
+# the domain once from the dashboard (Workers & Pages -> ci-atlas-prod ->
+# Settings -> Domains & Routes) and the rest of this file still applies.
 
 name = "ci-atlas-prod"
 main = "src/worker.ts"
@@ -28,6 +27,9 @@ compatibility_date = "2026-09-28"
 # node:crypto (object-store.ts's key derivation) needs this; nothing here
 # uses Node APIs beyond that.
 compatibility_flags = ["nodejs_compat"]
+
+# atlas.ci.computer, attached as a Workers custom domain on deploy.
+routes = [{ pattern = "atlas.ci.computer", custom_domain = true }]
 
 [assets]
 directory = "../viewer-react/dist"
@@ -52,8 +54,9 @@ ATLAS_CORS_ORIGINS = "https://atlas.ci.computer"
 
 # ── Companion OIDC (required before this deployment will serve anything
 #    beyond /healthz — see the boot guard in src/worker.ts) ────────────────
-# COMPANION_OIDC_ISSUER = "https://<ci-portal-prod-origin>/api/auth"
-# COMPANION_OIDC_AUDIENCE = "companion-atlas"
+# The Hub's auth origin. Tokens carry `iss` = <origin>/api/auth (see src/auth.ts).
+# The audience defaults to "companion-atlas" when unset.
+COMPANION_OIDC_ISSUER = "https://hub.ci.computer/api/auth"
 
 # ── Companion Intelligence suite connectors (optional; each is a no-op
 #    until its URL is set — see connectors.ts) ─────────────────────────────
