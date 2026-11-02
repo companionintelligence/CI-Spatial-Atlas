@@ -1,7 +1,7 @@
 import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import {
   BrandMark, GlobeIcon, PeopleIcon, LayersIcon,
-  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon,
+  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon, ARIcon,
 } from './icons.js';
 
 /** Left icon rail. Globe navigates home; Draw arms the drawing tools; People
@@ -102,13 +102,16 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
  *  view out of Atlas, which is what the Import & export panel is for, and that
  *  panel is where the other three exits already live. */
 export function TopBar({
-  onSearch, onFrameAll, live, sample, showPlaces, onTogglePlaces, layers, visibility,
+  onSearch, onFrameAll, onViewInAR, live, sample, showPlaces, onTogglePlaces, layers, visibility,
   sceneMode = '3d', onSceneMode,
 }: {
   onSearch: () => void;
   /** Frame the camera on every located memory. Beside the projection control
    *  because both answer "where am I looking from", not "what is on the map". */
   onFrameAll?: () => void;
+  /** Reload into the AR entry. Passed only where the device can start AR and the
+   *  page is not in an iOS WebView (see `useViewInAR`); absent means no control. */
+  onViewInAR?: () => void;
   live?: boolean;
   /** Showing the bundled demo story because no Companion Memory is connected. */
   sample?: boolean;
@@ -174,6 +177,19 @@ export function TopBar({
           onClick={onFrameAll}
         >
           <FitIcon />
+        </button>
+      )}
+      {onViewInAR && (
+        // Beside fit-all: both change where the world is seen from. Activating it
+        // reloads the page in the AR entry, so the renderer is never switched
+        // under a mounted globe.
+        <button
+          className="atlas-icon-btn"
+          title="View in AR — place the globe in your room"
+          aria-label="View in AR"
+          onClick={onViewInAR}
+        >
+          <ARIcon />
         </button>
       )}
       {onSceneMode && (

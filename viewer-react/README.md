@@ -49,6 +49,9 @@
 - `src/renderers/XRStoryScene.tsx` — R3F `<Canvas><XR>` globe rendering
   `storyEntities(story)` as pins; ports CI-Earth-2's working WebXR path.
 - `src/renderers/rendererForDevice.ts` — `immersive-vr` support check → renderer.
+  The decision itself is `src/renderers/rendererChoice.ts` (pure, unit-tested):
+  `?view=ar` with `immersive-ar` support enters the same XR root in AR, and the
+  flat top bar's "View in AR" control reloads with it (`src/renderers/useViewInAR.ts`).
 - `src/AtlasApp.tsx` — loads the story, switches renderer, owns the shell state,
   and shares the story with both renderers.
 - `src/memory/auth.ts` — obtains a short-lived CI-Server bearer after the

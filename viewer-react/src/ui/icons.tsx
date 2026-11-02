@@ -107,3 +107,9 @@ export const ExchangeIcon = (p: P) => (
 export const SlidesIcon = (p: P) => (
   <svg {...S(p)}><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M12 17v3m-3 0h6" /><path d="m10 8.5 4 2.5-4 2.5z" /></svg>
 );
+
+/** View in AR: a solid set down in the room. A cube, because the globe is
+ *  placed in the user's space rather than shown in a frame. */
+export const ARIcon = (p: P) => (
+  <svg {...S(p)}><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z" /><path d="M4 7.5 12 12l8-4.5M12 12v9" /></svg>
+);

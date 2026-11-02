@@ -42,11 +42,20 @@ const reactRoot = createRoot(root);
 // installing afterwards leaves it having already chosen the desktop globe.
 void maybeInstallXREmulator()
   .then(() => rendererForDevice())
-  .then(async (kind) => {
-    const App = kind === 'xr' ? (await import('./renderers/xr/XRAtlasApp.js')).XRAtlasApp : AtlasApp;
+  .then(async (choice) => {
+    if (choice === 'cesium') {
+      reactRoot.render(
+        <StrictMode>
+          <AtlasApp />
+        </StrictMode>,
+      );
+      return;
+    }
+    // 'xr-ar' is the same XR root, entered in immersive-ar. See rendererChoice.ts.
+    const { XRAtlasApp } = await import('./renderers/xr/XRAtlasApp.js');
     reactRoot.render(
       <StrictMode>
-        <App />
+        <XRAtlasApp entry={choice === 'xr-ar' ? 'ar' : 'vr'} />
       </StrictMode>,
     );
   });
