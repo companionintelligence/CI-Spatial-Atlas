@@ -31,10 +31,11 @@ const config: CapacitorConfig = {
   // so the safe-area strips and any overscroll are the app colour, not white.
   backgroundColor: '#041620',
   ios: {
-    // The Atlas shell is a fixed full-viewport grid with its own top bar, so it has to
-    // start BELOW the status bar / Dynamic Island. With the default ('never') the web
-    // view runs under it and the top bar's controls are hidden behind the clock.
-    contentInset: 'always',
+    // The web view runs edge to edge, and the CSS pads the top bar and the tab bar with
+    // env(safe-area-inset-*). 'always' also insets the web view natively: the layout viewport
+    // shrinks by the home indicator, so the tab bar sat 34pt above the bottom of the screen
+    // with a blank band under it. 'never' keeps env() as the one source of the iOS insets.
+    contentInset: 'never',
     // Capacitor defaults this to false, which switches pinch-zoom off for the whole web
     // view and fails WCAG 1.4.4 (Resize text). Cesium's canvas keeps its own pinch
     // gesture; this is what lets people enlarge the panels and text around it.
