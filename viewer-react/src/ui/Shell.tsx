@@ -3,7 +3,7 @@ import { NEARBY_RADIUS_METRES } from '../location/logic.js';
 import {
   BrandMark, GlobeIcon, PeopleIcon, ImagesIcon, CameraIcon,
   SearchIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon, ARIcon,
-  LocateIcon, BellIcon,
+  LocateIcon, BellIcon, CloudIcon,
 } from './icons.js';
 
 /** Left icon rail. Globe navigates home; Draw arms the drawing tools; People
@@ -26,7 +26,7 @@ import {
 export function Rail({
   onFrameAll, onPeople, peopleOpen, onCollections, collectionsOpen, scrapbookCount,
   onPresent, onInterop, interopOpen, canPresent, importedCount, onDraw, drawing,
-  onScenes, scenesOpen, sceneCount, authoring = true,
+  onScenes, scenesOpen, sceneCount, authoring = true, onMemory, memoryConnected, memoryOpen,
 }: {
   onPeople: () => void;
   peopleOpen: boolean;
@@ -53,6 +53,10 @@ export function Rail({
   /** Drawing, scenes and import write the story. A visitor to a demo or a shared story
    *  is shown only the tools that read it, so the rail is a short list of real choices. */
   authoring?: boolean;
+  /** Native shell only: opens the connect dialog. Omitted in a browser, which has no Keychain. */
+  onMemory?: () => void;
+  memoryConnected?: boolean;
+  memoryOpen?: boolean;
 }) {
   const items = [
     // The globe is home: it frames everything. "Fit all places" was a second
@@ -69,6 +73,15 @@ export function Rail({
     ...(authoring ? [{ key: 'draw', label: drawing ? 'Stop drawing' : 'Draw on the globe', short: drawing ? 'Stop' : 'Draw', Icon: PencilIcon, onClick: onDraw, active: drawing }] : []),
     ...(authoring ? [{ key: 'scenes', label: 'Scenes', short: 'Scenes', Icon: CameraIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount }] : []),
     ...(authoring ? [{ key: 'interop', label: 'Import & export', short: 'Import', Icon: ExchangeIcon, onClick: onInterop, active: interopOpen, badge: importedCount }] : []),
+    // Connecting is not authoring: the native shell offers it in every mode, demo included.
+    ...(onMemory ? [{
+      key: 'memory',
+      label: memoryConnected ? 'Companion Memory: connected' : 'Connect to Companion Memory',
+      short: memoryConnected ? 'Memory' : 'Connect',
+      Icon: CloudIcon,
+      onClick: onMemory,
+      active: memoryOpen,
+    }] : []),
   ];
   return (
     <nav className="atlas-rail" aria-label="Primary">
