@@ -158,7 +158,7 @@ export function ScrapbookDrawer({
       )}
 
       <div className="sb-actions">
-        <button className="atlas-btn primary" disabled={journeyEmpty} onClick={onCurate} title="Companion writes the narrative and titles the journey">
+        <button className="atlas-btn primary" disabled={journeyEmpty} onClick={onCurate} title="Fills in missing narratives and any missing title from a built-in template, in this browser">
           <SparkIcon />Curate with Companion
         </button>
         <button className="atlas-btn" disabled={journeyEmpty} onClick={onPlay}><PlayIcon />Play journey</button>

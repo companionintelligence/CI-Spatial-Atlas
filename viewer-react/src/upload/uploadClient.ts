@@ -26,11 +26,11 @@
  * and a panel must render its control disabled with `NO_API_CONFIGURED` rather
  * than offering an upload that has nowhere to go.
  *
- * The token is the other half, and it is not solved here: the viewer has no
- * sign-in flow (see `src/auth/portal.ts`, deliberately unwired). So `token` is
- * a caller-supplied field — whatever the app obtains once that lands — and
- * without one the API answers 401, which `describeFailure` reports as exactly
- * that rather than as a generic failure.
+ * The token is the other half, and it is not wired here. `token` is a
+ * caller-supplied field, and the app passes none: the Portal token from
+ * `src/auth/portalReturn.ts` is filed under the Memory URL instead. Without one the
+ * API answers 401, which `describeFailure` reports as exactly that rather than as a
+ * generic failure.
  */
 
 import type { MediaItem } from '@companion-atlas/story';
