@@ -4,9 +4,10 @@
  * CI-Portal is better-auth `oidcProvider`; the browser flow mirrors the Hub RP
  * (CI-Hub `packages/backend/src/modules/auth/portal-sso.ts`) but public + in the
  * browser. Endpoints hang off the issuer (`<portal-origin>/api/auth`):
- * `${issuer}/oauth2/authorize`, `${issuer}/oauth2/token`. Public PKCE client —
- * no secret. The access token is opaque, not a JWT, and CI-Memory refuses it
- * (docs/DISCOVERY.md).
+ * `${issuer}/oauth2/authorize`. This page never calls the token endpoint: the Atlas
+ * server redeems the code there (`exchangeUrl`, `POST /api/oidc/token`), as CI-Server
+ * does, so no browser needs a CORS grant on the Portal. Public PKCE client — no secret.
+ * The access token is opaque, not a JWT, and CI-Memory refuses it (docs/DISCOVERY.md).
  *
  * This file is the protocol. `auth/portalReturn.ts` drives it: the load screen's
  * "Sign in with Companion" button calls `beginLogin`, and the page load that comes
@@ -26,6 +27,8 @@ export interface PortalAuthConfig {
   clientId: string;
   /** Redirect URI registered/auto-allowed for this client. */
   redirectUri: string;
+  /** Where the code is redeemed: the Atlas server's `/api/oidc/token`. */
+  exchangeUrl: string;
   /** OAuth scopes; defaults to `openid profile email`. */
   scope?: string;
 }
@@ -171,16 +174,12 @@ export async function completeLogin(cfg: PortalAuthConfig, currentUrl: string = 
   if (!code) throw new Error('Portal login: missing authorization code');
   if (!verifier) throw new Error('Portal login: missing PKCE verifier');
 
-  const res = await fetch(`${cfg.issuer.replace(/\/$/, '')}/oauth2/token`, {
+  // The Atlas server redeems the code at the Portal with this verifier. The Portal is not
+  // called from this page, so the page needs no CORS grant on it.
+  const res = await fetch(cfg.exchangeUrl, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: cfg.clientId,
-      redirect_uri: cfg.redirectUri,
-      code,
-      code_verifier: verifier,
-    }),
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code, code_verifier: verifier, redirect_uri: cfg.redirectUri }),
   });
   if (!res.ok) {
     // Read the body defensively: a proxy or gateway between us and Portal can
@@ -209,5 +208,7 @@ export function portalConfigFromEnv(env: Record<string, string | undefined>): Po
   const clientId = env.VITE_OIDC_CLIENT_ID;
   const redirectUri = env.VITE_OIDC_REDIRECT_URI;
   if (!issuer || !clientId || !redirectUri) return null;
-  return { issuer, clientId, redirectUri };
+  // The Atlas API redeems the code: same origin in production, VITE_ATLAS_API in development.
+  const api = (env.VITE_ATLAS_API || '/api').replace(/\/$/, '');
+  return { issuer, clientId, redirectUri, exchangeUrl: `${api}/oidc/token` };
 }

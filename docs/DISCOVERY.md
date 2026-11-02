@@ -65,7 +65,7 @@ When the Memory server answers with an authentication error, the load screen off
 
 1. The button records the Memory URL in `sessionStorage` and sends the browser to `<issuer>/oauth2/authorize`. The request carries a PKCE S256 challenge and a `state` value. The verifier and the state stay in `sessionStorage` until the return.
 2. The Portal sends the browser back to the viewer with `code` and `state`. If it refuses the request, it sends `error` and `state` instead.
-3. On that page load, `finishPortalSignIn` checks `state`, exchanges `code` at `<issuer>/oauth2/token`, and removes `code`, `state` and `iss` from the address bar. The verifier is single-use.
+3. On that page load, `finishPortalSignIn` checks `state` and posts the `code` with its verifier to the Atlas server (`POST /api/oidc/token`). The server redeems them at `<issuer>/oauth2/token`, as CI-Server does, so the page never calls the Portal. The page removes `code`, `state` and `iss` from the address bar. The verifier is single-use.
 4. The access token is filed under the Memory URL that started the sign-in (`viewer-react/src/memory/auth.ts`). The Memory request then carries it.
 
 A refusal is shown in the Portal's own words, for example `Portal login: authorization failed — invalid_client — …`. The token never goes into the URL. The tab keeps it only in `sessionStorage`.
