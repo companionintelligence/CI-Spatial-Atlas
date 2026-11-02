@@ -151,6 +151,20 @@ body { background: var(--atlas-bg); overflow: hidden; }
 }
 .atlas-share-status.ok { color: var(--atlas-mint); }
 .atlas-share-status.err { color: var(--atlas-coral); }
+/* Tablet-portrait widths: the controls alone are wider than the bar here (the
+   wordmark is what gives way). The demo or connection chip keeps its text. */
+@media (min-width: 761px) and (max-width: 980px) {
+  .atlas-top { gap: 8px; }
+  .atlas-wordmark { display: none; }
+}
+/* Location and notification messages, under the top bar where the share status
+   sits. It wraps, because these sentences are longer than a share confirmation. */
+.atlas-device-note {
+  position: absolute; top: calc(100% + 8px); right: 16px; z-index: 2;
+  max-width: min(320px, calc(100vw - 32px)); padding: 8px 10px; border-radius: 9px;
+  background: var(--atlas-card); border: 1px solid var(--atlas-line-2); box-shadow: var(--atlas-shadow);
+  font-size: 11.5px; line-height: 1.4; color: var(--atlas-fg);
+}
 
 /* stage (holds the Cesium globe + overlays) */
 .atlas-stage { grid-area: stage; position: relative; overflow: hidden; }
@@ -570,7 +584,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
      unclickable on every phone. The children are constrained individually
      instead, which solves the width problem without creating a clip. */
   .atlas-top { gap: 4px; padding: 0 8px; min-width: 0; }
-  .atlas-share-status { top: calc(100% + 6px); right: 8px; }
+  .atlas-share-status, .atlas-device-note { top: calc(100% + 6px); right: 8px; }
   .atlas-wordmark { min-width: 0; }
   .atlas-wordmark b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .atlas-wordmark span { display: none; }
@@ -594,6 +608,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
      buttons even when the browser does not report a coarse pointer (as
      desktop browser emulation commonly does not). */
   .atlas-top .atlas-icon-btn { flex: 0 0 44px; width: 44px; height: 44px; }
+  /* Phone widths have no room for the location and nearby controls alongside
+     "Fit all places". The rail's globe button frames everything on these widths
+     (it is the first item of the bottom bar), so the top-bar copy steps aside. */
+  .atlas-top .atlas-fit-all { display: none; }
   /* Icon-only search. Left as a flex:1 box with its label hidden it rendered
      as a wide empty pill that looked like a broken input. */
   .atlas-search { width: 44px; height: 44px; min-height: 44px; flex: 0 0 44px; justify-content: center; padding: 0; }
@@ -689,7 +707,9 @@ body { background: var(--atlas-bg); overflow: hidden; }
    the right edge of the viewport. */
 @media (max-width: 380px) {
   .atlas-wordmark b { font-size: 12px; }
-  .atlas-live, .atlas-sample { width: 20px; height: 20px; padding: 0; justify-content: center; gap: 0; border-radius: 50%; font-size: 0; }
+  /* flex-basis pinned: the chip is the honesty signal (demo vs connected), so the
+     wordmark gives up the space here, not the dot. */
+  .atlas-live, .atlas-sample { flex: 0 0 20px; width: 20px; height: 20px; padding: 0; justify-content: center; gap: 0; border-radius: 50%; font-size: 0; }
   .atlas-live i, .atlas-sample i { width: 8px; height: 8px; }
 }
 

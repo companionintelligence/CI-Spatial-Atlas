@@ -8,6 +8,15 @@ pending a first tagged release).
 ## Unreleased
 
 ### Added
+- **Device location and nearby memories (foreground only).** Two toggles in the top bar.
+  "Show my location" tracks the device position while the app is in the foreground and
+  draws it on the globe. "Nearby memories" raises a local notification, once per memory per
+  session, when a located memory is within 300 m. Positions stay in memory and are never sent
+  to a server. Permission is asked only from these toggles. The native shells use
+  `@capacitor/geolocation` and `@capacitor/local-notifications` (Capacitor 8), with the iOS
+  location usage string and the Android coarse and fine location permissions. There is no
+  background location. Logic: `viewer-react/src/location/logic.ts`, tested in
+  `viewer-react/test/device-location.test.ts`. Store notes: `viewer-react/mobile/STORE_SUBMISSION.md`.
 - **PWA build check and kill switch.** `npm run build` (so the image build and the deploy
   workflow too) now fails when the service worker's files drift: a precached file that is
   missing or outside `/offline/`, a `CACHE` name that no longer matches the fingerprint of the

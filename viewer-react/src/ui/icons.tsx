@@ -69,6 +69,12 @@ export const PencilIcon = (p: P) => (
 export const FlagIcon = (p: P) => (
   <svg {...S(p)}><path d="M5 21V4" /><path d="M5 5c2-1.5 4-1.5 6 0s4 1.5 6 0v9c-2 1.5-4 1.5-6 0s-4-1.5-6 0V5z" /></svg>
 );
+export const LocateIcon = (p: P) => (
+  <svg {...S(p)}><circle cx="12" cy="12" r="7.5" /><circle cx="12" cy="12" r="2.5" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" /></svg>
+);
+export const BellIcon = (p: P) => (
+  <svg {...S(p)}><path d="M6 9.5a6 6 0 1 1 12 0c0 4.5 1.8 6 1.8 6H4.2s1.8-1.5 1.8-6z" /><path d="M10 19a2 2 0 0 0 4 0" /></svg>
+);
 export const PlayIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M8 5.5v13l11-6.5z" /></svg>;
 export const PauseIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /></svg>;
 export const PrevIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M6 5h2v14H6zM19 5 9 12l10 7z" /></svg>;
