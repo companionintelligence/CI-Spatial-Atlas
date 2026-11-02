@@ -19,7 +19,7 @@ disagree, both are reported.
 | 1 | The sign-in form is reachable in a store build, and the app has no in-app account deletion (Guideline 5.1.1(v)). | **Built**, option (b). Not yet run against a live server or a device. | `viewer-react/src/ui/DeleteMemoryAccount.tsx`, `viewer-react/src/ui/StoryLoadError.tsx`, `viewer-react/src/memory/auth.ts` |
 | 2 | App Review Guideline 4.2 (minimum functionality): the app is a web app inside a WebView. | **Decide**, high risk | Section 1, item 2 below |
 | 3 | Google Play's WebView and minimum-functionality policy. | **Decide**, medium risk | Section 4 |
-| 4 | The Atlas API answers 401 without credentials (checked 2026-11-01), so its sign-in issuer is configured. The Hub token's `iss` and `aud` are still unverified. | **Owner** | Build-time `VITE_MEMORY_URL` |
+| 4 | The Atlas API's protected routes answer `401 {"error":"unauthenticated"}` without credentials (`GET /api/media/config`, `GET /api/jobs/:id`, checked 2026-11-01). `GET /api/stories` answers `200 []` without credentials. A 401 does not show that a sign-in issuer is configured. The Hub token's `iss` and `aud` are still unverified. | **Owner** | Build-time `VITE_MEMORY_URL` |
 | 5 | Keys baked into the web bundle are public. | **Owner** | Mobile README, "Configuration is baked in" |
 | 6 | The avatar shows "LB" with the title "Liam Broza" for every user. | **Owner** (web app; not changed here) | `viewer-react/src/ui/Shell.tsx:81` |
 | 7 | Privacy policy URL and support URL. | **Owner**, TODO (not invented) | Section 5 |
@@ -297,3 +297,24 @@ Match the sign-in sentence to the decision in section 1, item 1.
   Android 13+ notification prompt, and the location prompts. Only the web and build paths were checked.
 - The launcher icon's appearance under real launcher masks: built to the 66 dp safe zone, but not seen on a device.
 - Android's build metadata: AGP embeds the git commit in the AAB (`base/root/META-INF/version-control-info.textproto`). It is harmless; set `vcsInfo.include` to false if you prefer not to ship it.
+
+## 13. Review notes (draft, not for submission)
+
+Draft for the owner to review before anything is sent to Apple or Google. Sections 1 and 4 still hold the open decisions.
+
+**Native value (App Review Guideline 4.2).** Companion Atlas is a native shell (Capacitor 8) around the viewer. The build adds these capabilities, which a browser tab does not have:
+
+- **Show my location** uses the platform location service (`@capacitor/geolocation`). It runs only while the app is in the foreground, draws a marker on the globe, and keeps the last fix in memory. The fix is not stored, logged or sent.
+- **Nearby memories** uses local notifications (`@capacitor/local-notifications`). With Nearby on, the app notifies once per memory within 300 m, and only in the foreground. The notification reads "Memory nearby" and does not name the memory.
+- **In-app account deletion** for Companion Memory accounts, from the sign-in screen (`DELETE /account`).
+- **Works offline at first launch.** The viewer ships inside the app (Capacitor `webDir` is the built bundle), and the bundled sample journey opens without a network.
+- **Native shell:** splash screen, status bar, system bars, pinch-zoom, and the system photo and video picker.
+
+Not claimed: "View in AR". The iOS app does not offer it, because WKWebView has no WebXR.
+
+**Google Play WebView policy.** The app does not load a website. Its content is the bundled viewer, served from the app's own origin (`https://localhost` on Android, from `androidScheme: 'https'`). It calls Companion Memory and the Atlas API, but the sample journey works without them. The native features above are what a reviewer should be pointed at.
+
+**Before submission (owner):**
+- Section 1, item 2 says "Nothing else is native". It predates the location and notification work (#73), so it is out of date and needs a rewrite.
+- Real GPS and real device notifications are not verified. Nearby alerts have only run in the simulator, and no memory was located there.
+- Reviewers need a test account on a live Companion Memory server. That account is not in this repository.
