@@ -26,7 +26,7 @@ import {
 export function Rail({
   onFrameAll, onPeople, peopleOpen, onCollections, collectionsOpen, scrapbookCount,
   onPresent, onInterop, interopOpen, canPresent, importedCount, onDraw, drawing,
-  onScenes, scenesOpen, sceneCount, onMemory, memoryConnected, memoryOpen,
+  onScenes, scenesOpen, sceneCount, authoring = true, onMemory, memoryConnected, memoryOpen,
 }: {
   onPeople: () => void;
   peopleOpen: boolean;
@@ -50,6 +50,9 @@ export function Rail({
   scenesOpen: boolean;
   /** Badge, and the honest signal that a story is being written. */
   sceneCount: number;
+  /** Drawing, scenes and import write the story. A visitor to a demo or a shared story
+   *  is shown only the tools that read it, so the rail is a short list of real choices. */
+  authoring?: boolean;
   /** Native shell only: opens the connect dialog. Omitted in a browser, which has no Keychain. */
   onMemory?: () => void;
   memoryConnected?: boolean;
@@ -63,13 +66,14 @@ export function Rail({
     // not a toggle, so it never shows `active` — it used to, unconditionally,
     // which meant Globe stayed lit the whole session no matter what was
     // actually open, the first thing that made this rail read as unreliable.
-    { key: 'globe', label: 'Globe — frame everything', short: 'Globe', Icon: GlobeIcon, onClick: onFrameAll },
-    { key: 'draw', label: drawing ? 'Stop drawing' : 'Draw', short: drawing ? 'Stop' : 'Draw', Icon: PencilIcon, onClick: onDraw, active: drawing },
+    { key: 'globe', label: 'Show all memories', short: 'Show all', Icon: GlobeIcon, onClick: onFrameAll },
     { key: 'people', label: 'People', short: 'People', Icon: PeopleIcon, onClick: onPeople, active: peopleOpen },
     { key: 'collections', label: 'Scrapbook', short: 'Scrapbook', Icon: ImagesIcon, onClick: onCollections, active: collectionsOpen, badge: scrapbookCount },
-    { key: 'scenes', label: 'Scenes', short: 'Scenes', Icon: CameraIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
-    ...(canPresent ? [{ key: 'present', label: 'Present', short: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
-    { key: 'interop', label: 'Import & export', short: 'Import', Icon: ExchangeIcon, onClick: onInterop, active: interopOpen, badge: importedCount },
+    ...(canPresent ? [{ key: 'present', label: 'Present the story', short: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
+    ...(authoring ? [{ key: 'draw', label: drawing ? 'Stop drawing' : 'Draw on the globe', short: drawing ? 'Stop' : 'Draw', Icon: PencilIcon, onClick: onDraw, active: drawing }] : []),
+    ...(authoring ? [{ key: 'scenes', label: 'Scenes', short: 'Scenes', Icon: CameraIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount }] : []),
+    ...(authoring ? [{ key: 'interop', label: 'Import & export', short: 'Import', Icon: ExchangeIcon, onClick: onInterop, active: interopOpen, badge: importedCount }] : []),
+    // Connecting is not authoring: the native shell offers it in every mode, demo included.
     ...(onMemory ? [{
       key: 'memory',
       label: memoryConnected ? 'Companion Memory: connected' : 'Connect to Companion Memory',
@@ -118,7 +122,7 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
 export function TopBar({
   onSearch, onFrameAll, onViewInAR, live, sample, showPlaces, onTogglePlaces, layers, visibility,
   sceneMode = '3d', onSceneMode,
-  locating = false, onToggleLocating, nearby = false, onToggleNearby, deviceNote,
+  locating = false, onToggleLocating, nearby = false, onToggleNearby, deviceNote, onConnect,
 }: {
   onSearch: () => void;
   /** Frame the camera on every located memory. Beside the projection control
@@ -141,6 +145,9 @@ export function TopBar({
   live?: boolean;
   /** Showing the bundled demo story because no Companion Memory is connected. */
   sample?: boolean;
+  /** Opens the connect sheet from the demo badge: the one place a visitor is told how to
+   *  see their own memories. */
+  onConnect?: () => void;
   /** Named-places layer (CI-Server Places API) — off by default; the memory layer is primary. */
   showPlaces?: boolean;
   onTogglePlaces?: () => void;
@@ -157,16 +164,25 @@ export function TopBar({
 }) {
   return (
     <header className="atlas-top">
-      <div className="atlas-wordmark"><BrandMark className="atlas-top-mark" gradientId="atlas-bm-top" aria-hidden="true" /><b>Companion&nbsp;Atlas</b><span>your memories in space &amp; time</span></div>
+      <div className="atlas-wordmark"><BrandMark className="atlas-top-mark" gradientId="atlas-bm-top" aria-hidden="true" /><div className="atlas-wordmark-text"><b>Companion&nbsp;Atlas</b><span>your memories in space &amp; time</span></div></div>
       {live && <span className="atlas-live" title="Connected to Companion Memory"><i />Live memory</span>}
-      {sample && (
+      {sample && (onConnect ? (
+        <button
+          type="button"
+          className="atlas-sample atlas-sample-btn"
+          title="Demo story: these are bundled places, not your memories. Connect a Companion Memory to see yours."
+          onClick={onConnect}
+        >
+          <i /><span className="long">Demo story · connect your memories</span><span className="short">Demo</span>
+        </button>
+      ) : (
         <span
           className="atlas-sample"
-          title="Not connected to Companion Memory. These are bundled demo places, not your memories. Pass ?memory=<ci-server-url> to load real data."
+          title="Demo story: these are bundled places, not your memories. Pass ?memory=<ci-server-url> to load real data."
         >
-          <i />Demo data — not connected
+          <i /><span className="long">Demo story · not connected</span><span className="short">Demo</span>
         </span>
-      )}
+      ))}
       <div className="atlas-grow" />
       {/* Search was a 340px box pretending to be a text field — clicking it
           opened a palette that has its own input, so the bar carried a second
@@ -185,7 +201,7 @@ export function TopBar({
       </button>
       {onTogglePlaces && (
         <button
-          className="atlas-icon-btn"
+          className="atlas-icon-btn atlas-places"
           data-label="Places"
           title="Named places (Companion Memory)"
           aria-label="Toggle named places"
@@ -237,10 +253,10 @@ export function TopBar({
       {onToggleNearby && (
         <button
           type="button"
-          className="atlas-icon-btn"
+          className="atlas-icon-btn atlas-alerts"
           data-label="Alerts"
-          title={`Nearby memories — alert me within ${NEARBY_RADIUS_METRES} m`}
-          aria-label="Nearby memories"
+          title={`Nearby alerts — tell me when a memory is within ${NEARBY_RADIUS_METRES} m`}
+          aria-label="Nearby alerts"
           aria-pressed={nearby}
           onClick={onToggleNearby}
         >

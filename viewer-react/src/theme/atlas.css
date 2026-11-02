@@ -993,3 +993,106 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-app .sb-actions .atlas-btn[title^="Connect"] { display: none; }
   .atlas-app .sb-actions { grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); }
 }
+
+/* ── Composition pass ──────────────────────────────────────────────────────────
+   The demo has to read at a glance, and a phone has no room for chrome that
+   repeats itself. These rules come last, so they win where they overlap the
+   rules above. */
+
+/* The brand mark is sized here, not left to the SVG's 100% default: unsized, it
+   filled a 173px box and pushed the wordmark over the stats ribbon. */
+.atlas-wordmark { flex-direction: row; align-items: center; gap: 10px; }
+.atlas-top-mark { width: 24px; height: 24px; flex: 0 0 auto; }
+.atlas-wordmark-text { display: flex; flex-direction: column; line-height: 1; min-width: 0; }
+
+/* The demo badge is a button when a visitor can connect from it. Long copy on a
+   desktop, the short word on a phone. */
+.atlas-sample-btn { font: inherit; cursor: pointer; }
+.atlas-sample-btn:hover { border-color: rgba(224,151,90,.8); }
+.atlas-sample .short { display: none; }
+
+/* The welcome card: what the demo is, and the two things to do next. */
+.atlas-welcome {
+  position: absolute; left: calc(60px + 18px); top: 104px; z-index: var(--z-panel);
+  width: min(380px, calc(100vw - 36px));
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px;
+  padding: 14px 40px 14px 16px; border-radius: 16px;
+  background: var(--atlas-glass); border: 1px solid var(--atlas-line-2);
+  box-shadow: var(--atlas-shadow); backdrop-filter: blur(16px);
+  color: var(--atlas-fg);
+}
+.atlas-welcome-copy { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; line-height: 1.45; }
+.atlas-welcome-copy strong { color: var(--atlas-fg-hi); font-size: 15px; letter-spacing: -.1px; }
+.atlas-welcome-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.atlas-welcome-actions .atlas-btn { flex: 0 1 auto; min-width: 0; }
+.atlas-welcome-close {
+  position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 8px;
+  border: 0; background: transparent; color: var(--atlas-fg-dim); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.atlas-welcome-close:hover { color: var(--atlas-fg-hi); background: rgba(64,155,155,.12); }
+
+@media (min-width: 761px) {
+  /* Lift the timeline and the panels above the Cesium credit line at the bottom-left. */
+  .atlas-timemachine { bottom: 28px; }
+  .atlas-inspector, .atlas-drawer { bottom: 136px; }
+}
+
+/* The connect sheet: a centred card over a dim scrim, above the chrome. */
+.atlas-connect {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  display: grid; place-items: center; padding: 16px;
+  background: rgba(2,10,14,.55);
+}
+.atlas-connect-card { width: min(420px, 100%); margin: 0; }
+.atlas-connect-card > strong { color: var(--atlas-fg-hi); font-size: 15px; }
+.atlas-connect-lede { color: var(--atlas-fg-dim); font-size: 12.5px; line-height: 1.5; }
+
+@media (max-width: 760px) {
+  /* One row of chrome. The wordmark text and the rarer controls go; the mark and
+     the demo badge stay, so the bar is a single 52px row and nothing wraps. */
+  .atlas-wordmark-text { display: none; }
+  .atlas-places, .atlas-alerts, .atlas-stats { display: none; }
+  .atlas-sample .long { display: none; }
+  .atlas-sample .short { display: inline; }
+  /* The status badge sits inline in the bar, not on a second row. A second row of
+     chrome is what made the header 108px tall on a phone. */
+  .atlas-live, .atlas-sample {
+    order: 0; flex: 0 1 auto; width: auto; height: auto; margin-top: 0;
+    border-radius: 999px; border-width: 1px; padding: 3px 9px;
+    font-size: 10.5px; justify-content: flex-start;
+  }
+  .atlas-top .atlas-places, .atlas-top .atlas-alerts { display: none; }
+  .atlas-welcome { left: 10px; right: 10px; top: 60px; width: auto; padding: 12px 36px 12px 14px; }
+  .atlas-welcome-copy span {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  /* The bottom bar says what each tab is, not only what it looks like. */
+  .atlas-rail-btn::after {
+    content: attr(data-label);
+    font: 600 9.5px/1 'Manrope', 'Avenir Next', system-ui, sans-serif;
+    display: block; color: inherit; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .atlas-rail-btn svg { width: 19px; height: 19px; }
+
+  /* The memory card is a short sheet over the globe, not a second screen. */
+  .atlas-inspector {
+    max-height: min(30dvh, 260px);
+    bottom: calc(56px + 68px + 12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The time machine is 68px: controls and date on one row, a full-width track below. */
+  .atlas-timemachine {
+    height: 68px; gap: 2px 8px; padding: 6px 10px 4px;
+    bottom: calc(56px + 8px + env(safe-area-inset-bottom, 0px));
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "controls date" "track track";
+  }
+  .tm-controls { grid-area: controls; }
+  .tm-track { grid-area: track; height: 12px; min-height: 12px; }
+  .tm-readout { grid-area: date; min-width: 0; justify-self: end; }
+  .tm-readout .date { font-size: 12px; }
+  .tm-histogram { top: 0; height: 100%; }
+  .tm-playhead { top: -3px; bottom: -3px; }
+  .tm-axis { display: none; }
+}
