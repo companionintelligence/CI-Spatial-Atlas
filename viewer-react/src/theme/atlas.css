@@ -113,7 +113,6 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-rail-btn:focus-visible, .atlas-icon-btn:focus-visible, .switch button:focus-visible, .atlas-btn:focus-visible, .tm-play:focus-visible,
 .tm-btn:focus-visible, .tm-track:focus-visible, .atlas-scrap:focus-visible, .atlas-rel:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
 .atlas-rail-spacer { flex: 1; }
-.atlas-rail-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--atlas-teal-600), var(--atlas-aqua)); display: grid; place-items: center; color: var(--atlas-ink); font-weight: 700; font-size: 13px; margin-top: 6px; }
 
 /* top bar */
 .atlas-top {
@@ -558,7 +557,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
     padding: 0 8px env(safe-area-inset-bottom, 0px);
     border-right: 0; border-top: 1px solid var(--atlas-line);
   }
-  .atlas-mark, .atlas-rail-spacer, .atlas-rail-avatar { display: none; }
+  .atlas-mark, .atlas-rail-spacer { display: none; }
 
   /* Top bar: keep identity + connection state, drop the long search label. */
   /* No `overflow: hidden` here. It was added to stop the header's buttons
