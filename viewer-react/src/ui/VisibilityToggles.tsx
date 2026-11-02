@@ -56,6 +56,7 @@ export function VisibilityToggles({ open, hidden, onToggleCategory, onToggle, on
         aria-label="What's shown on the globe"
         aria-expanded={open}
         aria-haspopup="dialog"
+        data-label="Show"
         title="What's shown on the globe"
         onClick={onToggle}
       >

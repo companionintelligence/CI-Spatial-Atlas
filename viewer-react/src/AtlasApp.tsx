@@ -275,6 +275,8 @@ export function AtlasApp() {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCamera, setShareCamera] = useState<Camera | null>(null);
   const [presenting, setPresenting] = useState(false);
+  // A presentation takes the stage: the drawers close, so the authoring panel is not left over the slides.
+  const startPresent = useCallback(() => { setOpenDrawer(null); setPresenting(true); }, []);
   const [drawing, setDrawing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
   const lastSync = useRef(0);
@@ -457,6 +459,9 @@ export function AtlasApp() {
   const scrub = useCallback((ms: number) => {
     if (!Number.isFinite(ms)) return;
     setCurrentMs(ms);
+    // Scrubbing moves the timeline, so the card follows the time. A memory picked earlier
+    // stayed on screen after the clock had moved past it.
+    setFocusedId(null);
     if (viewer) viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ms));
   }, [viewer]);
 
@@ -1217,7 +1222,7 @@ export function AtlasApp() {
         // Count what the drawer can actually show, so the badge can never claim
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
-        onPresent={() => setPresenting(true)}
+        onPresent={startPresent}
         onScenes={() => toggleDrawer('scenes')}
         scenesOpen={scenesOpen}
         sceneCount={sceneControl.count}
@@ -1498,7 +1503,7 @@ export function AtlasApp() {
         // Without these the presenter opens empty on any Memory story: the deck
         // is built from scenes, and a Memory archive has none.
         memories={model.memories}
-        initialSceneId={focused?.id ?? null}
+        initialSceneId={null}
         reduceMotion={reduceMotion}
       />
       {chrome.interop && <DropOverlay visible={dragging} />}
@@ -1531,7 +1536,7 @@ export function AtlasApp() {
           // because a Present button that opens an empty deck is the failure
           // this bar exists to avoid.
           canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
-          onPresent={() => setPresenting(true)}
+          onPresent={startPresent}
           presenting={presenting}
           href={window.location.href}
         />

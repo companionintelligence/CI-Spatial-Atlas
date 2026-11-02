@@ -5,7 +5,7 @@ server that build, store, and publish 4D scrapbook stories, plus the
 orchestration for the image/video → 3D reconstruction pipeline and the
 Companion Intelligence suite connectors.
 
-> Scaffold status: stores are in‑memory, auth is decode‑only, and reconstruction
+> Scaffold status: stores are in‑memory, auth verifies Companion OIDC tokens once `COMPANION_OIDC_ISSUER` is set, and reconstruction
 > shells out to tools that live in the GPU worker image. See
 > [`../REIMAGINE.md`](../REIMAGINE.md) for the roadmap. Heavy native tools
 > (COLMAP, OpenDroneMap, Nerfstudio, ffmpeg) are **not** npm deps — they run in
@@ -61,9 +61,11 @@ scoping to add once that's wired up.
 
 See [`../.env.default`](../.env.default) for `CI_MEMORY_URL`, optional
 `CI_MEMORY_TOKEN` / `CI_MEMORY_API_KEY`, `OPENCLAW_URL`,
-`HERMES_URL`, `COMPANION_OIDC_*`, `DATABASE_URL`, `REDIS_URL`, and `S3_*`.
-With no OIDC issuer set, auth is disabled and everything runs as a single dev
-subject.
+`HERMES_URL`, `COMPANION_OIDC_*`, and `S3_*`.
+With no OIDC issuer set, auth is off and every request runs as a single dev subject.
+The server refuses to start that way unless `NODE_ENV` is `development` or `test`, or
+`ATLAS_ALLOW_DEV_AUTH=1` is set (`assertAuthSafeToBoot` in `src/auth.ts`). The Cloudflare
+Worker refuses such requests instead (see below).
 
 ## Cloudflare deployment (prod)
 

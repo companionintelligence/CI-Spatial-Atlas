@@ -418,7 +418,7 @@ export function SceneEditor({
           className="sc-input sc-body"
           rows={7}
           value={narrative}
-          placeholder={'What happened here?\n\nMarkdown: **bold**, *italic*, [links](https://…), - lists, # headings.'}
+          placeholder="What happened here?"
           aria-describedby={`${ids}-body-help`}
           onChange={(e) => {
             setDraft({ id: scene.id, title, narrative: e.target.value, audio });

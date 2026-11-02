@@ -81,15 +81,15 @@ export const PrevIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', strok
 export const NextIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M16 5h2v14h-2zM5 5l10 7L5 19z" /></svg>;
 
 /** The Atlas globe: the same drawing as the app icon (public/icons/icon.svg). */
-export function BrandMark(props: P) {
+export function BrandMark({ gradientId = 'atlas-bm', ...props }: P & { gradientId?: string }) {
   return (
     <svg viewBox="0 0 100 100" {...props} role="img" aria-label="Companion Intelligence">
       <defs>
-        <linearGradient id="atlas-bm" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#066c80" /><stop offset=".55" stopColor="#00a9a7" /><stop offset="1" stopColor="#72ddd4" />
         </linearGradient>
       </defs>
-      <g fill="none" stroke="url(#atlas-bm)" strokeWidth="6" strokeLinecap="round">
+      <g fill="none" stroke={`url(#${gradientId})`} strokeWidth="6" strokeLinecap="round">
         <circle cx="50" cy="50" r="46" />
         <ellipse cx="50" cy="50" rx="21" ry="46" />
         <line x1="4" y1="50" x2="96" y2="50" />
@@ -123,4 +123,23 @@ export const SlidesIcon = (p: P) => (
  *  placed in the user's space rather than shown in a frame. */
 export const ARIcon = (p: P) => (
   <svg {...S(p)}><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z" /><path d="M4 7.5 12 12l8-4.5M12 12v9" /></svg>
+);
+
+export const LockIcon = (p: P) => (
+  <svg {...S(p)}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+);
+export const HomeIcon = (p: P) => (
+  <svg {...S(p)}><path d="M4 11 12 4l8 7" /><path d="M6 10v10h12V10" /></svg>
+);
+export const SaveIcon = (p: P) => (
+  <svg {...S(p)}><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h7V4M8 20v-6h8v6" /></svg>
+);
+export const DownloadIcon = (p: P) => (
+  <svg {...S(p)}><path d="M12 4v11" /><path d="m8 11 4 4 4-4" /><path d="M5 20h14" /></svg>
+);
+export const TrashIcon = (p: P) => (
+  <svg {...S(p)}><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /></svg>
+);
+export const UploadIcon = (p: P) => (
+  <svg {...S(p)}><path d="M12 16V5" /><path d="m8 9 4-4 4 4" /><path d="M5 20h14" /></svg>
 );

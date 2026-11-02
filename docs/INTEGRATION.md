@@ -67,28 +67,22 @@ endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
   enforcing **issuer** + **audience** (EdDSA; `aud === client_id === companion-atlas`).
   Replaces the previous decode-only stub. Empty issuer ⇒ dev subject. Tested with a
   local keypair (signature/issuer/audience/expiry) in `server/test/auth-oidc.test.ts`.
-- **SPA login** 🟡 — [`viewer-react/src/auth/portal.ts`](../viewer-react/src/auth/portal.ts):
-  Authorization Code + PKCE (S256), public client. Mirrors the Hub RP flow.
-  **Complete, and called by nothing.** `beginLogin` / `completeLogin` /
-  `portalConfigFromEnv` have no importer in the app — only the test named
-  below — so none of this reaches the bundle: there is no
-  `/auth/callback` handling at boot, no sign-in control in the shell, and no
-  consumer for the token if one were obtained. The app being unbuilt was never
-  what stood in the way; three other things do, and only the first is a code
-  change here:
-  1. no caller — plus an Atlas-API client to spend the bearer on
-     (`VITE_ATLAS_API` has no reader in `viewer-react` today, so a completed
-     login would change nothing about what the viewer can fetch);
-  2. `companion-atlas` is not in CI-Portal `PUBLIC_CLIENTS` (§5.1 — another
-     repo's PR; local/`.ts.net`/`.local` redirect URIs are auto-allowed, so dev
-     alone needs no Portal record);
-  3. `.env.default` ships `VITE_OIDC_ISSUER`/`VITE_OIDC_REDIRECT_URI` empty, so
-     `portalConfigFromEnv()` returns `null` in every configuration checked in.
+- **SPA login** 🟡 — [`viewer-react/src/auth/portal.ts`](../viewer-react/src/auth/portal.ts)
+  and [`viewer-react/src/auth/portalReturn.ts`](../viewer-react/src/auth/portalReturn.ts):
+  Authorization Code + PKCE (S256), public client, mirroring the Hub RP flow. The load
+  screen offers "Sign in with Companion" when the build sets `VITE_OIDC_*` and Memory
+  asks for sign-in; the token comes back to the same tab and is filed under that Memory
+  URL. [`DISCOVERY.md`](DISCOVERY.md) describes the flow and the build settings. Still open:
+  1. `companion-atlas` is not in CI-Portal `PUBLIC_CLIENTS` (§5.1, another repo's PR).
+     Until it is, the Portal refuses the redirect, and the viewer shows the Portal's reason.
+  2. Whether a Memory server accepts a Portal token is unverified.
+  3. A store build has no redirect the app can receive. Keep `VITE_OIDC_*` unset there
+     (see `viewer-react/mobile/README.md`).
 
-  Its failure paths *are* covered — `viewer-react/test/portal-auth.test.ts`
-  pins that an `?error=…` callback reports Portal's own error (blocker 2 above
-  arrives that way) rather than "missing authorization code", and that the PKCE
-  verifier is consumed on every path.
+  The failure paths are covered by `viewer-react/test/portal-auth.test.ts`: a `?error=…`
+  return reports the Portal's own error rather than "missing authorization code", and the
+  PKCE verifier is consumed on every path. The return path is covered by
+  `viewer-react/test/portal-return.test.ts`.
 
   Separately, the viewer now has an embedded **CI-Server Memory sign-in** path
   that *is* wired in —
@@ -191,11 +185,11 @@ verifier ourselves per §2.
 
 - Adopt `@companion-atlas/story` in the server schema (delete the mirrored Zod) — a
   breaking migration; see `docs/CONSOLIDATION.md`.
-- Wire the SPA login: give `viewer-react/src/auth/portal.ts` a caller — callback
-  handling at boot, a sign-in control, and an Atlas-API client that spends the
-  bearer (§2). Building the viewer is *not* part of this; it has been built and
-  run since the Resium spike landed. The separate embedded CI-Server Memory
-  sign-in (§2, `memory/auth.ts`) is already wired and does not depend on this.
+- Finish the SPA login: the Portal must list `companion-atlas` (§2, another repository), and
+  the Memory server must be verified to accept a Portal token. The sign-in control and the
+  return handling are wired (§2). Building the viewer is *not* part of this; it has been built
+  and run since the Resium spike landed. The embedded CI-Server Memory sign-in (§2,
+  `memory/auth.ts`) is wired too and does not depend on this.
 - Make `vite build` work in a single-repo checkout (§6) — the last thing between
   this repo and a green Docker/CI image.
 - ~~Drive the Cesium `Viewer` clock from the CZML doc packet.~~ Done — `AtlasApp`

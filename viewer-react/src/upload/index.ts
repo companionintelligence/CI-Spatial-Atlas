@@ -12,10 +12,11 @@
  *   1. `VITE_ATLAS_API` ships empty in `.env.default`, so `atlasApiFromEnv`
  *      returns null in every configuration checked into this repo and the
  *      control renders disabled with `NO_API_CONFIGURED`.
- *   2. The viewer performs no sign-in (`src/auth/portal.ts` is deliberately
- *      unwired), so against an API with authentication enabled every upload is
- *      a 401 — reported honestly as such, but a 401 nonetheless. Against a
- *      development API (no `COMPANION_OIDC_ISSUER`) uploads work today.
+ *   2. The upload sends no sign-in token. The Portal token from
+ *      `src/auth/portalReturn.ts` is filed under the Memory URL and is not passed
+ *      here, so against an API with authentication enabled every upload is a 401 —
+ *      reported honestly as such, but a 401 nonetheless. Against a development API
+ *      (no `COMPANION_OIDC_ISSUER`) uploads work today.
  *
  * See `docs/` and the module headers for the reasoning behind each piece.
  */

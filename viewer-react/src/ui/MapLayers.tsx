@@ -78,6 +78,7 @@ export function MapLayers({
         aria-label="Map layers"
         aria-expanded={open}
         aria-haspopup="dialog"
+        data-label="Layers"
         title="Map layers"
         onClick={onToggle}
       >

@@ -818,3 +818,167 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-scenemode-cycle:hover { color: var(--atlas-fg-hi); }
   .atlas-scenemode-cycle:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; }
 }
+
+/* ---- Phone chrome, second pass --------------------------------------------
+   Appended last so these win over the phone rules above. Each rule names the
+   control it changes. The tab bar is 52pt of content above the home indicator,
+   and the timeline and bottom sheets are placed from that, so change them
+   together. Desktop and tablet widths are untouched. */
+@media (max-width: 760px) {
+  .atlas-app { grid-template-rows: auto minmax(0, 1fr); }
+
+  /* Header: brand mark, then icon buttons with their own labels. The demo or
+     live state moves to a full-width strip under the row, where its words fit. */
+  .atlas-top {
+    flex-wrap: wrap; justify-content: space-between; align-content: center;
+    gap: 2px; padding: 4px 6px 0; min-height: 52px; height: auto;
+  }
+  .atlas-top-mark { display: block; flex: 0 0 26px; width: 26px; height: 26px; margin: 0 6px 0 2px; }
+  .atlas-wordmark b {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .atlas-wordmark span { display: none; }
+  .atlas-top .atlas-icon-btn, .atlas-scenemode-cycle {
+    flex: 0 0 46px; width: 46px; height: 48px; min-height: 48px; padding: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  }
+  .atlas-top .atlas-icon-btn svg { width: 18px; height: 18px; }
+  /* The desktop rule hides Fit all on phones; the 46px rule above must not undo it. */
+  .atlas-top .atlas-fit-all { display: none; }
+  .atlas-top .atlas-icon-btn::after, .atlas-scenemode-cycle::after {
+    content: attr(data-label); font-family: 'Manrope', 'Avenir Next', system-ui, sans-serif;
+    font-size: 9.5px; font-weight: 600; line-height: 1; letter-spacing: .1px; color: var(--atlas-fg-dim); white-space: nowrap;
+  }
+  .atlas-scenemode-cycle { font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--atlas-fg-hi); background: transparent; border: 1px solid transparent; border-radius: 9px; }
+  .atlas-live, .atlas-sample {
+    order: 10; flex: 0 0 100%; width: 100%; height: auto; min-width: 0; margin-top: 2px;
+    justify-content: center; gap: 6px; padding: 3px 10px; border-radius: 0; border-width: 1px 0 0;
+    font-size: 11px; line-height: 1.3; white-space: normal; overflow: visible; text-overflow: clip;
+  }
+
+  /* Tab bar: a 52pt row of icons with a label under each, above the home indicator. */
+  .atlas-rail {
+    height: calc(52px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 4px env(safe-area-inset-bottom, 0px);
+  }
+  /* Hidden without display:none, so the gradient the header mark uses stays defined. */
+  .atlas-mark { position: absolute; width: 0; height: 0; overflow: hidden; margin: 0; }
+  .atlas-rail-btn {
+    flex: 1 1 0; width: auto; min-width: 0; height: 44px; min-height: 44px; padding: 0 1px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 10px;
+  }
+  .atlas-rail-btn svg { width: 20px; height: 20px; flex: none; }
+  .atlas-rail-btn::after {
+    content: attr(data-label); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: 'Manrope', 'Avenir Next', system-ui, sans-serif; font-size: 9px; font-weight: 600; line-height: 1; letter-spacing: 0;
+  }
+
+  /* Timeline: one row of controls and date, one row of track. */
+  .atlas-timemachine {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px)); height: 76px;
+    padding: 4px 10px 6px; gap: 2px 10px; grid-template-rows: 44px 18px;
+  }
+  .tm-track { height: 18px; min-height: 18px; }
+  .tm-histogram { top: 0; height: 100%; }
+  .tm-playhead { top: 0; bottom: 0; }
+  .tm-axis { display: none; }
+
+  /* Bottom sheets sit above the timeline: 52 tab bar + 8 + 76 timeline + 8. */
+  .atlas-inspector { bottom: calc(144px + env(safe-area-inset-bottom, 0px)); max-height: 40vh; }
+  .atlas-sbdrawer { top: auto; bottom: calc(144px + env(safe-area-inset-bottom, 0px)); max-height: min(56dvh, 520px); gap: 8px; padding: 10px 12px; }
+  .sb-actions { margin-top: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sb-actions .atlas-btn { min-height: 38px; padding: 0 8px; font-size: 12px; }
+}
+
+/* Import & export and Scenes are docked cards like the scrapbook. On a phone
+   they take the same slot above the timeline, at the same gutter, and scroll
+   inside it instead of running from the header to the middle of the screen. */
+@media (max-width: 760px) {
+  /* Two classes, not one: interop.css and scenes.css load after this file, and
+     their base rules would otherwise win at equal specificity. */
+  .atlas-app .atlas-interop, .atlas-app .atlas-scenes {
+    top: auto; left: 8px; right: 8px; width: auto;
+    bottom: calc(144px + env(safe-area-inset-bottom, 0px));
+    max-height: min(56dvh, 520px);
+    padding: 10px 12px; gap: 8px;
+  }
+  .io-section { gap: 6px; }
+}
+
+/* One bottom sheet at a time on a phone: while a drawer is open, the memory
+   card steps aside instead of sitting under it. */
+@media (max-width: 760px) {
+  .atlas-app:has(.atlas-sbdrawer, .atlas-interop, .atlas-scenes) .atlas-inspector { display: none; }
+}
+
+/* ---- Phone: compact map overlays and drawers, round two ------------------
+   On a phone the symbols carry the meaning. Words stay in the DOM for screen
+   readers (.lbl is visually hidden there), and copy that only teaches the
+   desktop layout is hidden. Desktop keeps its labels. */
+.atlas-stat > svg { display: none; }
+@media (max-width: 760px) {
+  .atlas-app .lbl {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  /* Stats: one row of small pills at the top left, not three tall cards. */
+  .atlas-app .atlas-stats { top: 8px; left: 8px; right: auto; flex-direction: row; gap: 5px; }
+  .atlas-app .atlas-stat {
+    display: flex; flex-direction: row; align-items: center; gap: 5px; min-width: 0;
+    padding: 4px 9px 4px 7px; border-radius: 999px;
+  }
+  .atlas-app .atlas-stat > svg { display: block; width: 13px; height: 13px; flex: none; color: var(--atlas-teal); }
+  .atlas-app .atlas-stat b { font-size: 13px; line-height: 1; }
+  .atlas-app .atlas-place-chip { font-size: 11px; padding: 4px 9px; }
+  /* The memory card takes a third of the screen, not nearly half of it. */
+  .atlas-app .atlas-inspector { max-height: 28vh; }
+  /* Teaching copy is for the desktop layout. */
+  .atlas-app .sb-empty, .atlas-app .sb-scenes-note, .atlas-app .sb-status.dim,
+  .atlas-app .sc-empty, .atlas-app .io-hint, .atlas-app .io-note { display: none; }
+  .atlas-app .sb-title { min-height: 36px; padding: 6px 10px; }
+  /* Visibility: three symbols. */
+  .atlas-app .sb-vis button { min-height: 36px; padding: 4px 6px; display: flex; align-items: center; justify-content: center; }
+  .atlas-app .sb-vis button svg { width: 16px; height: 16px; }
+  /* Scrapbook actions: one row of five symbols. */
+  .atlas-app .sb-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 0; }
+  .atlas-app .sb-actions .atlas-btn { min-height: 42px; padding: 0; display: grid; place-items: center; }
+  .atlas-app .sb-actions .atlas-btn svg { width: 18px; height: 18px; }
+  /* Scenes: two symbol buttons. */
+  .atlas-app .sc-row-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .atlas-app .sc-action { min-height: 40px; padding: 0; justify-content: center; }
+  .atlas-app .sc-action svg { width: 18px; height: 18px; }
+}
+
+@media (max-width: 760px) {
+  /* The action words stay in each button for screen readers; font-size 0 hides them on a phone. */
+  .atlas-app .sb-actions .atlas-btn { font-size: 0; }
+}
+
+/* Phone, round three: symbols only on the bars and in the drawers. The words stay
+   in the DOM for screen readers; the bar labels are visually removed. */
+@media (max-width: 760px) {
+  .atlas-rail-btn::after, .atlas-top .atlas-icon-btn::after, .atlas-scenemode-cycle::after { display: none; }
+  .atlas-top .atlas-icon-btn, .atlas-scenemode-cycle { flex: 0 0 40px; width: 40px; height: 40px; min-height: 40px; }
+  .atlas-rail-btn { height: 44px; min-height: 44px; gap: 0; }
+  .atlas-rail-btn svg { width: 21px; height: 21px; }
+  .atlas-inspector { max-height: 28vh; }
+  .atlas-app .sb-scenes-label { display: none; }
+  .atlas-app .atlas-interop .atlas-btn.primary,
+  .atlas-app .atlas-interop .io-actions .atlas-btn { font-size: 0; display: grid; place-items: center; min-height: 42px; }
+  .atlas-app .atlas-interop .atlas-btn svg { width: 18px; height: 18px; }
+}
+
+/* Phone, round four: fixes from the user-flow walkthrough. */
+.ph-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  /* The journey chip sat under the timeline and the tab bar. On a phone it goes under the stats. */
+  .atlas-app .atlas-journey-chip { top: 52px; bottom: auto; max-width: calc(100% - 16px); font-size: 11px; padding: 6px 6px 6px 12px; }
+  /* The readout shows the time of day as well as the date. */
+  .atlas-app .tm-readout .sub { display: flex; font-size: 10px; }
+  /* Scene editor: symbol for Delete, and no teaching notes. */
+  .atlas-app .sc-head-action span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .atlas-app .sc-note { display: none; }
+  /* Save is greyed out until a Companion Memory is connected. Hide it rather than show a dead control. */
+  .atlas-app .sb-actions .atlas-btn[title^="Connect"] { display: none; }
+  .atlas-app .sb-actions { grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); }
+}
