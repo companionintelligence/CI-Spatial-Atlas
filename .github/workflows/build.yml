@@ -207,7 +207,12 @@ jobs:
           token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Build image
-        run: docker build -f viewer-react/Dockerfile -t companion-atlas-viewer:ci .
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # The Dockerfile reads this as a BuildKit secret: @companionintelligence/* resolve from
+        # npm.pkg.github.com, and npm ci needs a token for them. Passing it as a secret keeps
+        # it out of every layer, the same way the other jobs pass it through the environment.
+        run: docker build --secret id=NODE_AUTH_TOKEN,env=NODE_AUTH_TOKEN -f viewer-react/Dockerfile -t companion-atlas-viewer:ci .
 
       # Proves the container actually serves, on the port hub/config.json and
       # hub/docker-compose.json advertise to CI-Hub (8080).
