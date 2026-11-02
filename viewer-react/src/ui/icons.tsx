@@ -80,6 +80,7 @@ export const PauseIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stro
 export const PrevIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M6 5h2v14H6zM19 5 9 12l10 7z" /></svg>;
 export const NextIcon = (p: P) => <svg {...S({ ...p, fill: 'currentColor', stroke: 'none' })}><path d="M16 5h2v14h-2zM5 5l10 7L5 19z" /></svg>;
 
+/** The Atlas globe: the same drawing as the app icon (public/icons/icon.svg). */
 export function BrandMark(props: P) {
   return (
     <svg viewBox="0 0 100 100" {...props} role="img" aria-label="Companion Intelligence">
@@ -88,9 +89,13 @@ export function BrandMark(props: P) {
           <stop offset="0" stopColor="#066c80" /><stop offset=".55" stopColor="#00a9a7" /><stop offset="1" stopColor="#72ddd4" />
         </linearGradient>
       </defs>
-      <circle cx="50" cy="50" r="46" fill="none" stroke="url(#atlas-bm)" strokeWidth="6" />
-      <circle cx="50" cy="50" r="20" fill="none" stroke="url(#atlas-bm)" strokeWidth="6" />
-      <circle cx="50" cy="50" r="5" fill="#72ddd4" />
+      <g fill="none" stroke="url(#atlas-bm)" strokeWidth="6" strokeLinecap="round">
+        <circle cx="50" cy="50" r="46" />
+        <ellipse cx="50" cy="50" rx="21" ry="46" />
+        <line x1="4" y1="50" x2="96" y2="50" />
+        <line x1="13" y1="28" x2="87" y2="28" />
+        <line x1="13" y1="72" x2="87" y2="72" />
+      </g>
     </svg>
   );
 }

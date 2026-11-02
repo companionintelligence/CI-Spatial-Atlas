@@ -290,6 +290,9 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-boot .msg { width: min(420px, calc(100vw - 32px)); text-align: center; display: flex; flex-direction: column; gap: 8px; }
 .atlas-boot .msg strong { color: var(--atlas-fg-hi); font-size: 16px; }
 .atlas-boot .msg > span { line-height: 1.5; }
+.atlas-boot-mark { width: 56px; height: 56px; animation: atlas-boot-breathe 2.4s ease-in-out infinite; }
+@keyframes atlas-boot-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .atlas-boot-mark { animation: none; } }
 .atlas-auth-actions { display: flex; justify-content: center; gap: 8px; margin-top: 6px; }
 .atlas-auth-actions .atlas-btn { flex: 0 1 auto; min-width: 132px; }
 .atlas-auth-form { display: flex; flex-direction: column; gap: 10px; margin-top: 5px; padding: 14px; text-align: left; border: 1px solid var(--atlas-line-2); border-radius: 14px; background: var(--atlas-glass); box-shadow: var(--atlas-shadow); }

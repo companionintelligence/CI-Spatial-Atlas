@@ -13,9 +13,21 @@
     <meta name="apple-mobile-web-app-title" content="Atlas" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192" />
+    <style>@keyframes atlas-boot-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }</style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Painted before the bundle loads, so a slow connection shows the app, not a blank page.
+           React replaces this when the app mounts. Same drawing as the in-app BootScreen. -->
+      <div class="atlas-boot" role="status" style="position:fixed;inset:0;display:grid;place-items:center;background:#041620;color:#8fb3b8;font:500 14px/1.4 Manrope,'Avenir Next',system-ui,sans-serif">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+          <svg viewBox="0 0 100 100" width="56" height="56" aria-hidden="true" style="animation:atlas-boot-breathe 2.4s ease-in-out infinite"><defs><linearGradient id="atlas-bm-boot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#066c80"/><stop offset=".55" stop-color="#00a9a7"/><stop offset="1" stop-color="#72ddd4"/></linearGradient></defs><g fill="none" stroke="url(#atlas-bm-boot)" stroke-width="6" stroke-linecap="round"><circle cx="50" cy="50" r="46"/><ellipse cx="50" cy="50" rx="21" ry="46"/><line x1="4" y1="50" x2="96" y2="50"/><line x1="13" y1="28" x2="87" y2="28"/><line x1="13" y1="72" x2="87" y2="72"/></g></svg>
+          <span>Loading Companion Atlas…</span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

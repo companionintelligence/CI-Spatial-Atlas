@@ -1,3 +1,4 @@
+import { BootScreen } from './ui/BootScreen.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
 import { buildScrapbookStory, curateJourney, type Camera, type Item, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
@@ -1163,7 +1164,7 @@ export function AtlasApp() {
     [viewer, pause, scrub],
   );
 
-  if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
+  if (loading) return <BootScreen />;
   if (error || !model || !story) {
     return <StoryLoadError error={error} memoryUrl={memory?.url} />;
   }
