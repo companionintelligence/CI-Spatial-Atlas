@@ -168,7 +168,7 @@ export function MemoryInspector({ memory, related, place, weather, streetView, s
                   <button key={m.id} className="atlas-rel" onClick={() => onFly(m)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer' }} aria-label={m.title}>
                     {t
                       ? <img className="ph" src={t} alt="" loading="lazy" />
-                      : <span className="ph ph-text">{m.title.slice(0, 18)}</span>}
+                      : <span className="ph ph-text">{m.title}</span>}
                     <small>{m.whenTime}</small>
                   </button>
                 );

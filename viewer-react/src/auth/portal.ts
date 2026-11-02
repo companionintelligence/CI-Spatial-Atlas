@@ -5,38 +5,18 @@
  * (CI-Hub `packages/backend/src/modules/auth/portal-sso.ts`) but public + in the
  * browser. Endpoints hang off the issuer (`<portal-origin>/api/auth`):
  * `${issuer}/oauth2/authorize`, `${issuer}/oauth2/token`. Public PKCE client —
- * no secret. The access token is a JWT the Atlas API verifies (server/src/auth.ts).
+ * no secret. The access token is opaque, not a JWT, and CI-Memory refuses it
+ * (docs/DISCOVERY.md).
  *
- * NOT WIRED — and deliberately so, not by oversight. Nothing in the app calls
- * these functions (only `test/portal-auth.test.ts` imports them, so none of this
- * reaches the bundle): there is no `/auth/callback` handling at boot, no
- * sign-in control in the shell, and no consumer for the token if one were
- * obtained. The viewer authenticates to Companion Memory by ambient CI-Server
- * session cookie (`credentials: 'include'` in `memory/client.ts`) or an explicit
- * `?token=<jwt>` / `VITE_MEMORY_TOKEN`; `story/useStory.ts` reads that param and
- * knows nothing about OIDC.
+ * This file is the protocol. `auth/portalReturn.ts` drives it: the load screen's
+ * "Sign in with Companion" button calls `beginLogin`, and the page load that comes
+ * back calls `completeLogin`. Both need the build's `VITE_OIDC_*` variables
+ * (docs/DISCOVERY.md, "Sign-on"); without them nothing here runs.
  *
- * Three things block wiring it, and none of them is the code below:
- *   1. `companion-atlas` is not registered in CI-Portal `PUBLIC_CLIENTS` — that
- *      is a PR against another repo. (Local/`.ts.net`/`.local` redirect URIs are
- *      auto-allowed, so dev alone would need no Portal record.)
- *   2. `.env.default` ships `VITE_OIDC_ISSUER` and `VITE_OIDC_REDIRECT_URI`
- *      empty, so `portalConfigFromEnv()` returns null in every configuration
- *      checked into this repo — a sign-in control would render disabled or not
- *      at all until an operator fills those in.
- *   3. `VITE_ATLAS_API` has no reader anywhere in viewer-react, so a completed
- *      login would not change what the viewer can fetch. Wiring sign-in is
- *      worth doing only together with an Atlas-API client that sends the bearer.
- *
- * Kept rather than deleted because the flow itself is correct and the hard part
- * (PKCE S256, state validation, single-use verifier) is done; see
- * `docs/architecture.md` §8, which states this gap rather than implying the
- * `VITE_OIDC_*` variables are live configuration.
- *
- * Because it is unwired, nothing exercises it by accident — so the failure paths
- * that the first caller will actually hit are covered by `test/portal-auth.test.ts`
- * instead. Dead code that is subtly wrong is worse than dead code: it looks
- * finished, so whoever wires it debugs the wrong subsystem.
+ * Sign-in needs `companion-atlas` listed in CI-Portal's `PUBLIC_CLIENTS` (it is, on
+ * the Portal's main branch) and a deployed origin registered with the Portal
+ * (docs/INTEGRATION.md §5). Without that the Portal refuses the redirect, and the
+ * viewer shows the Portal's own reason rather than a generic failure.
  */
 
 export interface PortalAuthConfig {
@@ -129,10 +109,10 @@ function oauthErrorText(src: { error?: string | null; description?: string | nul
  *    `code` (RFC 6749 §4.1.2.1). Reading `code` first and reporting "missing
  *    authorization code" therefore renders every server-side refusal as a
  *    client-side bug and throws away the only text that says what happened.
- *    That is not hypothetical here: the blocker documented at the top of this
- *    file — `companion-atlas` not being in CI-Portal's `PUBLIC_CLIENTS` — comes
- *    back as `error=invalid_client`/`unauthorized_client`, so the first person
- *    to wire this up is exactly the person the old message misdirected. The
+ *    That is not hypothetical here: before CI-Portal listed `companion-atlas`, the
+ *    unlisted client came back as `error=invalid_client`/`unauthorized_client`, so
+ *    the first person to wire this up was exactly the person the old message
+ *    misdirected. The
  *    token endpoint has the same shape: a 400 with a `{error, error_description}`
  *    body (§5.2) distinguishing "wrong verifier" from "unknown client" from
  *    "code already redeemed", all of which a bare status code flattens to 400.

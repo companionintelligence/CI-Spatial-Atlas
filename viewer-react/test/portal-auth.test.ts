@@ -1,12 +1,11 @@
 /**
  * CI-Portal SPA login — the failure paths.
  *
- * `src/auth/portal.ts` has no caller (see its header and docs/architecture.md
- * §8), so nothing else in the suite touches it. That is exactly why it needs
- * tests: an unwired module gets no accidental exercise, and the two defects
- * covered here — every OAuth refusal reported as "missing authorization code",
- * and a PKCE verifier that outlived the failed callback that consumed it —
- * were both invisible for as long as no one called the function.
+ * `src/auth/portal.ts` is driven by `auth/portalReturn.ts` (see docs/DISCOVERY.md),
+ * and the return path has its own tests in `portal-return.test.ts`. This file pins
+ * the failure paths: an OAuth refusal must be reported as the server's own error,
+ * not "missing authorization code", and a PKCE verifier must not outlive the failed
+ * callback that consumed it.
  *
  * The happy path is deliberately thin: it is the part that was already right.
  */

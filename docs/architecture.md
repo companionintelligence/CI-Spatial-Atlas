@@ -130,7 +130,7 @@ peeks when present (`src/renderers/basemaps.ts`).
 
 | Source | Trigger | Notes |
 |---|---|---|
-| **Companion Memory** | `?memory=<ci-server-url>` (+ `&token=`), or `VITE_MEMORY_URL` / `VITE_MEMORY_TOKEN` | Real data. Queries CI-Server's located `search()` and maps it with `mediaItemsFromMemory` |
+| **Companion Memory** | `?memory=<ci-server-url>` (+ `&token=`), `VITE_MEMORY_URL` / `VITE_MEMORY_TOKEN`, or the Memory server the Companion Hub names via `VITE_COMPANION_HUB_URL` ([DISCOVERY.md](DISCOVERY.md)) | Real data. Queries CI-Server's located `search()` and maps it with `mediaItemsFromMemory` |
 | **A published story** | `?story=<url>` | Accepts legacy Atlas *and* CI-Earth-2 documents via `loadStory` |
 | **The bundled sample** | nothing configured | So the viewer renders out of the box. The UI marks it "Demo data — not connected" — synthetic places rendered unmarked read as a fake product rather than a disconnected one |
 
@@ -337,23 +337,19 @@ first.
 
 | Group | Variables |
 |---|---|
-| Viewer (build-time, Vite-inlined) | `VITE_CESIUM_ION_TOKEN`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_MAPBOX_TOKEN`, `VITE_MEMORY_URL`, `VITE_MEMORY_TOKEN` |
-| Viewer SPA login — **declared but not wired**, see [§8](#8-known-gaps--deliberately-out-of-scope-today) | `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_REDIRECT_URI`, `VITE_ATLAS_API` |
+| Viewer (build-time, Vite-inlined) | `VITE_CESIUM_ION_TOKEN`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_MAPBOX_TOKEN`, `VITE_MEMORY_URL`, `VITE_MEMORY_TOKEN`, `VITE_COMPANION_HUB_URL`, `VITE_ATLAS_API` |
+| Viewer sign-in through the Portal, see [DISCOVERY.md](DISCOVERY.md) | `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_REDIRECT_URI` |
 | Atlas server URLs | `ATLAS_VIEWER_BASE_URL`, `ATLAS_API_BASE_URL` |
-| Infrastructure | `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `S3_BUCKET` |
+| Infrastructure | `S3_ENDPOINT`, `S3_BUCKET` (`DATABASE_URL` and `REDIS_URL` are set for Compose, and nothing reads them yet) |
 | Suite connectors | `CI_MEMORY_URL`, `OPENCLAW_URL`, `HERMES_URL` |
-| Companion OIDC | `COMPANION_OIDC_ISSUER`, `COMPANION_OIDC_AUDIENCE`, `COMPANION_OIDC_CLIENT_ID`, `COMPANION_OIDC_CLIENT_SECRET`, `ATLAS_DEV_SUBJECT` |
+| Companion OIDC | `COMPANION_OIDC_ISSUER`, `COMPANION_OIDC_AUDIENCE`, `COMPANION_OIDC_CLIENT_ID`, `ATLAS_DEV_SUBJECT` |
 
 Every `VITE_*` value is inlined into the bundle at build time and is therefore
 **public**. `VITE_MEMORY_TOKEN` in particular is a build-time default for
 single-tenant deployments only; multi-user installs pass `?token=` per session
 instead.
 
-The four SPA-login variables are the exception to "these configure the viewer":
-setting them changes nothing today. `viewer-react/src/auth/portal.ts` reads
-`VITE_OIDC_*` through `portalConfigFromEnv()`, but nothing calls it, and
-`VITE_ATLAS_API` has no reader in `viewer-react/` at all. They are kept so the
-contract with CI-Portal stays written down, not because they are live.
+The `VITE_OIDC_*` variables turn on the Companion sign-in on the load screen, and with them unset nothing changes. `VITE_COMPANION_HUB_URL` turns on discovery of the Memory server, and with it unset the Memory server comes only from `VITE_MEMORY_URL`. Both are described in [DISCOVERY.md](DISCOVERY.md).
 
 ### 7.4 Docker Compose services (`docker-compose.yml`)
 
@@ -435,24 +431,14 @@ stores and API in containers, the viewer on the host for HMR.
     vocabulary onto Atlas operations is a deliberate follow-up — that
     vocabulary isn't defined anywhere Atlas can see yet, so a mapping written
     today would be invented rather than agreed.
-- **The viewer has no sign-in. It authenticates by ambient cookie or
-  `?token=`.** `memory/client.ts` sends `credentials: 'include'`, so a CI-Server
-  session cookie already set on the host is used if one exists; otherwise the
-  bearer comes from `?token=<jwt>` on the URL, or from `VITE_MEMORY_TOKEN` baked
-  in at build time. That is the whole of it. There is no OIDC login in the SPA:
-  `viewer-react/src/auth/portal.ts` implements a complete Authorization Code +
-  PKCE (S256) flow — `beginLogin()`, `completeLogin()`,
-  `portalConfigFromEnv()` — and **nothing calls any of it**. There is no
-  `/auth/callback` handling at boot and no sign-in control in the shell.
-
-  It is kept rather than deleted because the flow is correct and its blockers
-  are external: `companion-atlas` is not registered in CI-Portal
-  `PUBLIC_CLIENTS` (a PR against another repo), `.env.default` ships
-  `VITE_OIDC_ISSUER`/`VITE_OIDC_REDIRECT_URI` empty so `portalConfigFromEnv()`
-  returns null in every checked-in configuration, and `VITE_ATLAS_API` has no
-  reader in `viewer-react/`, so a completed login would not change what the
-  viewer can fetch. Wiring sign-in is worth doing as one piece of work together
-  with an Atlas-API client that actually sends the bearer — not before.
+- **The viewer's sign-in is partly wired.** The Memory connection authenticates by
+  ambient cookie, `?token=`, `VITE_MEMORY_TOKEN`, or the email and password form
+  (`memory/client.ts`, `memory/auth.ts`). With `VITE_OIDC_*` set, the load screen also
+  offers the Companion account through the Portal (`auth/portalReturn.ts`, see
+  [DISCOVERY.md](DISCOVERY.md)). That sign-in is unproven. The Portal lists
+  `companion-atlas` in `PUBLIC_CLIENTS` on its main branch, but a deployed Atlas's origin
+  is not registered, and the Memory server refuses the Portal's opaque access token. The Portal token is not passed to the Atlas API:
+  `atlasApiFromEnv` builds the upload configuration from `VITE_ATLAS_API` alone.
 
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all
   data on restart — see [`REIMAGINE.md` Phase 1](../REIMAGINE.md#8-migration-roadmap)

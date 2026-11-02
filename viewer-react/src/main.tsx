@@ -46,11 +46,20 @@ void maybeInstallXREmulator()
   // instead of the bundled demo.
   .then(() => restoreNativeMemoryConnection())
   .then(() => rendererForDevice())
-  .then(async (kind) => {
-    const App = kind === 'xr' ? (await import('./renderers/xr/XRAtlasApp.js')).XRAtlasApp : AtlasApp;
+  .then(async (choice) => {
+    if (choice === 'cesium') {
+      reactRoot.render(
+        <StrictMode>
+          <AtlasApp />
+        </StrictMode>,
+      );
+      return;
+    }
+    // 'xr-ar' is the same XR root, entered in immersive-ar. See rendererChoice.ts.
+    const { XRAtlasApp } = await import('./renderers/xr/XRAtlasApp.js');
     reactRoot.render(
       <StrictMode>
-        <App />
+        <XRAtlasApp entry={choice === 'xr-ar' ? 'ar' : 'vr'} />
       </StrictMode>,
     );
   });

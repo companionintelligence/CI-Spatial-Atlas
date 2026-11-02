@@ -66,5 +66,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Companion Atlas uses the camera only when you choose to take a photo or video for a memory.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Companion Atlas records sound only when you choose to record a video for a memory.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Companion Atlas uses your location only while the app is open, to show where you are on the globe and to tell you when you are near a memory. Your location stays on this device.</string>
 </dict>
 </plist>

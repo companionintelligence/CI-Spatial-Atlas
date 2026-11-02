@@ -1,3 +1,4 @@
+import { UploadIcon } from '../ui/icons.js';
 /**
  * "Add a photo or video" — the Import & export panel's media picker.
  *
@@ -172,7 +173,7 @@ export function MediaUploadSection({
           disabled={!upload.available || busy}
           onClick={() => input.current?.click()}
         >
-          {busy ? 'Uploading…' : 'Choose a file'}
+          <UploadIcon />{busy ? 'Uploading…' : 'Choose a file'}
         </button>
         {state.phase === 'uploading' && (
           <button className="atlas-btn" onClick={upload.cancel}>Cancel</button>

@@ -26,10 +26,11 @@ import { initialTileSource, type TileSource } from './xr/ImageryGlobe.js';
  *  - `xr/MemoryPins.tsx` — pins at real coordinates, sized by angle, with
  *    readable cards for the ones being looked at.
  *
- * URL switches: `?renderer=xr` forces this renderer, `?tiles=esri|google`
- * chooses the imagery, and `?xremu=quest3` runs the WebXR device emulator so a
- * session can be entered (and driven) without a headset. `?emulate=1` remains
- * a legacy alias for the default Quest 3 profile.
+ * URL switches: `?renderer=xr` forces this renderer, `?view=ar` makes it lead
+ * with AR (see rendererChoice.ts), `?tiles=esri|google` chooses the imagery,
+ * and `?xremu=quest3` runs the WebXR device emulator so a session can be entered
+ * (and driven) without a headset. `?emulate=1` remains a legacy alias for the
+ * default Quest 3 profile.
  */
 
 export const xrStore = createXRStore({
@@ -42,15 +43,25 @@ export const xrStore = createXRStore({
   foveation: 0.4,
 });
 
+/**
+ * The session the scene leads with. `ar` is the entry from the flat viewer's
+ * "View in AR" control: the same scene, with Enter AR as the action a phone
+ * can take. Nothing starts on load. A browser opens an immersive session only
+ * in response to a tap, so the entry is a button, not an automatic start.
+ */
+export type XREntry = 'vr' | 'ar';
+
 export interface XRStorySceneProps {
   story: Story;
   /** Pre-derived memories, when the caller already has them. */
   memories?: AtlasMemory[];
   focusedId?: string | null;
   onPick?: (memory: AtlasMemory) => void;
+  /** The session the page leads with. VR is the route it has always been. */
+  entry?: XREntry;
 }
 
-export function XRStoryScene({ story, memories, focusedId, onPick }: XRStorySceneProps) {
+export function XRStoryScene({ story, memories, focusedId, onPick, entry = 'vr' }: XRStorySceneProps) {
   const model = useMemo(() => memories ?? deriveModel(story).memories, [story, memories]);
   const [focused, setFocused] = useState<string | null>(focusedId ?? null);
   const [source, setSource] = useState<TileSource>(initialTileSource);
@@ -125,9 +136,13 @@ export function XRStoryScene({ story, memories, focusedId, onPick }: XRStoryScen
       </Canvas>
 
       <div style={styles.chrome}>
-        <button type="button" style={styles.enter} onClick={() => void xrStore.enterVR()}>
-          Enter VR
-        </button>
+        {/* On the AR entry a phone has no headset to enter, so a VR button there
+            would only disappoint. It shows once VR is known to be available. */}
+        {(entry === 'vr' || vrSupported === true) && (
+          <button type="button" style={styles.enter} onClick={() => void xrStore.enterVR()}>
+            Enter VR
+          </button>
+        )}
         {/* AR is offered only where the device actually has passthrough; on a
             headset without it the session request just fails, and a button that
             can only disappoint is worse than one that was never there. */}
@@ -137,9 +152,11 @@ export function XRStoryScene({ story, memories, focusedId, onPick }: XRStoryScen
           </button>
         )}
         <span style={styles.note}>
-          {vrSupported === false
-            ? 'No headset detected — drag to turn the globe, scroll to zoom.'
-            : 'Drag to turn the globe, scroll to zoom.'}
+          {entry === 'ar' && arSupported
+            ? 'Drag to turn the globe. Enter AR to place it in your room.'
+            : vrSupported === false
+              ? 'No headset detected — drag to turn the globe, scroll to zoom.'
+              : 'Drag to turn the globe, scroll to zoom.'}
         </span>
       </div>
 

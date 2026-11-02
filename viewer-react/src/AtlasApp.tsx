@@ -1,3 +1,4 @@
+import { BootScreen } from './ui/BootScreen.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
 import { buildScrapbookStory, curateJourney, type Camera, type Item, type ScrapbookEntry, type Story, type Place } from '@companion-atlas/story';
@@ -10,6 +11,7 @@ import { MapLayers } from './ui/MapLayers.js';
 import { VisibilityToggles, type AuthoredCategory } from './ui/VisibilityToggles.js';
 import { NoteCard } from './ui/NoteCard.js';
 import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
+import { useViewInAR } from './renderers/useViewInAR.js';
 
 const googleMapsAvailable = Boolean(
   (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GOOGLE_MAPS_API_KEY,
@@ -55,6 +57,7 @@ import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
 import { PeoplePanel, groupByPerson, type PersonGroup } from './ui/PeoplePanel.js';
 import { saveStoryToMemory } from './memory/client.js';
 import { StoryLoadError } from './ui/StoryLoadError.js';
+import { useDeviceLocation } from './location/useDeviceLocation.js';
 
 /** The last memory whose time is at or before `ms` (the segment being played). */
 function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
@@ -113,6 +116,9 @@ export function AtlasApp() {
   const chrome = useMemo(() => atlasChrome(window.location.search), []);
   /** The camera and moment a shared or embedded link asked to open at. */
   const opened = useMemo(() => restoredView(window.location.search), []);
+  // Offered only where the device can start AR, and never in embeds, which have
+  // no top bar. See renderers/useViewInAR.ts.
+  const viewInAR = useViewInAR(chrome.topBar);
   // A Companion Memory import REPLACES the loaded story rather than merging
   // into it. `deriveModel` reads its memory list from `story.scenes` whenever
   // there are any, so an archive merged into a scened story renders as nothing;
@@ -153,6 +159,9 @@ export function AtlasApp() {
   );
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
+  // "Show my location" and "Nearby memories": in memory only, foreground only.
+  // See location/useDeviceLocation.ts.
+  const device = useDeviceLocation({ viewer, memories: model?.memories });
   const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
   // Projection. Starts on the globe because that is what Atlas is for; a story
   // that is really a map is one click from being read as one.
@@ -269,6 +278,8 @@ export function AtlasApp() {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCamera, setShareCamera] = useState<Camera | null>(null);
   const [presenting, setPresenting] = useState(false);
+  // A presentation takes the stage: the drawers close, so the authoring panel is not left over the slides.
+  const startPresent = useCallback(() => { setOpenDrawer(null); setPresenting(true); }, []);
   const [drawing, setDrawing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ s: 'idle' });
   const lastSync = useRef(0);
@@ -451,6 +462,9 @@ export function AtlasApp() {
   const scrub = useCallback((ms: number) => {
     if (!Number.isFinite(ms)) return;
     setCurrentMs(ms);
+    // Scrubbing moves the timeline, so the card follows the time. A memory picked earlier
+    // stayed on screen after the clock had moved past it.
+    setFocusedId(null);
     if (viewer) viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ms));
   }, [viewer]);
 
@@ -1158,7 +1172,7 @@ export function AtlasApp() {
     [viewer, pause, scrub],
   );
 
-  if (loading) return <div className="atlas-boot"><div className="msg">Loading Companion Atlas…</div></div>;
+  if (loading) return <BootScreen />;
   if (error || !model || !story) {
     return <StoryLoadError error={error} memoryUrl={memory?.url} />;
   }
@@ -1211,7 +1225,7 @@ export function AtlasApp() {
         // Count what the drawer can actually show, so the badge can never claim
         // memories this story can't resolve.
         scrapbookCount={sbEntries.length}
-        onPresent={() => setPresenting(true)}
+        onPresent={startPresent}
         onScenes={() => toggleDrawer('scenes')}
         scenesOpen={scenesOpen}
         sceneCount={sceneControl.count}
@@ -1236,10 +1250,16 @@ export function AtlasApp() {
         // are looking from. Drawing went back to the rail with the other
         // panel-openers.
         onFrameAll={frameAll}
+        onViewInAR={viewInAR}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}
         onTogglePlaces={togglePlaces}
+        locating={device.locating}
+        onToggleLocating={device.toggleLocating}
+        nearby={device.nearby}
+        onToggleNearby={device.toggleNearby}
+        deviceNote={device.note}
         sceneMode={sceneMode}
         onSceneMode={setSceneMode}
         layers={(
@@ -1493,7 +1513,7 @@ export function AtlasApp() {
         // Without these the presenter opens empty on any Memory story: the deck
         // is built from scenes, and a Memory archive has none.
         memories={model.memories}
-        initialSceneId={focused?.id ?? null}
+        initialSceneId={null}
         reduceMotion={reduceMotion}
       />
       {chrome.interop && <DropOverlay visible={dragging} />}
@@ -1526,7 +1546,7 @@ export function AtlasApp() {
           // because a Present button that opens an empty deck is the failure
           // this bar exists to avoid.
           canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
-          onPresent={() => setPresenting(true)}
+          onPresent={startPresent}
           presenting={presenting}
           href={window.location.href}
         />

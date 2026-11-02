@@ -174,10 +174,8 @@ export const STORAGE_NOT_CONFIGURED =
   '(`docker compose up minio` provides the store locally).';
 
 export const NOT_SIGNED_IN =
-  'The Atlas API refused this upload because the request carried no verified identity. ' +
-  'Uploads are scoped to the person making them, so they need a Companion sign-in — which this ' +
-  'viewer does not yet perform (see src/auth/portal.ts). Against a development API running with ' +
-  'authentication disabled, uploads work without one.';
+  'Uploads from this viewer are sent without a sign-in token, so the Atlas API refused the request. ' +
+  'Against a development API running with authentication disabled, uploads work without one.';
 
 /**
  * Turn an HTTP status and whatever body came with it into one honest failure.

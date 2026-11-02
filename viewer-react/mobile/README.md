@@ -89,6 +89,9 @@ cd android
 JAVA_HOME=<jdk21> ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
+# Android — release AAB (unsigned unless the ATLAS_UPLOAD_* inputs are set; see STORE_SUBMISSION.md)
+./gradlew bundleRelease
+
 # iOS — unsigned Simulator .app (no Apple Developer account needed)
 cd ios/App
 xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
@@ -114,6 +117,7 @@ from the `VITE_*` variables present when the **web bundle** is built
 | Variable | Without it |
 |---|---|
 | `VITE_MEMORY_URL` (+ `VITE_MEMORY_TOKEN`) | The app opens the bundled sample story, labelled "Demo data". The rail's Connect to Companion Memory sets a server at run time instead. |
+| `VITE_COMPANION_HUB_URL` | No discovery: the Memory server comes only from `VITE_MEMORY_URL` |
 | `VITE_CESIUM_ION_TOKEN` | Offline basemap only |
 | `VITE_GOOGLE_MAPS_API_KEY` | No photoreal buildings or Street View |
 
@@ -145,45 +149,50 @@ Little, now that Capacitor 8's own template uses iOS 15.0, API 36, AGP 8.13.0 an
 
 ## Before a store submission
 
-Nothing below exists yet; the shell is a working, unsigned build.
+The checklist is [STORE_SUBMISSION.md](STORE_SUBMISSION.md). Its first section lists the
+decisions and blockers, so read that first. The store answers in it (privacy labels, Data
+safety, export compliance, age rating) are derived from the code, not from the marketing.
 
-- **Icons and splash.** Both platforms still carry Capacitor's placeholder icon, and
-  the iOS launch screen is a white placeholder (a white frame shows before the
-  dark UI). A 1024 px master, Android adaptive-icon layers (foreground, background,
-  monochrome) and light/dark splash art are needed; `@capacitor/assets` can
-  generate the sets from a master.
-- **Signing and versions.** iOS needs a team, certificate, provisioning profile and
-  an App Store Connect record for `com.companionintelligence.atlas`. Android needs an
-  upload keystore (Play App Signing) and a release build type that signs;
-  `assembleRelease` is unsigned today and `minifyEnabled` is off. `versionCode`/
-  `versionName` and `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` are hard-coded
-  to 1 / "1.0" and must be bumped per upload (Play rejects a reused `versionCode`).
-  There is no release workflow.
-- **Privacy answers.** An App Store privacy label, a privacy-policy URL, Google Play's
-  Data safety form and content rating, and Apple's export-compliance answer
-  (`ITSAppUsesNonExemptEncryption`, not set). The app target has no
-  `PrivacyInfo.xcprivacy`: Capacitor ships its own manifest, but check Xcode's privacy
-  report on a real archive for the two plugins. The
-  declarations have to account for what the viewer sends off-device: memory
-  coordinates go to
-  Open-Meteo (historical weather) and place queries to Nominatim / Photon
-  (geocoding); map tiles come from several providers (OpenStreetMap, EOX, Esri,
-  NASA GIBS, Cesium ion, Mapbox/Google Maps when keyed); plus whatever
-  `VITE_MEMORY_URL` points at.
-- **Real devices.** Only the iOS 27 simulator and an API 36.1 emulator were used.
-  Performance, memory and thermals of the Cesium globe on real phones (and iPad
-  layouts) are unmeasured. WebXR is not available in either WebView, so the
-  immersive renderer is never selected.
-- **Sign-in.** The Portal OIDC flow in `src/auth/portal.ts` is not wired into the
-  viewer yet; when it is, the app needs a custom URL scheme or Universal / App Links.
-- **A way to connect.** Built, but not yet proven against a live server. The rail's
-  Connect to Companion Memory takes an https:// server address and signs in. The address and
-  the short-lived access token go to the Keychain through `capacitor-secure-storage-plugin`
-  (0.13, Capacitor 8), and launch restores them before the first render. The password is only
-  sent to the server. Still open: a live sign-in (it relies on cookies, which WKWebView may not
-  send cross-site), the Android path (installed but untested), and the reviewer account.
-- **Review notes** for the stores: the bundled sample story works with no server. To see
-  memories, the reviewer connects from the rail (Connect to Companion Memory) with the server
-  address and a test account, both given in the review notes.
-- **Attribution.** `THIRD_PARTY.md` / `NOTICE.md` are generated; regenerate them so
-  the Capacitor packages (MIT) are listed.
+Done in the repository:
+
+- **Artwork.** The iOS App Store icon (1024 px, no alpha channel), the iOS launch screen, the
+  Android adaptive and legacy launcher icons and the Android launch background come from the
+  repository's own mark, `viewer-react/public/offline/mark.svg`, on the Atlas background colour.
+  Capacitor's placeholder artwork is gone.
+- **iOS.** `App/PrivacyInfo.xcprivacy` is in the app target. `ITSAppUsesNonExemptEncryption` is
+  `false`. `NSCameraUsageDescription` and `NSMicrophoneUsageDescription` stay because the file
+  picker offers capture, and no other usage string is set, since nothing else is requested.
+- **Android.** Release builds are minified and shrunk with R8; `proguard-rules.pro` keeps the
+  WebView bridge. The release is signed only when `ATLAS_UPLOAD_STORE_FILE`,
+  `ATLAS_UPLOAD_STORE_PASSWORD`, `ATLAS_UPLOAD_KEY_ALIAS` and `ATLAS_UPLOAD_KEY_PASSWORD` are set,
+  as Gradle properties or environment variables. Without them it is an unsigned build. Backup
+  (`allowBackup`) and cleartext traffic are off. Keystores are git-ignored.
+- **One version source.** `ios/version.xcconfig`. `MARKETING_VERSION` is the name on both
+  stores. `CURRENT_PROJECT_VERSION` is the iOS build number and the Android `versionCode`, so
+  raise it for every upload (Play rejects a reused `versionCode`). `cap migrate` rewrites
+  `ios/debug.xcconfig`; if you run it, check that the `#include` of `version.xcconfig` survives.
+
+Owner supplies (none of this is in the repository):
+
+- The Apple Developer Program and Google Play Console accounts.
+- The upload keystore and Apple signing (team, certificate, provisioning profile).
+- The privacy policy and support URLs, screenshots, and the Play listing graphics (512 px icon,
+  1024x500 feature graphic).
+- The decision on sign-in in a store build (STORE_SUBMISSION.md, section 1).
+- A reviewer account and a Memory server that App Review can reach over HTTPS, for the review notes.
+
+Still open in the code:
+
+- **Connecting to a Memory server.** The rail's Connect to Companion Memory takes an https://
+  server address and signs in. The address and the short-lived token go to the Keychain through
+  `capacitor-secure-storage-plugin` (0.13, Capacitor 8) and are restored at launch. Portal and
+  Hub discovery come first, and the saved connection is the fallback. This is built but not yet
+  proven against a live server, and the Android path is untested.
+- **Portal sign-in.** The flow in `src/auth/portalReturn.ts` (on `src/auth/portal.ts`) runs only
+  when the build sets `VITE_OIDC_*`. In the app it needs a custom URL scheme or Universal / App
+  Links first, so keep `VITE_OIDC_*` unset in store builds.
+- **Attribution.** `THIRD_PARTY.md` and `NOTICE.md` are generated by an external script and do
+  not list the Capacitor packages (MIT). Regenerate them.
+
+Not verified here: a physical iPhone, iPad or Android device; a live Memory server; camera capture
+on iOS; and any review by Apple or Google. The release build was run on the API 36.1 emulator only.
