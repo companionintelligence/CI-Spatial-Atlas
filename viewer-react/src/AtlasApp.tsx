@@ -29,6 +29,8 @@ import { MemoryInspector } from './ui/MemoryInspector.js';
 import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
 import { CommandPalette } from './ui/CommandPalette.js';
+import { ConnectToMemory } from './ui/ConnectToMemory.js';
+import { isNativeShell } from './memory/nativeKeychain.js';
 import { Lightbox } from './ui/Lightbox.js';
 import { useScrapbook } from './scrapbook/useScrapbook.js';
 import { useLayers } from './layers/index.js';
@@ -232,6 +234,7 @@ export function AtlasApp() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<AtlasMemory | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   /**
    * Which of the four right-anchored drawers is open, or none.
    *
@@ -1214,6 +1217,10 @@ export function AtlasApp() {
         sceneCount={sceneControl.count}
         onInterop={() => toggleDrawer('interop')}
         interopOpen={interopOpen}
+        // Native shell only: a browser has no Keychain, so the rail leaves the item out there.
+        onMemory={isNativeShell() ? () => setMemoryOpen((open) => !open) : undefined}
+        memoryConnected={source === 'memory'}
+        memoryOpen={memoryOpen}
         // `memoryToStory` returns `scenes: []`, so gating on scenes hid Present
         // from every real story and left it reachable only from the bundled
         // demo. `buildDeck` now projects memories when a story has no authored
@@ -1374,6 +1381,9 @@ export function AtlasApp() {
       )}
       {chrome.people && (
         <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPersonJourney} />
+      )}
+      {memoryOpen && (
+        <ConnectToMemory connectedUrl={memory?.url} onClose={() => setMemoryOpen(false)} />
       )}
       {chrome.commandPalette && (
       <CommandPalette

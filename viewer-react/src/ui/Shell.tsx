@@ -1,7 +1,7 @@
 import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import {
   BrandMark, GlobeIcon, PeopleIcon, LayersIcon,
-  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon,
+  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon, CloudIcon,
 } from './icons.js';
 
 /** Left icon rail. Globe navigates home; Draw arms the drawing tools; People
@@ -24,7 +24,7 @@ import {
 export function Rail({
   onFrameAll, onPeople, peopleOpen, onCollections, collectionsOpen, scrapbookCount,
   onPresent, onInterop, interopOpen, canPresent, importedCount, onDraw, drawing,
-  onScenes, scenesOpen, sceneCount,
+  onScenes, scenesOpen, sceneCount, onMemory, memoryConnected, memoryOpen,
 }: {
   onPeople: () => void;
   peopleOpen: boolean;
@@ -48,6 +48,10 @@ export function Rail({
   scenesOpen: boolean;
   /** Badge, and the honest signal that a story is being written. */
   sceneCount: number;
+  /** Native shell only: opens the connect dialog. Omitted in a browser, which has no Keychain. */
+  onMemory?: () => void;
+  memoryConnected?: boolean;
+  memoryOpen?: boolean;
 }) {
   const items = [
     // The globe is home: it frames everything. "Fit all places" was a second
@@ -64,6 +68,13 @@ export function Rail({
     { key: 'scenes', label: 'Scenes', Icon: FlagIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
     ...(canPresent ? [{ key: 'present', label: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
     { key: 'interop', label: 'Import & export', Icon: ExchangeIcon, onClick: onInterop, active: interopOpen, badge: importedCount },
+    ...(onMemory ? [{
+      key: 'memory',
+      label: memoryConnected ? 'Companion Memory: connected' : 'Connect to Companion Memory',
+      Icon: CloudIcon,
+      onClick: onMemory,
+      active: memoryOpen,
+    }] : []),
   ];
   return (
     <nav className="atlas-rail" aria-label="Primary">

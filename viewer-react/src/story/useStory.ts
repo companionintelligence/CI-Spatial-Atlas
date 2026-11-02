@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadStory, type Story } from '@companion-atlas/story';
 import { fetchMemoryStory } from '../memory/client.js';
-import { storedMemoryToken } from '../memory/auth.js';
+import { nativeMemoryUrl, storedMemoryToken } from '../memory/auth.js';
 import { memoryCredentialsAllowed } from '../embed/index.js';
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
@@ -13,7 +13,8 @@ export type StorySource = 'memory' | 'story';
  *  - **Companion Memory** (real data): `?memory=<ci-server-url>` (optionally
  *    `&token=<jwt>` or `&apiKey=<key>`) or the `VITE_MEMORY_URL`,
  *    `VITE_MEMORY_TOKEN` / `VITE_MEMORY_API_KEY` env vars, or the short-lived
- *    token from the in-viewer sign-in —
+ *    token from the in-viewer sign-in, or the connection a native shell saved
+ *    at its last sign-in —
  *    queries CI-Server's located `search()` and maps it to a Story.
  *  - **A published Story**: `?story=<url>` (accepts legacy Atlas + Earth-2
  *    documents), falling back to the bundled sample so the viewer renders out of
@@ -50,7 +51,10 @@ export function useStory(): {
   // choice, not something a third-party page can write.
   const urlCredentials = memoryCredentialsAllowed(window.location.search);
   const memoryParam = urlCredentials ? params.get('memory') : null;
-  const memoryUrl = memoryParam ?? env.VITE_MEMORY_URL;
+  // A native shell reconnects to the Memory it saved at its last sign-in before
+  // this hook runs (main.tsx awaits restoreNativeMemoryConnection), so a saved
+  // connection wins over the build-time default.
+  const memoryUrl = memoryParam ?? nativeMemoryUrl() ?? env.VITE_MEMORY_URL;
   // A URL supplied in the address bar is an explicit connection choice. Do not
   // silently combine it with credentials baked into a different deployment:
   // that is especially dangerous for `?memory=/memory`, where the intended

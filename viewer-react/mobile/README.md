@@ -11,7 +11,7 @@ separate mobile UI: the app ships `viewer-react/dist` inside a WKWebView
 | Capacitor | 8.6 (see [Capacitor 8](#capacitor-8): 7.x loses extended support on 2026-12-08) |
 | iOS | deployment target 15.0, Swift Package Manager (no CocoaPods), Xcode 26 or newer |
 | Android | minSdk 24, compileSdk/targetSdk 36, AGP 8.13.0, Gradle 8.14.3, JDK 21 |
-| Plugins | `@capacitor/splash-screen`, `@capacitor/status-bar` (nothing else) |
+| Plugins | `@capacitor/splash-screen`, `@capacitor/status-bar`, `capacitor-secure-storage-plugin` (the Keychain, for the Memory connection) |
 
 ## Capacitor 8
 
@@ -113,7 +113,7 @@ from the `VITE_*` variables present when the **web bundle** is built
 
 | Variable | Without it |
 |---|---|
-| `VITE_MEMORY_URL` (+ `VITE_MEMORY_TOKEN`) | The app opens the bundled sample story, labelled "Demo data" |
+| `VITE_MEMORY_URL` (+ `VITE_MEMORY_TOKEN`) | The app opens the bundled sample story, labelled "Demo data". The rail's Connect to Companion Memory sets a server at run time instead. |
 | `VITE_CESIUM_ION_TOKEN` | Offline basemap only |
 | `VITE_GOOGLE_MAPS_API_KEY` | No photoreal buildings or Street View |
 
@@ -176,12 +176,14 @@ Nothing below exists yet; the shell is a working, unsigned build.
   immersive renderer is never selected.
 - **Sign-in.** The Portal OIDC flow in `src/auth/portal.ts` is not wired into the
   viewer yet; when it is, the app needs a custom URL scheme or Universal / App Links.
-- **A way to connect.** The Memory URL is baked in at build time and the sign-in token lives
-  in `sessionStorage`, so a store build cannot be pointed at a server and asks for the
-  password again on every cold start. It needs a "Connect to Memory" screen that keeps the
-  URL in Preferences and the token in the Keychain / Keystore. `capacitor-secure-storage-plugin`
-  0.13 needs Capacitor 8, which is one reason the shell moved first. Not designed yet.
-- **Review notes** for the stores: the bundled sample story works with no server;
-  anything beyond it needs a reachable CI-Server and a test account.
+- **A way to connect.** Built, but not yet proven against a live server. The rail's
+  Connect to Companion Memory takes an https:// server address and signs in. The address and
+  the short-lived access token go to the Keychain through `capacitor-secure-storage-plugin`
+  (0.13, Capacitor 8), and launch restores them before the first render. The password is only
+  sent to the server. Still open: a live sign-in (it relies on cookies, which WKWebView may not
+  send cross-site), the Android path (installed but untested), and the reviewer account.
+- **Review notes** for the stores: the bundled sample story works with no server. To see
+  memories, the reviewer connects from the rail (Connect to Companion Memory) with the server
+  address and a test account, both given in the review notes.
 - **Attribution.** `THIRD_PARTY.md` / `NOTICE.md` are generated; regenerate them so
   the Capacitor packages (MIT) are listed.

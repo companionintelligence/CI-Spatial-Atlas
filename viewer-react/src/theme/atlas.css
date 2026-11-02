@@ -272,10 +272,14 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-auth-actions .atlas-btn { flex: 0 1 auto; min-width: 132px; }
 .atlas-auth-form { display: flex; flex-direction: column; gap: 10px; margin-top: 5px; padding: 14px; text-align: left; border: 1px solid var(--atlas-line-2); border-radius: 14px; background: var(--atlas-glass); box-shadow: var(--atlas-shadow); }
 .atlas-auth-form label { display: flex; flex-direction: column; gap: 5px; color: var(--atlas-fg); font-size: 12px; font-weight: 600; }
-.atlas-auth-form input { width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid var(--atlas-line); border-radius: 9px; background: rgba(4,18,26,.66); color: var(--atlas-fg-hi); font: inherit; }
+.atlas-auth-form input { width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid var(--atlas-line); border-radius: 9px; background: rgba(4,18,26,.66); color: var(--atlas-fg-hi); font: inherit; font-size: 16px; /* iOS zooms the page when a field under 16px takes focus, and the sign-in form focuses its first field on open. */ }
 .atlas-auth-form input:focus-visible { outline: 2px solid var(--atlas-aqua-light); outline-offset: 2px; border-color: var(--atlas-teal); }
 .atlas-auth-error { color: var(--atlas-coral); font-size: 12px; }
 .atlas-auth-note { color: var(--atlas-fg-dim); font-size: 10.5px; line-height: 1.45; }
+/* The native shell's connect dialog: a scrim over the viewer, with the sign-in form centred. */
+.atlas-connect-scrim { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 10, 14, .6); }
+.atlas-connect { width: 100%; max-width: 420px; max-height: calc(100dvh - 32px); overflow: auto; background: rgba(6, 24, 34, .97); }
+.atlas-connect h2 { margin: 0; color: var(--atlas-fg-hi); font-size: 16px; }
 .atlas-emptyview { display: grid; place-items: center; color: var(--atlas-fg-dim); font-size: 14px; }
 
 /* ————— alternate views (Gallery / Timeline / Graph) ————— */
