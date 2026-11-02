@@ -5,9 +5,9 @@ import { mediaThumb, type AtlasModel, type AtlasMemory } from '../model/atlasMod
 
 export function StatsRibbon({ stats }: { stats: AtlasModel['stats'] }) {
   const cells = [
-    { v: stats.memories.toLocaleString(), l: 'Memories', Icon: ImagesIcon },
-    { v: String(stats.places), l: 'Places', Icon: PinIcon },
-    { v: String(stats.years), l: 'Years', Icon: ClockIcon },
+    { v: stats.memories.toLocaleString(), l: stats.memories === 1 ? 'Memory' : 'Memories', Icon: ImagesIcon },
+    { v: String(stats.places), l: stats.places === 1 ? 'Place' : 'Places', Icon: PinIcon },
+    { v: String(stats.years), l: stats.years === 1 ? 'Year' : 'Years', Icon: ClockIcon },
   ];
   return (
     <div className="atlas-stats">

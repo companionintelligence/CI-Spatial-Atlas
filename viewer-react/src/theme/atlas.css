@@ -245,9 +245,9 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-divider { height: 1px; background: var(--atlas-line); }
 .atlas-insp-label { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--atlas-fg-dim); }
 .atlas-related { display: flex; gap: 8px; }
-.atlas-rel { flex: 1; }
+.atlas-rel { flex: 1; font: inherit; }
 .atlas-rel .ph { height: 42px; width: 100%; object-fit: cover; display: block; border-radius: 8px; border: 1px solid var(--atlas-line); }
-.atlas-rel small { display: block; font-size: 9px; color: var(--atlas-fg-dim); margin-top: 4px; text-align: center; font-family: var(--atlas-mono); }
+.atlas-rel small { display: block; font-size: 10px; color: var(--atlas-fg-dim); margin-top: 4px; text-align: center; font-family: var(--atlas-mono); }
 .atlas-insp-actions { display: flex; gap: 8px; margin-top: 2px; }
 .atlas-btn { flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px; border-radius: 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid var(--atlas-line-2); background: rgba(4,18,26,.4); color: var(--atlas-fg); }
 .atlas-btn svg { width: 15px; height: 15px; }
@@ -550,7 +550,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .atlas-scrap .cap-only .where { color: var(--atlas-fg-dim); font-size: 9.5px; }
 /* Text stand-in inside the small "around this time" tiles. */
 .atlas-rel .ph-text {
-  display: flex; align-items: center; padding: 6px; font-size: 9px; line-height: 1.25;
+  display: flex; align-items: center; padding: 6px; font-size: 10px; line-height: 1.25;
   color: var(--atlas-fg-dim); background: rgba(4,18,26,.55);
   border: 1px solid var(--atlas-line); overflow: hidden;
 }
@@ -888,6 +888,13 @@ body { background: var(--atlas-bg); overflow: hidden; }
   .atlas-sbdrawer { top: auto; bottom: calc(144px + env(safe-area-inset-bottom, 0px)); max-height: min(56dvh, 520px); gap: 8px; padding: 10px 12px; }
   .sb-actions { margin-top: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .sb-actions .atlas-btn { min-height: 38px; padding: 0 8px; font-size: 12px; }
+}
+
+/* At 360 px the brand mark, six 44 px buttons and the 2D toggle only fit on one
+   row with the gaps closed up; otherwise the toggle wraps onto a second row. */
+@media (max-width: 380px) {
+  .atlas-top { gap: 0; }
+  .atlas-top-mark { margin: 0 4px 0 2px; }
 }
 
 /* Import & export and Scenes are docked cards like the scrapbook. On a phone
