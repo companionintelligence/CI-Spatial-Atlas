@@ -50,8 +50,7 @@ CI_MEMORY_URL=http://localhost:3030/graphql               # local CI-Server
 # Or use a scoped key when the server is reached directly:
 CI_MEMORY_API_KEY=
 ```
-Now the API verifies Portal JWTs and seeds stories from real located memories.
-Requires the two cross-repo prerequisites in §5.
+The Memory API verifies Portal JWTs, but the Portal issues `companion-atlas` opaque tokens today. Portal sign-in therefore needs the two cross-repo prerequisites in §5 before it reaches Memory; until then, use the scoped key above.
 
 ---
 
@@ -67,15 +66,19 @@ endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
   enforcing **issuer** + **audience** (EdDSA; `aud === client_id === companion-atlas`).
   Replaces the previous decode-only stub. Empty issuer ⇒ dev subject. Tested with a
   local keypair (signature/issuer/audience/expiry) in `server/test/auth-oidc.test.ts`.
+  The Portal issues `companion-atlas` opaque tokens today, so a live sign-in token will not
+  pass this check until the Portal issues a JWT for it (§5).
 - **SPA login** 🟡 — [`viewer-react/src/auth/portal.ts`](../viewer-react/src/auth/portal.ts)
   and [`viewer-react/src/auth/portalReturn.ts`](../viewer-react/src/auth/portalReturn.ts):
   Authorization Code + PKCE (S256), public client, mirroring the Hub RP flow. The load
   screen offers "Sign in with Companion" when the build sets `VITE_OIDC_*` and Memory
   asks for sign-in; the token comes back to the same tab and is filed under that Memory
   URL. [`DISCOVERY.md`](DISCOVERY.md) describes the flow and the build settings. Still open:
-  1. `companion-atlas` is not in CI-Portal `PUBLIC_CLIENTS` (§5.1, another repo's PR).
-     Until it is, the Portal refuses the redirect, and the viewer shows the Portal's reason.
-  2. Whether a Memory server accepts a Portal token is unverified.
+  1. CI-Portal lists `companion-atlas` in `PUBLIC_CLIENTS` on its main branch, but a
+     deployed Atlas's origin is not registered yet (§5.1). Until it is, the Portal refuses
+     the redirect, and the viewer shows the Portal's reason.
+  2. The Memory server refuses the Portal's access token. The token is opaque, and the
+     Memory server accepts only JWTs (§5.2).
   3. A store build has no redirect the app can receive. Keep `VITE_OIDC_*` unset there
      (see `viewer-react/mobile/README.md`).
 
@@ -131,11 +134,12 @@ tokens itself (§6). No runtime CSS injection.
 
 ## 5. Cross-repo prerequisites 🔧 (other repos)
 
-1. **CI-Portal** — add `{ clientId: 'companion-atlas', name: 'Companion Atlas' }` to
-   `PUBLIC_CLIENTS` in `apps/hono-app/src/domains/core/services/createAuth.ts` (a
-   Portal PR — no self-service registration). Local/`.ts.net`/`.local` redirect URIs
-   are auto-allowed; a **deployed** Atlas also needs a `FIRST_PARTY_APP_IDENTITIES`
-   entry (clientId → provisioned slug + callback path).
+1. **CI-Portal** — `companion-atlas` is already in `PUBLIC_CLIENTS`
+   (`apps/hono-app/src/domains/core/services/oidcClients.ts`) on the Portal's main branch.
+   Local/`.ts.net`/`.local` redirect URIs are auto-allowed. A **deployed** Atlas still needs
+   its origin registered, through a `FIRST_PARTY_APP_IDENTITIES` entry (clientId →
+   provisioned slug + callback path) or a `FIXED_PUBLIC_REDIRECTS` entry. Both are Portal
+   PRs — no self-service registration.
 2. **CI-Server** — set `PORTAL_OIDC_ENABLED=true` and add `companion-atlas` to
    `PORTAL_OIDC_AUDIENCE` (default allowlist omits it), or mint tokens with an
    allowed `aud` / use a scoped API key.
@@ -185,8 +189,8 @@ verifier ourselves per §2.
 
 - Adopt `@companion-atlas/story` in the server schema (delete the mirrored Zod) — a
   breaking migration; see `docs/CONSOLIDATION.md`.
-- Finish the SPA login: the Portal must list `companion-atlas` (§2, another repository), and
-  the Memory server must be verified to accept a Portal token. The sign-in control and the
+- Finish the SPA login: register a deployed Atlas's origin with the Portal, and make the
+  Memory server accept a Portal token (§2, §5). It refuses the opaque token today. The sign-in control and the
   return handling are wired (§2). Building the viewer is *not* part of this; it has been built
   and run since the Resium spike landed. The embedded CI-Server Memory sign-in (§2,
   `memory/auth.ts`) is wired too and does not depend on this.
