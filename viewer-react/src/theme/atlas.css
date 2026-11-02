@@ -73,7 +73,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
   position: fixed; inset: 0; color: var(--atlas-fg);
   font-family: 'Manrope', 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  display: grid; grid-template-columns: 60px 1fr; grid-template-rows: 54px 1fr;
+  /* minmax(0, 1fr), not 1fr: a bare 1fr grows to the top bar's min-content width, so
+     between 761px and 900px the stage (and everything anchored in it) ran past the
+     viewport. Measured at 768px portrait, the inspector's right edge sat at 846px. */
+  display: grid; grid-template-columns: 60px minmax(0, 1fr); grid-template-rows: 54px 1fr;
   grid-template-areas: "rail top" "rail stage";
   /* Keep the whole grid, and so everything anchored in its stage, clear of the Android
      system bars and cutouts (see --atlas-inset-top). Below 761px the tab bar and the time
@@ -148,6 +151,20 @@ body { background: var(--atlas-bg); overflow: hidden; }
 }
 .atlas-share-status.ok { color: var(--atlas-mint); }
 .atlas-share-status.err { color: var(--atlas-coral); }
+/* Tablet-portrait widths: the controls alone are wider than the bar here (the
+   wordmark is what gives way). The demo or connection chip keeps its text. */
+@media (min-width: 761px) and (max-width: 980px) {
+  .atlas-top { gap: 8px; }
+  .atlas-wordmark { display: none; }
+}
+/* Location and notification messages, under the top bar where the share status
+   sits. It wraps, because these sentences are longer than a share confirmation. */
+.atlas-device-note {
+  position: absolute; top: calc(100% + 8px); right: 16px; z-index: 2;
+  max-width: min(320px, calc(100vw - 32px)); padding: 8px 10px; border-radius: 9px;
+  background: var(--atlas-card); border: 1px solid var(--atlas-line-2); box-shadow: var(--atlas-shadow);
+  font-size: 11.5px; line-height: 1.4; color: var(--atlas-fg);
+}
 
 /* stage (holds the Cesium globe + overlays) */
 .atlas-stage { grid-area: stage; position: relative; overflow: hidden; }
@@ -397,6 +414,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .sb-actions .atlas-btn { flex: none; }
 .atlas-btn:disabled { opacity: .45; cursor: not-allowed; }
 .atlas-btn.ghost { background: transparent; border-color: var(--atlas-line); color: var(--atlas-fg-dim); }
+.atlas-btn.danger { border-color: var(--atlas-coral); color: var(--atlas-coral); }
 .atlas-btn.collected { border-color: var(--atlas-mint); color: var(--atlas-mint); background: rgba(88,235,191,.1); }
 .sb-status { margin: 0; font-size: 11.5px; line-height: 1.5; }
 .sb-status.ok { color: var(--atlas-mint); }
@@ -566,7 +584,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
      unclickable on every phone. The children are constrained individually
      instead, which solves the width problem without creating a clip. */
   .atlas-top { gap: 4px; padding: 0 8px; min-width: 0; }
-  .atlas-share-status { top: calc(100% + 6px); right: 8px; }
+  .atlas-share-status, .atlas-device-note { top: calc(100% + 6px); right: 8px; }
   .atlas-wordmark { min-width: 0; }
   .atlas-wordmark b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .atlas-wordmark span { display: none; }
@@ -590,6 +608,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
      buttons even when the browser does not report a coarse pointer (as
      desktop browser emulation commonly does not). */
   .atlas-top .atlas-icon-btn { flex: 0 0 44px; width: 44px; height: 44px; }
+  /* Phone widths have no room for the location and nearby controls alongside
+     "Fit all places". The rail's globe button frames everything on these widths
+     (it is the first item of the bottom bar), so the top-bar copy steps aside. */
+  .atlas-top .atlas-fit-all { display: none; }
   /* Icon-only search. Left as a flex:1 box with its label hidden it rendered
      as a wide empty pill that looked like a broken input. */
   .atlas-search { width: 44px; height: 44px; min-height: 44px; flex: 0 0 44px; justify-content: center; padding: 0; }
@@ -685,7 +707,9 @@ body { background: var(--atlas-bg); overflow: hidden; }
    the right edge of the viewport. */
 @media (max-width: 380px) {
   .atlas-wordmark b { font-size: 12px; }
-  .atlas-live, .atlas-sample { width: 20px; height: 20px; padding: 0; justify-content: center; gap: 0; border-radius: 50%; font-size: 0; }
+  /* flex-basis pinned: the chip is the honesty signal (demo vs connected), so the
+     wordmark gives up the space here, not the dot. */
+  .atlas-live, .atlas-sample { flex: 0 0 20px; width: 20px; height: 20px; padding: 0; justify-content: center; gap: 0; border-radius: 50%; font-size: 0; }
   .atlas-live i, .atlas-sample i { width: 8px; height: 8px; }
 }
 
@@ -762,7 +786,9 @@ body { background: var(--atlas-bg); overflow: hidden; }
    overflowing. 2.5D is the one to drop: it matters when a story carries 3D
    tilesets or raised tracks, which is desktop work, and 3D/2D is the choice
    Google Earth itself offers. It stays reachable by widening the window. */
-/* One button instead of three below 760px. Adding a segmented control to a bar
+/* One button instead of three below 900px. At 768px (iPad portrait) the segmented
+   control ran past the right edge of the top bar, so the cycle takes over up to 900px.
+   Adding a segmented control to a bar
    that was already nearly full pushed the share button clean off the right
    edge — measured at 412px, share moved from ending at 404 (inside the
    viewport) to 429 (outside it, unreachable). Shrinking the segments was not
@@ -772,7 +798,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
    wide-viewport option, which is honest — it exists for 3D tilesets and raised
    tracks, and that is desktop work. */
 .atlas-scenemode-cycle { display: none; }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .atlas-scenemode { display: none; }
   .atlas-scenemode-cycle {
     display: inline-flex; align-items: center; justify-content: center;

@@ -54,6 +54,7 @@ import { ScrapbookDrawer, type SaveState } from './ui/ScrapbookDrawer.js';
 import { PeoplePanel, groupByPerson, type PersonGroup } from './ui/PeoplePanel.js';
 import { saveStoryToMemory } from './memory/client.js';
 import { StoryLoadError } from './ui/StoryLoadError.js';
+import { useDeviceLocation } from './location/useDeviceLocation.js';
 
 /** The last memory whose time is at or before `ms` (the segment being played). */
 function lastPassed(memories: AtlasMemory[], ms: number): AtlasMemory | null {
@@ -155,6 +156,9 @@ export function AtlasApp() {
   );
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
+  // "Show my location" and "Nearby memories": in memory only, foreground only.
+  // See location/useDeviceLocation.ts.
+  const device = useDeviceLocation({ viewer, memories: model?.memories });
   const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP);
   // Projection. Starts on the globe because that is what Atlas is for; a story
   // that is really a map is one click from being read as one.
@@ -1238,6 +1242,11 @@ export function AtlasApp() {
         sample={isSample}
         showPlaces={showPlaces}
         onTogglePlaces={togglePlaces}
+        locating={device.locating}
+        onToggleLocating={device.toggleLocating}
+        nearby={device.nearby}
+        onToggleNearby={device.toggleNearby}
+        deviceNote={device.note}
         sceneMode={sceneMode}
         onSceneMode={setSceneMode}
         layers={(

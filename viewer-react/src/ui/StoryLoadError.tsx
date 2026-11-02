@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 
 import { isMemoryAuthError, signInToMemory } from '../memory/auth.js';
+import { DeleteMemoryAccount } from './DeleteMemoryAccount.js';
 
 function retry(): void {
   window.location.reload();
@@ -14,6 +15,7 @@ function retry(): void {
 export function StoryLoadError({ error, memoryUrl }: { error: string | null; memoryUrl?: string }) {
   const authError = Boolean(memoryUrl) && isMemoryAuthError(error);
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -46,9 +48,14 @@ export function StoryLoadError({ error, memoryUrl }: { error: string | null; mem
             : error ?? 'Append ?story=&lt;url&gt; to view one.'}
         </span>
         <div className="atlas-auth-actions">
-          {authError && !open && (
+          {authError && !open && !deleting && (
             <button className="atlas-btn primary" type="button" onClick={() => setOpen(true)}>
               Sign in to Companion Memory
+            </button>
+          )}
+          {authError && !open && !deleting && memoryUrl && (
+            <button className="atlas-btn ghost danger" type="button" onClick={() => setDeleting(true)}>
+              Delete my account
             </button>
           )}
           <button className="atlas-btn" type="button" onClick={retry} disabled={busy}>
@@ -88,6 +95,9 @@ export function StoryLoadError({ error, memoryUrl }: { error: string | null; mem
             </div>
             <span className="atlas-auth-note">Your access token stays in this browser tab and is never added to the URL.</span>
           </form>
+        )}
+        {authError && deleting && memoryUrl && (
+          <DeleteMemoryAccount memoryUrl={memoryUrl} onClose={() => setDeleting(false)} />
         )}
       </div>
     </div>
