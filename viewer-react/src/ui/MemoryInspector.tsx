@@ -1,4 +1,4 @@
-import { PinIcon, ClockIcon, CameraIcon, SunIcon, MoonIcon, PlaneIcon, PlusIcon } from './icons.js';
+import { PinIcon, ClockIcon, CameraIcon, SunIcon, MoonIcon, PlaneIcon, SaveIcon } from './icons.js';
 import { mediaThumb, type AtlasMemory, type AtlasPlaceSummary } from '../model/atlasModel.js';
 import type { MemoryWeather } from '../memory/weather.js';
 import type { StreetViewShot } from '../memory/streetview.js';
@@ -183,9 +183,9 @@ export function MemoryInspector({ memory, related, place, weather, streetView, s
               className={`atlas-btn${collected ? ' collected' : ''}`}
               onClick={onCollect}
               aria-pressed={collected}
-              title={collected ? 'Remove from your scrapbook' : 'Collect into your scrapbook'}
+              title={collected ? 'Remove from your scrapbook' : 'Save to your scrapbook'}
             >
-              <PlusIcon />{collected ? 'Collected' : 'Collect'}
+              <SaveIcon />{collected ? 'Saved' : 'Save'}
             </button>
           )}
         </div>

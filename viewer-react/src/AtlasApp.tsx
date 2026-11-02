@@ -27,7 +27,9 @@ import { StatsRibbon, Legend, PlaceChip, ScrapbookFrames } from './ui/Overlays.j
 import { nameUnplacedMemories, placeSummaries } from './model/atlasModel.js';
 import { useWeather } from './story/useWeather.js';
 import { useStreetView } from './story/useStreetView.js';
+import { ConnectMemorySheet } from './ui/ConnectMemorySheet.js';
 import { MemoryInspector } from './ui/MemoryInspector.js';
+import { WelcomeCard } from './ui/WelcomeCard.js';
 import { PlaceCard } from './ui/PlaceCard.js';
 import { TimeMachine } from './ui/TimeMachine.js';
 import { CommandPalette } from './ui/CommandPalette.js';
@@ -231,13 +233,17 @@ export function AtlasApp() {
   // its own focus state — independent of `focusedId`/`focused`, which are memory-only.
   const [showPlaces, setShowPlaces] = useState(false);
   const [focusedPlace, setFocusedPlace] = useState<Place | null>(null);
+  // The connect sheet, opened from the demo badge or the welcome card.
+  const [connectOpen, setConnectOpen] = useState(false);
   // A clicked note's full text, docked in the same slot as `focusedPlace` —
   // its label on the globe is cropped (see `cropNoteLabel`), so this is where
   // the rest of it goes. `Item` rather than a plain string: `NoteCard` also
   // wants the title, if the note has one.
   const [focusedNote, setFocusedNote] = useState<(Item & { type: 'note' }) | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
-  const [playing, setPlaying] = useState(!reduceMotion);
+  // A demo starts still: the visitor chooses the moment, and the globe does not fly off
+  // on its own before anyone has read what they are looking at.
+  const [playing, setPlaying] = useState(!reduceMotion && !isSample);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<AtlasMemory | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -297,10 +303,12 @@ export function AtlasApp() {
   // story can't resolve.
   const sb = useScrapbook(loadedStory?.id ?? null);
 
+  // The story's featured memory opens by default on a connected story. A demo has no
+  // featured memory on screen: its card appears when a visitor chooses one.
   const focused: AtlasMemory | null = useMemo(() => {
     if (!model) return null;
-    return model.memories.find((m) => m.id === focusedId) ?? model.focused;
-  }, [model, focusedId]);
+    return model.memories.find((m) => m.id === focusedId) ?? (isSample ? null : model.focused);
+  }, [model, focusedId, isSample]);
 
   const related = useMemo(
     () => (model ? model.memories.filter((m) => m.id !== focused?.id) : []),
@@ -469,9 +477,11 @@ export function AtlasApp() {
   // the moment) and flies the camera. `flownToRef` keeps the playback fly-through
   // from immediately re-flying the same memory.
   const select = useCallback((m: AtlasMemory) => {
-    setFocusedId(m.id);
     flownToRef.current = m.id;
+    // Scrubbing clears the card, so the memory is focused after the scrub. Set first,
+    // the card was cleared straight away and picking a memory never opened it.
     scrub(m.timeMs);
+    setFocusedId(m.id);
     flyTo(m);
   }, [flyTo, scrub]);
 
@@ -641,9 +651,10 @@ export function AtlasApp() {
       return;
     }
 
-    const first = model.memories[0];
-    if (first) { introDone.current = true; select(first); }
-  }, [viewer, model, select, scrub, pause, opened, reduceMotion, flyTo]);
+    // Open on the whole set, not on one memory. The first memory's card covered the
+    // globe on a phone, and a visitor reads the set first; they pick a memory from it.
+    if (model.memories.length) { introDone.current = true; frameAll(); }
+  }, [viewer, model, scrub, pause, opened, reduceMotion, flyTo, frameAll]);
 
   // ————— the scrapbook loop: collect → curate → play → save —————
 
@@ -1234,20 +1245,20 @@ export function AtlasApp() {
         // scenes, so the honest question is whether there is anything to show.
         canPresent={(story.scenes?.length ?? 0) > 0 || model.memories.length > 0}
         importedCount={imported.items.length}
+        authoring={!isSample}
       />
       )}
       {chrome.topBar && (
       <TopBar
         onSearch={() => setPaletteOpen(true)}
-        // Framing sits with the projection control: both are about where you
-        // are looking from. Drawing went back to the rail with the other
-        // panel-openers.
-        onFrameAll={frameAll}
+        // Framing lives on the rail's first button ("Show all memories"); a second
+        // copy in the bar was the same action twice.
         onViewInAR={viewInAR}
         live={source === 'memory'}
         sample={isSample}
+        onConnect={() => setConnectOpen(true)}
         showPlaces={showPlaces}
-        onTogglePlaces={togglePlaces}
+        onTogglePlaces={isSample ? undefined : togglePlaces}
         locating={device.locating}
         onToggleLocating={device.toggleLocating}
         nearby={device.nearby}
@@ -1395,6 +1406,10 @@ export function AtlasApp() {
       {chrome.people && (
         <PeoplePanel open={peopleOpen} groups={peopleGroups} onClose={closePeople} onPlayPerson={playPersonJourney} />
       )}
+      {isSample && !presenting && chrome.topBar && (
+        <WelcomeCard onTour={startPresent} onConnect={() => setConnectOpen(true)} />
+      )}
+      {connectOpen && <ConnectMemorySheet onClose={() => setConnectOpen(false)} />}
       {chrome.commandPalette && (
       <CommandPalette
         open={paletteOpen}
