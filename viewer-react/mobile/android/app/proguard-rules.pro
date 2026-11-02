@@ -19,3 +19,14 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Capacitor's JavaScript side calls these methods by name through WebView.addJavascriptInterface
+# (MessageHandler.postMessage, and the plugin flags in CapacitorHttp and CapacitorCookies).
+# R8 cannot see those calls, so without this rule it removes or renames them and the bridge breaks.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# Capacitor finds plugins and their annotations by reflection, so the annotation attributes must
+# survive shrinking (the consumer rules keep the annotation types themselves).
+-keepattributes *Annotation*
