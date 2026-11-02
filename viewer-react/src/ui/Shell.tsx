@@ -1,7 +1,9 @@
 import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
+import { NEARBY_RADIUS_METRES } from '../location/logic.js';
 import {
   BrandMark, GlobeIcon, PeopleIcon, LayersIcon,
   SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon,
+  LocateIcon, BellIcon,
 } from './icons.js';
 
 /** Left icon rail. Globe navigates home; Draw arms the drawing tools; People
@@ -104,11 +106,23 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
 export function TopBar({
   onSearch, onFrameAll, live, sample, showPlaces, onTogglePlaces, layers, visibility,
   sceneMode = '3d', onSceneMode,
+  locating = false, onToggleLocating, nearby = false, onToggleNearby, deviceNote,
 }: {
   onSearch: () => void;
   /** Frame the camera on every located memory. Beside the projection control
    *  because both answer "where am I looking from", not "what is on the map". */
   onFrameAll?: () => void;
+  /** "Show my location": on while the device position is tracked in the
+   *  foreground. Its pressed state is the switch, not the fix. */
+  locating?: boolean;
+  onToggleLocating?: () => void;
+  /** "Nearby memories": on while a located memory within reach raises a local
+   *  notification. Turning it on asks for notification access. */
+  nearby?: boolean;
+  onToggleNearby?: () => void;
+  /** A short message about the location or notification controls, when the
+   *  user has to act (permission refused, no position, and so on). */
+  deviceNote?: string | null;
   live?: boolean;
   /** Showing the bundled demo story because no Companion Memory is connected. */
   sample?: boolean;
@@ -168,12 +182,36 @@ export function TopBar({
       {visibility}
       {onFrameAll && (
         <button
-          className="atlas-icon-btn"
+          className="atlas-icon-btn atlas-fit-all"
           title="Fit all places — frame every located memory"
           aria-label="Fit all places"
           onClick={onFrameAll}
         >
           <FitIcon />
+        </button>
+      )}
+      {onToggleLocating && (
+        <button
+          type="button"
+          className="atlas-icon-btn"
+          title="Show my location"
+          aria-label="Show my location"
+          aria-pressed={locating}
+          onClick={onToggleLocating}
+        >
+          <LocateIcon />
+        </button>
+      )}
+      {onToggleNearby && (
+        <button
+          type="button"
+          className="atlas-icon-btn"
+          title={`Nearby memories — alert me within ${NEARBY_RADIUS_METRES} m`}
+          aria-label="Nearby memories"
+          aria-pressed={nearby}
+          onClick={onToggleNearby}
+        >
+          <BellIcon />
         </button>
       )}
       {onSceneMode && (
@@ -215,6 +253,7 @@ export function TopBar({
           {sceneMode === '3d' ? '2D' : '3D'}
         </button>
       )}
+      {deviceNote && <span className="atlas-device-note" role="status">{deviceNote}</span>}
     </header>
   );
 }
