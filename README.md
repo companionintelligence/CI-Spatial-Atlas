@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/companionintelligence/.github/main/profile/assets/icons/companion-atlas.png" width="96" height="96" alt="Companion Atlas icon">
+</p>
+
 <h1 align="center">Companion Atlas</h1>
 
 <p align="center"><strong>Companion Atlas 3D XR Globe to review and plan your travels.</strong></p>
