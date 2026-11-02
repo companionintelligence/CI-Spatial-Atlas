@@ -19,7 +19,7 @@ import { downloadKml, downloadStoryJson } from './exportFile.js';
 import { summarise } from './useImported.js';
 import type { MemorySource } from '../memory/client.js';
 import type { MemoryImport } from '../memory/import.js';
-import { ShareIcon } from '../ui/icons.js';
+import { ShareIcon, UploadIcon, DownloadIcon } from '../ui/icons.js';
 import { MemoryExportSection, MemoryImportSection } from './MemorySections.js';
 import { MediaUploadSection } from './MediaUploadSection.js';
 import { atlasApiFromEnv } from '../upload/index.js';
@@ -186,7 +186,7 @@ export function InteropPanel({
           onChange={(e) => void take(e.target.files)}
         />
         <button className="atlas-btn primary" disabled={busy} onClick={() => input.current?.click()}>
-          {busy ? 'Reading…' : 'Choose files'}
+          <UploadIcon />{busy ? 'Reading…' : 'Choose files'}
         </button>
       </section>
 
@@ -232,10 +232,10 @@ export function InteropPanel({
         </p>
         <div className="io-actions">
           <button className="atlas-btn" disabled={!story} onClick={() => story && downloadKml(story)}>
-            Export KML
+            <DownloadIcon />Export KML
           </button>
           <button className="atlas-btn" disabled={!story} onClick={() => story && downloadStoryJson(story)}>
-            Export story JSON
+            <DownloadIcon />Export story JSON
           </button>
         </div>
         <p className="io-note">

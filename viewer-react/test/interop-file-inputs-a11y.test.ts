@@ -70,7 +70,7 @@ function isNamed(attrs: Record<string, string>, html: string): boolean {
 
 /** True when `text` is the content of a real `<button>` element, not merely somewhere in the markup. */
 const hasButton = (html: string, text: string): boolean =>
-  new RegExp(`<button\\b[^>]*>\\s*${text}\\s*</button>`).test(html);
+  new RegExp(`<button\\b[^>]*>(?:\\s*<svg\\b[\\s\\S]*?</svg>)?\\s*${text}\\s*</button>`).test(html);
 
 function isOutOfTheWay(attrs: Record<string, string>): boolean {
   return attrs.tabindex === '-1' && attrs['aria-hidden'] === 'true';

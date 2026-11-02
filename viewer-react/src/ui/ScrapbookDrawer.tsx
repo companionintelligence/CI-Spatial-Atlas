@@ -1,6 +1,6 @@
 import type { Scene, Visibility } from '@companion-atlas/story';
 import { mediaThumb, type AtlasMemory } from '../model/atlasModel.js';
-import { SparkIcon, PlayIcon, PlusIcon } from './icons.js';
+import { SparkIcon, PlayIcon, PlusIcon, LockIcon, HomeIcon, GlobeIcon, SaveIcon, DownloadIcon, TrashIcon } from './icons.js';
 
 export type SaveState =
   | { s: 'idle' }
@@ -15,6 +15,8 @@ const VIS_LABEL: { v: Visibility; label: string }[] = [
   { v: 'unlisted', label: 'Household' },
   { v: 'public', label: 'Public' },
 ];
+/** A symbol for each visibility choice. The word stays in the DOM for screen readers. */
+const VIS_ICON: Record<Visibility, typeof LockIcon> = { private: LockIcon, unlisted: HomeIcon, public: GlobeIcon };
 
 /**
  * The scrapbook drawer — collected memories become a journey: curate it with
@@ -93,11 +95,15 @@ export function ScrapbookDrawer({
       />
 
       <div className="sb-vis" role="group" aria-label="Who can see this">
-        {VIS_LABEL.map(({ v, label }) => (
-          <button key={v} aria-pressed={visibility === v} className={visibility === v ? 'active' : ''} onClick={() => onVisibility(v)}>
-            {label}
-          </button>
-        ))}
+        {VIS_LABEL.map(({ v, label }) => {
+          const Icon = VIS_ICON[v];
+          return (
+            <button key={v} aria-pressed={visibility === v} title={label} className={visibility === v ? 'active' : ''} onClick={() => onVisibility(v)}>
+              <Icon />
+              <span className="lbl">{label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {empty ? (
@@ -161,20 +167,21 @@ export function ScrapbookDrawer({
         <button className="atlas-btn primary" disabled={journeyEmpty} onClick={onCurate} title="Companion writes the narrative and titles the journey">
           <SparkIcon />Curate with Companion
         </button>
-        <button className="atlas-btn" disabled={journeyEmpty} onClick={onPlay}><PlayIcon />Play journey</button>
+        <button className="atlas-btn" disabled={journeyEmpty} title="Play journey" onClick={onPlay}><PlayIcon />Play journey</button>
         <button
           className="atlas-btn"
           disabled={nothingToSave || !canSave || saveState.s === 'saving'}
           onClick={onSave}
           title={canSave ? 'Save into Companion Memory (shares per visibility)' : 'Connect Companion Memory (?memory=…) to save'}
         >
+          <SaveIcon />
           {saveState.s === 'saving' ? 'Saving…' : 'Save to Memory'}
         </button>
-        <button className="atlas-btn" disabled={nothingToSave} onClick={onDownload}>Download .story.json</button>
+        <button className="atlas-btn" disabled={nothingToSave} title="Download .story.json" onClick={onDownload}><DownloadIcon />Download .story.json</button>
         {/* Gate Clear on the raw draft, not on resolvable entries: a draft whose
             ids this story can't resolve renders zero rows, and disabling Clear
             there left the only reset affordance dead exactly when it was needed. */}
-        <button className="atlas-btn ghost" disabled={!canClear} onClick={onClear}>Clear</button>
+        <button className="atlas-btn ghost" disabled={!canClear} title="Clear" onClick={onClear}><TrashIcon />Clear</button>
       </div>
 
       {saveState.s === 'done' && (
