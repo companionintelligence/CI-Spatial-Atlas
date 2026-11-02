@@ -16,6 +16,7 @@ const CFG = {
   issuer: 'https://hub.ci.localhost/api/auth',
   clientId: 'companion-atlas',
   redirectUri: 'http://localhost:4174/auth/callback',
+  exchangeUrl: 'http://localhost:8787/api/oidc/token',
 };
 
 // Node has no sessionStorage; the module only uses get/set/removeItem.
@@ -151,8 +152,13 @@ describe('completeLogin — success', () => {
     vi.stubGlobal('fetch', fetchMock);
     const tokens = await completeLogin(CFG, `${CFG.redirectUri}?code=c1&state=state-xyz`);
     expect(tokens.access_token).toBe('jwt');
-    const body = new URLSearchParams(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
-    expect(body.get('code_verifier')).toBe('verifier-abc');
-    expect(body.get('grant_type')).toBe('authorization_code');
+    // The code goes to the Atlas server, which redeems it at the Portal. The page does not call the Portal.
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(CFG.exchangeUrl);
+    expect(JSON.parse(String(init.body))).toEqual({
+      code: 'c1',
+      code_verifier: 'verifier-abc',
+      redirect_uri: CFG.redirectUri,
+    });
   });
 });

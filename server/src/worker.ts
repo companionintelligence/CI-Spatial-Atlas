@@ -59,6 +59,7 @@ import {
   uploadLimitsFromEnv,
 } from './object-store.js';
 import { r2Get, r2Put } from './object-store-r2.js';
+import { exchangeAuthorizationCode } from './oidc-exchange.js';
 import { ingest, reconstruct, type ReconstructBackend } from './pipeline.js';
 import type { MediaItem, Scene, Story } from './schema.js';
 import { D1Store } from './store-d1.js';
@@ -236,6 +237,19 @@ async function requireAuth(c: AppContext, next: Next) {
 }
 
 app.get('/healthz', (c) => c.json({ ok: true, service: 'companion-atlas', version: '0.1.0' }));
+
+// ── Browser sign-in: the Portal's code is redeemed here, not in the page ──
+// The viewer posts the code it was given with its PKCE verifier. The Portal is called
+// from this Worker, so the page needs no CORS grant on the Portal. See oidc-exchange.ts.
+app.post('/api/oidc/token', async (c) => {
+  const input: unknown = await c.req.json().catch(() => null);
+  const result = await exchangeAuthorizationCode(input, toProcessEnv(c.env));
+
+  return new Response(JSON.stringify(result.body), {
+    status: result.status,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+  });
+});
 
 // ── Media upload ────────────────────────────────────────────────────────
 app.get('/api/media/config', requireAuth, (c) => {

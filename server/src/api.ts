@@ -45,6 +45,7 @@ import { sceneInstantFromTime } from './compose.js';
 import type { SuiteConnectors } from './connectors.js';
 import { registerMediaRoutes } from './media.js';
 import { objectStoreConfigFromEnv, uploadLimitsFromEnv, type ObjectStore, type UploadLimits } from './object-store.js';
+import { exchangeAuthorizationCode, type TokenExchangeEnv } from './oidc-exchange.js';
 import { ingest, reconstruct } from './pipeline.js';
 import type { MediaItem, Scene } from './schema.js';
 import type { JobStore, StoryStore } from './store.js';
@@ -137,6 +138,15 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   }
 
   app.get('/healthz', async () => ({ ok: true, service: 'companion-atlas', version: '0.1.0' }));
+
+  // ── Browser sign-in: the Portal's code is redeemed here, not in the page ──
+  // The same exchange the Worker runs (oidc-exchange.ts), for the local Fastify server.
+  app.post('/api/oidc/token', async (req, reply) => {
+    const result = await exchangeAuthorizationCode(req.body, process.env as TokenExchangeEnv);
+
+    reply.header('cache-control', 'no-store');
+    return reply.code(result.status).send(result.body);
+  });
 
   // ── Media upload ─────────────────────────────────────────────────────────
   // `storageReason` is read from the environment even when no store was passed,
