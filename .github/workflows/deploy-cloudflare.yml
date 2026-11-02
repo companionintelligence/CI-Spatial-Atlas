@@ -86,11 +86,17 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Sign-on for the web build (docs/DISCOVERY.md, "Sign-on"). These identify the
+      # public client and its redirect, so they are plain values, not secrets. All three
+      # are needed together: the viewer shows "Sign in with Companion" only when set.
       - name: Build viewer-react
         run: npm run build
         env:
           VITE_CESIUM_ION_TOKEN: ${{ secrets.VITE_CESIUM_ION_TOKEN }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_OIDC_ISSUER: https://hub.ci.computer/api/auth
+          VITE_OIDC_CLIENT_ID: companion-atlas
+          VITE_OIDC_REDIRECT_URI: https://atlas.ci.computer/
 
       # Schema before code. wrangler records which migrations it has applied, so
       # this is a no-op once the database is current.
