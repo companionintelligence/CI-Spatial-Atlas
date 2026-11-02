@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
-import { PinIcon } from './icons.js';
+import { PinIcon, ImagesIcon, ClockIcon } from './icons.js';
 import { mediaThumb, type AtlasModel, type AtlasMemory } from '../model/atlasModel.js';
 
 export function StatsRibbon({ stats }: { stats: AtlasModel['stats'] }) {
   const cells = [
-    { v: stats.memories.toLocaleString(), l: 'Memories' },
-    { v: String(stats.places), l: 'Places' },
-    { v: String(stats.years), l: 'Years' },
+    { v: stats.memories.toLocaleString(), l: 'Memories', Icon: ImagesIcon },
+    { v: String(stats.places), l: 'Places', Icon: PinIcon },
+    { v: String(stats.years), l: 'Years', Icon: ClockIcon },
   ];
   return (
     <div className="atlas-stats">
-      {cells.map((c) => (
-        <div className="atlas-stat" key={c.l}><b>{c.v}</b><span>{c.l}</span></div>
+      {cells.map(({ v, l, Icon }) => (
+        <div className="atlas-stat" key={l} title={l}><Icon aria-hidden="true" /><b>{v}</b><span className="lbl">{l}</span></div>
       ))}
     </div>
   );

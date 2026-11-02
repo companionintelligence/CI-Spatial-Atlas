@@ -1,8 +1,8 @@
 import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import { NEARBY_RADIUS_METRES } from '../location/logic.js';
 import {
-  BrandMark, GlobeIcon, PeopleIcon, LayersIcon,
-  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon, ARIcon,
+  BrandMark, GlobeIcon, PeopleIcon, ImagesIcon, CameraIcon,
+  SearchIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon, ARIcon,
   LocateIcon, BellIcon,
 } from './icons.js';
 
@@ -59,19 +59,19 @@ export function Rail({
     // not a toggle, so it never shows `active` — it used to, unconditionally,
     // which meant Globe stayed lit the whole session no matter what was
     // actually open, the first thing that made this rail read as unreliable.
-    { key: 'globe', label: 'Globe — frame everything', Icon: GlobeIcon, onClick: onFrameAll },
-    { key: 'draw', label: drawing ? 'Stop drawing' : 'Draw', Icon: PencilIcon, onClick: onDraw, active: drawing },
-    { key: 'people', label: 'People', Icon: PeopleIcon, onClick: onPeople, active: peopleOpen },
-    { key: 'collections', label: 'Scrapbook', Icon: LayersIcon, onClick: onCollections, active: collectionsOpen, badge: scrapbookCount },
-    { key: 'scenes', label: 'Scenes', Icon: FlagIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
-    ...(canPresent ? [{ key: 'present', label: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
-    { key: 'interop', label: 'Import & export', Icon: ExchangeIcon, onClick: onInterop, active: interopOpen, badge: importedCount },
+    { key: 'globe', label: 'Globe — frame everything', short: 'Globe', Icon: GlobeIcon, onClick: onFrameAll },
+    { key: 'draw', label: drawing ? 'Stop drawing' : 'Draw', short: drawing ? 'Stop' : 'Draw', Icon: PencilIcon, onClick: onDraw, active: drawing },
+    { key: 'people', label: 'People', short: 'People', Icon: PeopleIcon, onClick: onPeople, active: peopleOpen },
+    { key: 'collections', label: 'Scrapbook', short: 'Scrapbook', Icon: ImagesIcon, onClick: onCollections, active: collectionsOpen, badge: scrapbookCount },
+    { key: 'scenes', label: 'Scenes', short: 'Scenes', Icon: CameraIcon, onClick: onScenes, active: scenesOpen, badge: sceneCount },
+    ...(canPresent ? [{ key: 'present', label: 'Present', short: 'Present', Icon: SlidesIcon, onClick: onPresent }] : []),
+    { key: 'interop', label: 'Import & export', short: 'Import', Icon: ExchangeIcon, onClick: onInterop, active: interopOpen, badge: importedCount },
   ];
   return (
     <nav className="atlas-rail" aria-label="Primary">
       <BrandMark className="atlas-mark" />
-      {items.map(({ key, label, Icon, onClick, active, badge }) => (
-        <button key={key} className={`atlas-rail-btn${active ? ' active' : ''}`} title={label} aria-label={badge ? `${label} (${badge})` : label} aria-current={active ? 'page' : undefined} onClick={onClick}>
+      {items.map(({ key, label, short, Icon, onClick, active, badge }) => (
+        <button key={key} className={`atlas-rail-btn${active ? ' active' : ''}`} data-label={short} title={label} aria-label={badge ? `${label} (${badge})` : label} aria-current={active ? 'page' : undefined} onClick={onClick}>
           <Icon />
           {badge ? <span className="rail-badge" aria-hidden="true">{badge}</span> : null}
         </button>
@@ -145,7 +145,7 @@ export function TopBar({
 }) {
   return (
     <header className="atlas-top">
-      <div className="atlas-wordmark"><b>Companion&nbsp;Atlas</b><span>your memories in space &amp; time</span></div>
+      <div className="atlas-wordmark"><BrandMark className="atlas-top-mark" gradientId="atlas-bm-top" aria-hidden="true" /><b>Companion&nbsp;Atlas</b><span>your memories in space &amp; time</span></div>
       {live && <span className="atlas-live" title="Connected to Companion Memory"><i />Live memory</span>}
       {sample && (
         <span
@@ -163,6 +163,7 @@ export function TopBar({
           the label, which is where the palette's own hint already lives. */}
       <button
         className="atlas-icon-btn"
+        data-label="Search"
         title="Search — ⌘K"
         aria-label="Search memories (Command K)"
         aria-keyshortcuts="Meta+K Control+K"
@@ -173,12 +174,13 @@ export function TopBar({
       {onTogglePlaces && (
         <button
           className="atlas-icon-btn"
+          data-label="Places"
           title="Named places (Companion Memory)"
           aria-label="Toggle named places"
           aria-pressed={!!showPlaces}
           onClick={onTogglePlaces}
         >
-          <FlagIcon />
+          <FitIcon />
         </button>
       )}
       {layers}
@@ -199,6 +201,7 @@ export function TopBar({
         // under a mounted globe.
         <button
           className="atlas-icon-btn"
+          data-label="AR"
           title="View in AR — place the globe in your room"
           aria-label="View in AR"
           onClick={onViewInAR}
@@ -210,6 +213,7 @@ export function TopBar({
         <button
           type="button"
           className="atlas-icon-btn"
+          data-label="Locate"
           title="Show my location"
           aria-label="Show my location"
           aria-pressed={locating}
@@ -222,6 +226,7 @@ export function TopBar({
         <button
           type="button"
           className="atlas-icon-btn"
+          data-label="Alerts"
           title={`Nearby memories — alert me within ${NEARBY_RADIUS_METRES} m`}
           aria-label="Nearby memories"
           aria-pressed={nearby}
@@ -262,6 +267,7 @@ export function TopBar({
         <button
           type="button"
           className="atlas-scenemode-cycle"
+          data-label={sceneMode === '3d' ? 'Flat' : 'Globe'}
           title={sceneMode === '3d' ? 'Switch to the flat map' : 'Switch to the globe'}
           aria-label={sceneMode === '3d' ? 'Switch to the flat map' : 'Switch to the globe'}
           onClick={() => onSceneMode(sceneMode === '3d' ? '2d' : '3d')}

@@ -148,14 +148,14 @@ export function SceneList({
 
       <div className="sc-row-actions sc-new">
         {onCaptureScene ? (
-          <button type="button" className="sc-action primary" onClick={onCaptureScene}>
+          <button type="button" className="sc-action primary" title="Scene from this view" onClick={onCaptureScene}>
             <CameraViewIcon aria-hidden="true" />
-            <span>Scene from this view</span>
+            <span className="lbl">Scene from this view</span>
           </button>
         ) : null}
-        <button type="button" className="sc-action" onClick={onCreate}>
+        <button type="button" className="sc-action" title="Blank scene" onClick={onCreate}>
           <PlusIcon aria-hidden="true" />
-          <span>Blank scene</span>
+          <span className="lbl">Blank scene</span>
         </button>
       </div>
 
