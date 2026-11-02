@@ -113,6 +113,11 @@ export const ExchangeIcon = (p: P) => (
   <svg {...S(p)}><path d="M7 21V7m0 0L3.5 10.5M7 7l3.5 3.5" /><path d="M17 3v14m0 0 3.5-3.5M17 17l-3.5-3.5" /></svg>
 );
 
+/** Companion Memory — a cloud, where the located memories are kept. */
+export const CloudIcon = (p: P) => (
+  <svg {...S(p)}><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /></svg>
+);
+
 /** Present — a framed slide. PlayIcon already means "play the journey on the
  *  globe", which is a different thing from stepping through authored scenes. */
 export const SlidesIcon = (p: P) => (

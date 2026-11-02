@@ -6,6 +6,7 @@ import './theme/atlas.css';
 import { AtlasApp } from './AtlasApp.js';
 import { maybeInstallXREmulator } from './renderers/xr/devEmulator.js';
 import { rendererForDevice } from './renderers/rendererForDevice.js';
+import { restoreNativeMemoryConnection } from './memory/auth.js';
 import { registerServiceWorker } from './pwa/registerServiceWorker.js';
 
 // Use the configured Cesium ion token for real World Imagery / World Terrain.
@@ -41,6 +42,9 @@ const reactRoot = createRoot(root);
 // function asking navigator.xr whether an immersive session is possible, so
 // installing afterwards leaves it having already chosen the desktop globe.
 void maybeInstallXREmulator()
+  // Before the first render, so the viewer starts on a saved native connection
+  // instead of the bundled demo.
+  .then(() => restoreNativeMemoryConnection())
   .then(() => rendererForDevice())
   .then(async (choice) => {
     if (choice === 'cesium') {

@@ -11,7 +11,7 @@ separate mobile UI: the app ships `viewer-react/dist` inside a WKWebView
 | Capacitor | 8.6 (see [Capacitor 8](#capacitor-8): 7.x loses extended support on 2026-12-08) |
 | iOS | deployment target 15.0, Swift Package Manager (no CocoaPods), Xcode 26 or newer |
 | Android | minSdk 24, compileSdk/targetSdk 36, AGP 8.13.0, Gradle 8.14.3, JDK 21 |
-| Plugins | `@capacitor/splash-screen`, `@capacitor/status-bar` (nothing else) |
+| Plugins | `@capacitor/splash-screen`, `@capacitor/status-bar`, `capacitor-secure-storage-plugin` (the Keychain, for the Memory connection) |
 
 ## Capacitor 8
 
@@ -116,7 +116,7 @@ from the `VITE_*` variables present when the **web bundle** is built
 
 | Variable | Without it |
 |---|---|
-| `VITE_MEMORY_URL` (+ `VITE_MEMORY_TOKEN`) | The app opens the bundled sample story, labelled "Demo data" |
+| `VITE_MEMORY_URL` (+ `VITE_MEMORY_TOKEN`) | The app opens the bundled sample story, labelled "Demo data". The rail's Connect to Companion Memory sets a server at run time instead. |
 | `VITE_COMPANION_HUB_URL` | No discovery: the Memory server comes only from `VITE_MEMORY_URL` |
 | `VITE_CESIUM_ION_TOKEN` | Offline basemap only |
 | `VITE_GOOGLE_MAPS_API_KEY` | No photoreal buildings or Street View |
@@ -179,13 +179,15 @@ Owner supplies (none of this is in the repository):
 - The privacy policy and support URLs, screenshots, and the Play listing graphics (512 px icon,
   1024x500 feature graphic).
 - The decision on sign-in in a store build (STORE_SUBMISSION.md, section 1).
+- A reviewer account and a Memory server that App Review can reach over HTTPS, for the review notes.
 
 Still open in the code:
 
-- **Connecting to a Memory server.** The Memory URL is baked in at build time, and the sign-in
-  token lives in `sessionStorage`, so a store build cannot be pointed at a server and asks for
-  the password again on every cold start. A "Connect to Memory" screen with the token in the
-  Keychain / Keystore is not designed yet.
+- **Connecting to a Memory server.** The rail's Connect to Companion Memory takes an https://
+  server address and signs in. The address and the short-lived token go to the Keychain through
+  `capacitor-secure-storage-plugin` (0.13, Capacitor 8) and are restored at launch. Portal and
+  Hub discovery come first, and the saved connection is the fallback. This is built but not yet
+  proven against a live server, and the Android path is untested.
 - **Portal sign-in.** The flow in `src/auth/portalReturn.ts` (on `src/auth/portal.ts`) runs only
   when the build sets `VITE_OIDC_*`. In the app it needs a custom URL scheme or Universal / App
   Links first, so keep `VITE_OIDC_*` unset in store builds.

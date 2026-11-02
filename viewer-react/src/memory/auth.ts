@@ -6,9 +6,22 @@
  * access token in sessionStorage, scoped to the selected Memory URL, so Atlas
  * can authenticate a same-origin dev proxy without putting a credential in the
  * address bar or in a shareable story URL.
+ *
+ * In the native shell the address and token also go to the Keychain, so the
+ * connection survives a relaunch. Launch copies them back into sessionStorage,
+ * so every reader keeps using the same lookup.
  */
 
+import { isNativeShell, readSecret, removeSecret, writeSecret } from './nativeKeychain.js';
+
 const SESSION_KEY = 'atlas.memory.auth';
+const KEYCHAIN_URL = 'atlas.memory.url';
+const KEYCHAIN_TOKEN = 'atlas.memory.token';
+/** The longest a launch waits for the Keychain before it opens the demo instead. */
+const RESTORE_TIMEOUT_MS = 3000;
+
+/** The Memory the native shell reconnected to at launch. */
+let restoredMemoryUrl: string | undefined;
 
 interface StoredMemoryAuth {
   memoryUrl: string;
@@ -157,6 +170,7 @@ export async function signInToMemory({ memoryUrl, email, password }: MemoryLogin
   }
 
   storeMemoryToken(memoryUrl, body.accessToken);
+  await persistNativeConnection(memoryUrl, body.accessToken);
 
   return body.accessToken;
 }
@@ -202,9 +216,86 @@ export async function deleteMemoryAccount({ memoryUrl, accessToken, confirmEmail
 
   // 204: the account has ended, so this tab must not keep its token.
   clearMemoryToken();
+  await forgetMemoryConnection();
 }
 
 /** True when a load failure is an authentication problem with the live source. */
 export function isMemoryAuthError(error: string | null): boolean {
   return /\b(?:401|403)\b|unauthori[sz]ed|sign in/i.test(error ?? '');
+}
+
+/** The Memory the native shell reconnected to at launch, if it has one. */
+export function nativeMemoryUrl(): string | undefined {
+  return restoredMemoryUrl;
+}
+
+/**
+ * Reconnect the native shell to the Memory it last signed in to. main.tsx awaits
+ * this before the first render, so the viewer starts on the saved connection rather
+ * than the bundled demo. The token goes back into sessionStorage, where
+ * storedMemoryToken already looks.
+ */
+export async function restoreNativeMemoryConnection(): Promise<void> {
+  if (!isNativeShell()) return;
+
+  const fallback: [null, null] = [null, null];
+  const [memoryUrl, accessToken] = await withTimeout<[string | null, string | null]>(
+    Promise.all([readSecret(KEYCHAIN_URL), readSecret(KEYCHAIN_TOKEN)]),
+    fallback,
+    RESTORE_TIMEOUT_MS,
+  );
+
+  if (!memoryUrl || !accessToken) return;
+
+  restoredMemoryUrl = memoryUrl;
+  storeMemoryToken(memoryUrl, accessToken);
+}
+
+/** Disconnect: forget the saved address and token, here and in the Keychain. */
+export async function forgetMemoryConnection(): Promise<void> {
+  restoredMemoryUrl = undefined;
+
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Nothing to clear when sessionStorage is unavailable.
+  }
+
+  if (!isNativeShell()) return;
+  await removeSecret(KEYCHAIN_URL);
+  await removeSecret(KEYCHAIN_TOKEN);
+}
+
+/** Why a typed server address cannot be used, or null when it can. */
+export function connectionUrlError(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return 'Enter the address of your Companion Memory server.';
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return 'Start the address with https://, for example https://memory.example.com.';
+  }
+
+  if (url.protocol !== 'https:') return 'Use an https:// address. The app only connects over HTTPS.';
+  if (url.username || url.password || url.search || url.hash) {
+    return 'Enter the server address alone, without a token or query string.';
+  }
+  return null;
+}
+
+async function persistNativeConnection(memoryUrl: string, accessToken: string): Promise<void> {
+  if (!isNativeShell()) return;
+  await writeSecret(KEYCHAIN_URL, normalizeMemoryUrl(memoryUrl));
+  await writeSecret(KEYCHAIN_TOKEN, accessToken);
+}
+
+/** Race a Keychain read against a timer, so a stuck plugin cannot hold the boot screen. */
+function withTimeout<T>(work: Promise<T>, fallback: T, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }

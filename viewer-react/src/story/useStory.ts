@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadStory, type Story } from '@companion-atlas/story';
 import { fetchMemoryStory } from '../memory/client.js';
-import { storedMemoryToken } from '../memory/auth.js';
+import { nativeMemoryUrl, storedMemoryToken } from '../memory/auth.js';
 import { memoryCredentialsAllowed } from '../embed/index.js';
 import { companionHubFromEnv, discoverCompanionResources, type CompanionLlm, type CompanionResources } from '../discovery/companion.js';
 import { finishPortalSignIn } from '../auth/portalReturn.js';
@@ -27,7 +27,8 @@ export interface CompanionState {
  *  - **Companion Memory** (real data): `?memory=<ci-server-url>` (optionally
  *    `&token=<jwt>` or `&apiKey=<key>`) or the `VITE_MEMORY_URL`,
  *    `VITE_MEMORY_TOKEN` / `VITE_MEMORY_API_KEY` env vars, or the short-lived
- *    token from the in-viewer sign-in —
+ *    token from the in-viewer sign-in, or the connection a native shell saved
+ *    at its last sign-in —
  *    queries CI-Server's located `search()` and maps it to a Story. With none of
  *    those set, and `VITE_COMPANION_HUB_URL` set, the Memory server is discovered
  *    from the Companion Hub (docs/DISCOVERY.md).
@@ -72,7 +73,11 @@ export function useStory(): {
   // choice, not something a third-party page can write.
   const urlCredentials = memoryCredentialsAllowed(window.location.search);
   const memoryParam = urlCredentials ? params.get('memory') : null;
-  const memoryUrl = memoryParam ?? env.VITE_MEMORY_URL;
+  // An address in the URL or the build is an explicit choice. The Companion Hub (below)
+  // comes next, then a native shell's saved connection, which main.tsx restores before this
+  // hook runs. Portal and Hub discovery stay the primary path.
+  const configuredMemoryUrl = memoryParam ?? env.VITE_MEMORY_URL;
+  const memoryUrl = configuredMemoryUrl ?? nativeMemoryUrl();
   // A URL supplied in the address bar is an explicit connection choice. Do not
   // silently combine it with credentials baked into a different deployment:
   // that is especially dangerous for `?memory=/memory`, where the intended
@@ -95,22 +100,22 @@ export function useStory(): {
         // Nothing configured: ask the Companion Hub where the Memory server is. Only when
         // the build names a Hub, and never over an explicit `?story=`.
         let discovered: CompanionResources | null = null;
-        if (!memoryUrl && !explicit && COMPANION_HUB) {
+        if (!configuredMemoryUrl && !explicit && COMPANION_HUB) {
           discovered = await discoverCompanionResources(COMPANION_HUB);
         }
         if (!cancelled && COMPANION_HUB) {
           setCompanion({ hub: COMPANION_HUB, memory: Boolean(discovered?.memory), llm: discovered?.llm ?? null });
         }
-        const target = memoryUrl ?? discovered?.memory?.url ?? null;
+        const target = configuredMemoryUrl ?? discovered?.memory?.url ?? memoryUrl ?? null;
         if (target) {
           // A configured Memory keeps its build credentials, read again after the Portal
-          // return above. A discovered Memory gets only the token this tab signed in with
-          // for that exact server, never the build's own token or API key.
+          // return above. A discovered or saved Memory gets only the token this tab signed in
+          // with for that exact server, never the build's own token or API key.
           const urlToken = urlCredentials ? params.get('token') : null;
-          const token = memoryUrl
+          const token = configuredMemoryUrl
             ? (urlToken ?? storedMemoryToken(target) ?? (memoryParam == null ? env.VITE_MEMORY_TOKEN : undefined))
             : storedMemoryToken(target);
-          const apiKey = memoryUrl ? memoryApiKey : undefined;
+          const apiKey = configuredMemoryUrl ? memoryApiKey : undefined;
           // Reported before the request, so a load that fails still names the Memory it
           // tried: the load screen offers sign-in for that server.
           if (!cancelled) setResolved({ source: 'memory', memory: { url: target, token, apiKey } });
