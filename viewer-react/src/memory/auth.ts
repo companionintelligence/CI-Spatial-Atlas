@@ -51,7 +51,7 @@ export function storedMemoryToken(memoryUrl: string): string | undefined {
   return stored?.memoryUrl === normalizeMemoryUrl(memoryUrl) ? stored.accessToken : undefined;
 }
 
-function storeMemoryToken(memoryUrl: string, accessToken: string): void {
+export function storeMemoryToken(memoryUrl: string, accessToken: string): void {
   try {
     sessionStorage.setItem(
       SESSION_KEY,

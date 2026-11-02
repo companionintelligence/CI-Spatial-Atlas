@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from 'react';
 
 import { isMemoryAuthError, signInToMemory } from '../memory/auth.js';
+import { portalSignInAvailable, startPortalSignIn } from '../auth/portalReturn.js';
 import { DeleteMemoryAccount } from './DeleteMemoryAccount.js';
+
+const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
 
 function retry(): void {
   window.location.reload();
@@ -20,6 +23,21 @@ export function StoryLoadError({ error, memoryUrl }: { error: string | null; mem
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
+  // The Portal sign-in appears only when this build configures it (VITE_OIDC_*); otherwise
+  // the email form is the only sign-in, as before.
+  const portal = portalSignInAvailable(env);
+
+  // Sign in with the Companion account through the Portal. The token comes back to this
+  // tab and is filed under this Memory connection (auth/portalReturn.ts).
+  const beginPortalSignIn = async () => {
+    if (!memoryUrl) return;
+    setSignInError(null);
+    try {
+      await startPortalSignIn(env, memoryUrl);
+    } catch (err) {
+      setSignInError(err instanceof Error ? err.message : 'Sign-in failed.');
+    }
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -48,10 +66,18 @@ export function StoryLoadError({ error, memoryUrl }: { error: string | null; mem
             : error ?? 'Append ?story=&lt;url&gt; to view one.'}
         </span>
         <div className="atlas-auth-actions">
+          {authError && !open && !deleting && portal && memoryUrl && (
+            <button className="atlas-btn primary" type="button" onClick={() => void beginPortalSignIn()}>
+              Sign in with Companion
+            </button>
+          )}
           {authError && !open && !deleting && (
-            <button className="atlas-btn primary" type="button" onClick={() => setOpen(true)}>
+            <button className={portal ? 'atlas-btn ghost' : 'atlas-btn primary'} type="button" onClick={() => setOpen(true)}>
               Sign in to Companion Memory
             </button>
+          )}
+          {authError && !open && !deleting && signInError && (
+            <span className="atlas-auth-error" role="alert">{signInError}</span>
           )}
           {authError && !open && !deleting && memoryUrl && (
             <button className="atlas-btn ghost danger" type="button" onClick={() => setDeleting(true)}>

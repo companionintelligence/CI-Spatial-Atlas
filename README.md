@@ -116,6 +116,7 @@ bundled demo story on offline imagery, and says so. To go further, put these in
 | `VITE_GOOGLE_MAPS_API_KEY` | Photorealistic 3D buildings and Street View peeks |
 | `VITE_MAPBOX_TOKEN` | Sharper satellite basemap |
 | `VITE_MEMORY_URL` / `VITE_MEMORY_TOKEN` | Your real located memories from CI-Server |
+| `VITE_COMPANION_HUB_URL` | Your Companion Hub, which names the Memory server when `VITE_MEMORY_URL` is not set ([docs/DISCOVERY.md](docs/DISCOVERY.md)) |
 
 URL params override all of them per load: `?memory=<url>&token=<jwt>` for live
 memory, `?story=<url>` for a published story, `?renderer=cesium|xr` to force a
