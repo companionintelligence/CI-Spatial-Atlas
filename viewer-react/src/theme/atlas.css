@@ -25,11 +25,13 @@
      asks for viewport-fit=cover, and Capacitor's SystemBars plugin publishes the bar sizes
      as --safe-area-inset-* on <html> (0 wherever it pads the web view itself). Nothing sets
      them anywhere else, so in a browser and the installed PWA this is 0px and nothing moves.
-     The iOS app sets ios.contentInset, but that does not move position: fixed content, so
-     the top bar sat under the status bar and Dynamic Island. env(safe-area-inset-top) is
-     the iOS value; with viewport-fit=cover it reports the same bar on Android, so the larger
-     of the two is used. */
+     The iOS app sets ios.contentInset to 'never', so nothing insets the web view natively and
+     env(safe-area-inset-top) is the one iOS source. With viewport-fit=cover it reports the same
+     bar on Android too, so the larger of the two is used. */
   --atlas-inset-top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
+  /* The same for the sides: in landscape the Dynamic Island or a notch takes one of them. */
+  --atlas-inset-left: max(var(--safe-area-inset-left, 0px), env(safe-area-inset-left, 0px));
+  --atlas-inset-right: max(var(--safe-area-inset-right, 0px), env(safe-area-inset-right, 0px));
 }
 
 /* ---- Stacking order -------------------------------------------------------
@@ -81,10 +83,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
      viewport. Measured at 768px portrait, the inspector's right edge sat at 846px. */
   display: grid; grid-template-columns: 60px minmax(0, 1fr); grid-template-rows: 54px 1fr;
   grid-template-areas: "rail top" "rail stage";
-  /* Keep the whole grid, and so everything anchored in its stage, clear of the Android
+  /* Keep the whole grid, and so everything anchored in its stage, clear of the
      system bars and cutouts (see --atlas-inset-top). Below 761px the tab bar and the time
      machine already add env(safe-area-inset-bottom) themselves, so the bottom stays out. */
-  padding: var(--atlas-inset-top) var(--safe-area-inset-right, 0px) 0 var(--safe-area-inset-left, 0px);
+  padding: var(--atlas-inset-top) var(--atlas-inset-right) 0 var(--atlas-inset-left);
 }
 @media (min-width: 761px) {
   .atlas-app { padding-bottom: var(--safe-area-inset-bottom, 0px); }
