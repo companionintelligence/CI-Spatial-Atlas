@@ -73,7 +73,10 @@ body { background: var(--atlas-bg); overflow: hidden; }
   position: fixed; inset: 0; color: var(--atlas-fg);
   font-family: 'Manrope', 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  display: grid; grid-template-columns: 60px 1fr; grid-template-rows: 54px 1fr;
+  /* minmax(0, 1fr), not 1fr: a bare 1fr grows to the top bar's min-content width, so
+     between 761px and 900px the stage (and everything anchored in it) ran past the
+     viewport. Measured at 768px portrait, the inspector's right edge sat at 846px. */
+  display: grid; grid-template-columns: 60px minmax(0, 1fr); grid-template-rows: 54px 1fr;
   grid-template-areas: "rail top" "rail stage";
   /* Keep the whole grid, and so everything anchored in its stage, clear of the Android
      system bars and cutouts (see --atlas-inset-top). Below 761px the tab bar and the time
@@ -763,7 +766,9 @@ body { background: var(--atlas-bg); overflow: hidden; }
    overflowing. 2.5D is the one to drop: it matters when a story carries 3D
    tilesets or raised tracks, which is desktop work, and 3D/2D is the choice
    Google Earth itself offers. It stays reachable by widening the window. */
-/* One button instead of three below 760px. Adding a segmented control to a bar
+/* One button instead of three below 900px. At 768px (iPad portrait) the segmented
+   control ran past the right edge of the top bar, so the cycle takes over up to 900px.
+   Adding a segmented control to a bar
    that was already nearly full pushed the share button clean off the right
    edge — measured at 412px, share moved from ending at 404 (inside the
    viewport) to 429 (outside it, unreachable). Shrinking the segments was not
@@ -773,7 +778,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
    wide-viewport option, which is honest — it exists for 3D tilesets and raised
    tracks, and that is desktop work. */
 .atlas-scenemode-cycle { display: none; }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .atlas-scenemode { display: none; }
   .atlas-scenemode-cycle {
     display: inline-flex; align-items: center; justify-content: center;
