@@ -1,0 +1,14 @@
+# Companion Atlas
+
+> Companion Atlas is a 3D XR globe for reviewing and planning travel. The web viewer opens a story on a 3D globe in the browser, and the same story in WebXR. It is part of the Companion Intelligence platform (https://ci.computer/).
+
+Sign-in uses your Companion Intelligence account. A story can come from a URL, from a local draft, or from a Companion Memory query. The app is in active development, so features and the API can change. Support: support@ci.computer
+
+## Pages
+
+- [Viewer](https://atlas.ci.computer/): the globe viewer for stories
+
+## Optional
+
+- [Source code](https://github.com/companionintelligence/CI-Spatial-Atlas): README, architecture and API notes
+- [Companion Intelligence](https://ci.computer/): the platform this app belongs to
