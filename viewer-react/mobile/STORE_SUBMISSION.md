@@ -16,10 +16,10 @@ disagree, both are reported.
 
 | # | Item | Status | Where |
 |---|---|---|---|
-| 1 | The sign-in form is reachable in a store build, and the app has no in-app account deletion (Guideline 5.1.1(v)). | **Decide**, a blocker under this checklist's rule | `viewer-react/src/ui/StoryLoadError.tsx` (line 15, `authError`); `viewer-react/src/memory/auth.ts` |
+| 1 | The sign-in form is reachable in a store build, and the app has no in-app account deletion (Guideline 5.1.1(v)). | **Built**, option (b). Not yet run against a live server or a device. | `viewer-react/src/ui/DeleteMemoryAccount.tsx`, `viewer-react/src/ui/StoryLoadError.tsx`, `viewer-react/src/memory/auth.ts` |
 | 2 | App Review Guideline 4.2 (minimum functionality): the app is a web app inside a WebView. | **Decide**, high risk | Section 1, item 2 below |
 | 3 | Google Play's WebView and minimum-functionality policy. | **Decide**, medium risk | Section 4 |
-| 4 | `https://atlas.ci.computer/api` returns 500 `auth_not_configured` until the Companion sign-in issuer is set. | **Owner** | Build-time `VITE_MEMORY_URL` |
+| 4 | The Atlas API answers 401 without credentials (checked 2026-11-01), so its sign-in issuer is configured. The Hub token's `iss` and `aud` are still unverified. | **Owner** | Build-time `VITE_MEMORY_URL` |
 | 5 | Keys baked into the web bundle are public. | **Owner** | Mobile README, "Configuration is baked in" |
 | 6 | The avatar shows "LB" with the title "Liam Broza" for every user. | **Owner** (web app; not changed here) | `viewer-react/src/ui/Shell.tsx:81` |
 | 7 | Privacy policy URL and support URL. | **Owner**, TODO (not invented) | Section 5 |
@@ -30,15 +30,17 @@ disagree, both are reported.
 
 **Item 1, the sign-in form.** The only sign-in in the app is an email and password form. It appears
 when a build has `VITE_MEMORY_URL` and the Memory server answers with an authentication error. The
-bearer token is kept in `sessionStorage`. The app cannot create accounts or delete them; accounts are
-made outside the app with `scripts/new-account.ts`.
+bearer token is kept in `sessionStorage`. The app cannot create accounts; accounts are made outside
+the app with `scripts/new-account.ts`.
 
 Apple's Guideline 5.1.1(v), as read on 2026-11-01, requires in-app account deletion for apps that
 support account creation. This shell does not create accounts, so the rule may not apply. This
-checklist's rule is broader (any sign-in counts), so treat it as a blocker until one of these is done:
+checklist's rule is broader (any sign-in counts), so the store build keeps sign-in and offers deletion
+(option b):
 
-- (a) the store build has no `VITE_MEMORY_URL`, so the app opens only the bundled sample journey. This is the smallest change.
-- (b) in-app deletion is reachable from the sign-in screen, backed by a delete endpoint on the Memory server.
+- The sign-in screen has a **Delete my account** action. It signs in, asks for the email again, then calls `DELETE /account` on the Memory server, the route behind Settings > Account on the web. The server ends the account at once and purges its data after its grace period: 30 days by default (`accountDeletion.graceDays` in Companion Memory). The owner confirms the value before the privacy policy states it.
+- Limit: the in-app path needs a password the person knows. Accounts made through CI-Portal have a random password unless their owner set one, so those accounts cannot sign in here and cannot delete from the app.
+- Not run yet: a live Memory server (the sign-in and the `DELETE /account` round trip, including CORS for the Atlas origins), and a device.
 
 **Item 2, minimum functionality.** Today the native layer adds a bundled sample journey that works with
 no network on an offline base map, native splash and system bars, pinch-zoom, and the system photo
@@ -185,7 +187,7 @@ two in step.
 - App activity, Other user-generated content (memory text and story content): collected when signed in.
 - Data encrypted in transit: yes. The app allows HTTPS only.
 - Data sold, used for ads, or used for tracking: no.
-- Users can request data deletion: **Owner, TODO.** Name the method, for example a support address, or in-app deletion once section 1, item 1 is decided.
+- Users can request data deletion in the app, from the sign-in screen (section 1, item 1). The account ends at once and its data is purged after the server's grace period: 30 days by default. **Owner:** confirm that period before publishing it.
 
 **Privacy policy (owner, TODO).** It must cover the Memory server and the services in the table above, and it must be a public page that needs no login. The URL is not invented here.
 
@@ -278,7 +280,7 @@ Match the sign-in sentence to the decision in section 1, item 1.
 ## 12. Not verified
 
 - Physical devices: no iPhone, iPad or Android phone was used.
-- The sign-in flow with a live server: `atlas.ci.computer` returns 500 until its sign-in issuer is set.
+- The sign-in and account-deletion flows with a live Memory server: not run. Only the unauthenticated 401 from the Atlas API was checked.
 - Camera and microphone prompts from the file picker on iOS: the simulator has no camera.
 - Apple's upload validation and Google's pre-launch report: neither was run, because both need the accounts.
 - App Review and Play review judgments, including Guideline 4.2 and Play's WebView policy: these were read from the policies, not tested by reviewers.
