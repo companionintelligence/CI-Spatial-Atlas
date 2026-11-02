@@ -2,7 +2,7 @@ import type { SceneModeName } from '../renderers/CesiumStoryViewer.js';
 import { NEARBY_RADIUS_METRES } from '../location/logic.js';
 import {
   BrandMark, GlobeIcon, PeopleIcon, LayersIcon,
-  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon,
+  SearchIcon, FlagIcon, ExchangeIcon, SlidesIcon, PencilIcon, PinIcon as FitIcon, ARIcon,
   LocateIcon, BellIcon,
 } from './icons.js';
 
@@ -104,7 +104,7 @@ const SCENE_MODES: { id: SceneModeName; short: string; label: string }[] = [
  *  view out of Atlas, which is what the Import & export panel is for, and that
  *  panel is where the other three exits already live. */
 export function TopBar({
-  onSearch, onFrameAll, live, sample, showPlaces, onTogglePlaces, layers, visibility,
+  onSearch, onFrameAll, onViewInAR, live, sample, showPlaces, onTogglePlaces, layers, visibility,
   sceneMode = '3d', onSceneMode,
   locating = false, onToggleLocating, nearby = false, onToggleNearby, deviceNote,
 }: {
@@ -112,6 +112,9 @@ export function TopBar({
   /** Frame the camera on every located memory. Beside the projection control
    *  because both answer "where am I looking from", not "what is on the map". */
   onFrameAll?: () => void;
+  /** Reload into the AR entry. Passed only where the device can start AR and the
+   *  page is not in an iOS WebView (see `useViewInAR`); absent means no control. */
+  onViewInAR?: () => void;
   /** "Show my location": on while the device position is tracked in the
    *  foreground. Its pressed state is the switch, not the fix. */
   locating?: boolean;
@@ -188,6 +191,19 @@ export function TopBar({
           onClick={onFrameAll}
         >
           <FitIcon />
+        </button>
+      )}
+      {onViewInAR && (
+        // Beside fit-all: both change where the world is seen from. Activating it
+        // reloads the page in the AR entry, so the renderer is never switched
+        // under a mounted globe.
+        <button
+          className="atlas-icon-btn"
+          title="View in AR — place the globe in your room"
+          aria-label="View in AR"
+          onClick={onViewInAR}
+        >
+          <ARIcon />
         </button>
       )}
       {onToggleLocating && (

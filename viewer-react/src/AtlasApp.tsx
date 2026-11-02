@@ -10,6 +10,7 @@ import { MapLayers } from './ui/MapLayers.js';
 import { VisibilityToggles, type AuthoredCategory } from './ui/VisibilityToggles.js';
 import { NoteCard } from './ui/NoteCard.js';
 import { DEFAULT_BASEMAP } from './renderers/basemaps.js';
+import { useViewInAR } from './renderers/useViewInAR.js';
 
 const googleMapsAvailable = Boolean(
   (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GOOGLE_MAPS_API_KEY,
@@ -112,6 +113,9 @@ export function AtlasApp() {
   const chrome = useMemo(() => atlasChrome(window.location.search), []);
   /** The camera and moment a shared or embedded link asked to open at. */
   const opened = useMemo(() => restoredView(window.location.search), []);
+  // Offered only where the device can start AR, and never in embeds, which have
+  // no top bar. See renderers/useViewInAR.ts.
+  const viewInAR = useViewInAR(chrome.topBar);
   // A Companion Memory import REPLACES the loaded story rather than merging
   // into it. `deriveModel` reads its memory list from `story.scenes` whenever
   // there are any, so an archive merged into a scened story renders as nothing;
@@ -1233,6 +1237,7 @@ export function AtlasApp() {
         // are looking from. Drawing went back to the rail with the other
         // panel-openers.
         onFrameAll={frameAll}
+        onViewInAR={viewInAR}
         live={source === 'memory'}
         sample={isSample}
         showPlaces={showPlaces}

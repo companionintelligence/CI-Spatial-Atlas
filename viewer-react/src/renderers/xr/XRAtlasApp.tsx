@@ -12,10 +12,11 @@
 import { useMemo } from 'react';
 import { useStory } from '../../story/useStory.js';
 import { deriveModel } from '../../model/atlasModel.js';
-import { XRStoryScene } from '../XRStoryScene.js';
+import { XRStoryScene, type XREntry } from '../XRStoryScene.js';
 import { StoryLoadError } from '../../ui/StoryLoadError.js';
 
-export function XRAtlasApp() {
+/** `entry` says which session the scene leads with: see `XRStoryScene`. */
+export function XRAtlasApp({ entry = 'vr' }: { entry?: XREntry } = {}) {
   const { story, error, loading, source, memory } = useStory();
   const model = useMemo(() => (story ? deriveModel(story) : null), [story]);
 
@@ -46,5 +47,5 @@ export function XRAtlasApp() {
     );
   }
 
-  return <XRStoryScene story={story} memories={model.memories} />;
+  return <XRStoryScene story={story} memories={model.memories} entry={entry} />;
 }
