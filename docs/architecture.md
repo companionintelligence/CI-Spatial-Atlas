@@ -435,9 +435,9 @@ stores and API in containers, the viewer on the host for HMR.
   ambient cookie, `?token=`, `VITE_MEMORY_TOKEN`, or the email and password form
   (`memory/client.ts`, `memory/auth.ts`). With `VITE_OIDC_*` set, the load screen also
   offers the Companion account through the Portal (`auth/portalReturn.ts`, see
-  [DISCOVERY.md](DISCOVERY.md)). That sign-in is unproven until the Portal lists
-  `companion-atlas` in `PUBLIC_CLIENTS` (another repository) and the Memory server is
-  verified to accept a Portal token. The Portal token is not passed to the Atlas API:
+  [DISCOVERY.md](DISCOVERY.md)). That sign-in is unproven. The Portal lists
+  `companion-atlas` in `PUBLIC_CLIENTS` on its main branch, but a deployed Atlas's origin
+  is not registered, and the Memory server refuses the Portal's opaque access token. The Portal token is not passed to the Atlas API:
   `atlasApiFromEnv` builds the upload configuration from `VITE_ATLAS_API` alone.
 
 - **Stores are in-memory.** `server/src/store.ts`'s `InMemoryStore` loses all

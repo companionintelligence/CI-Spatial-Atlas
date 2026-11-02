@@ -117,7 +117,7 @@ describe('the file picker offers what the server takes', () => {
 });
 
 describe('a failure names the thing to do about it', () => {
-  it('401 says the viewer has no sign-in, not “upload failed”', () => {
+  it('401 says the upload was sent without a sign-in token, not “upload failed”', () => {
     const failure = describeFailure(401, JSON.stringify({ error: 'unauthenticated' }));
     expect(failure.code).toBe('unauthenticated');
     expect(failure.message).toBe(NOT_SIGNED_IN);

@@ -2,7 +2,7 @@
 
 How the Companion Atlas viewer finds its Companion Memory server, and how a person signs in to that server with their Companion account.
 
-**Status.** The viewer side is built and tested. Two things outside this repository decide whether it works live. The Companion Hub does not publish its resource document yet, so discovery finds nothing until it does. CI-Portal must list `companion-atlas` before the Portal sign-in can succeed.
+**Status.** The viewer side is built and tested. Three things outside this repository decide whether it works live. The Companion Hub does not publish its resource document yet, so discovery finds nothing until it does. CI-Portal lists `companion-atlas` on its main branch, but a deployed Atlas also needs its redirect registered. CI-Memory refuses the Portal's access token, so sign-in alone does not reach Memory.
 
 ## Build settings
 
@@ -75,8 +75,8 @@ Code: `viewer-react/src/auth/portalReturn.ts` (the flow), `viewer-react/src/auth
 ## Not done yet
 
 - The Companion Hub does not publish `/.well-known/companion-resources`. Until it does, discovery finds nothing.
-- CI-Portal must list `companion-atlas` in `PUBLIC_CLIENTS`. That is a change in the Portal repository.
-- Whether a Memory server accepts a Portal token is not verified.
+- CI-Portal lists `companion-atlas` in `PUBLIC_CLIENTS` on its main branch. A deployed Atlas's origin still has to be registered with the Portal (`docs/INTEGRATION.md` §5).
+- The Memory server refuses the Portal's access token. The Portal issues an opaque token, and the Memory server accepts only JWTs. Changing that takes work in both the Portal and the Memory server (`docs/INTEGRATION.md` §5). This was checked against `origin/main` in each repository, not against a live server.
 - The Portal token is not sent to the Atlas API. The upload client takes a `token` only from its caller, and the app passes none.
 - The LLM resource is recorded and never called.
 - A store build has no redirect the app can receive, so keep `VITE_OIDC_*` unset there (see `viewer-react/mobile/README.md`).
