@@ -63,6 +63,15 @@ function storeMemoryToken(memoryUrl: string, accessToken: string): void {
   }
 }
 
+/** Forget this tab's Companion Memory sign-in. */
+export function clearMemoryToken(): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Storage is blocked, so there is no token here to forget.
+  }
+}
+
 async function responseMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as { message?: string; error?: string };
@@ -84,8 +93,8 @@ export interface MemoryLoginInput {
   password: string;
 }
 
-/** Sign in to CI-Server and retain the access token for this browser tab. */
-export async function signInToMemory({ memoryUrl, email, password }: MemoryLoginInput): Promise<void> {
+/** Sign in to CI-Server, retain the access token for this browser tab, and return it. */
+export async function signInToMemory({ memoryUrl, email, password }: MemoryLoginInput): Promise<string> {
   const base = authBase(memoryUrl);
   let csrf: Response;
 
@@ -148,6 +157,51 @@ export async function signInToMemory({ memoryUrl, email, password }: MemoryLogin
   }
 
   storeMemoryToken(memoryUrl, body.accessToken);
+
+  return body.accessToken;
+}
+
+export interface MemoryDeleteInput {
+  memoryUrl: string;
+  /** The token from this person's sign-in, passed in so storage is not needed. */
+  accessToken: string;
+  confirmEmail: string;
+}
+
+/**
+ * Delete the signed-in Companion Memory account: `DELETE /account`, the route
+ * behind Settings > Account on the web. The account ends at once and its data is
+ * purged after the server's grace period. The email is typed again, not the
+ * password, so every sign-in method can delete.
+ */
+export async function deleteMemoryAccount({ memoryUrl, accessToken, confirmEmail }: MemoryDeleteInput): Promise<void> {
+  const base = authBase(memoryUrl);
+  let res: Response;
+
+  try {
+    res = await fetch(`${base}/account`, {
+      method: 'DELETE',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ confirmEmail }),
+    });
+  } catch {
+    throw new Error(`Couldn’t reach Companion Memory at ${base}. Check that the server is running.`);
+  }
+
+  if (res.status === 401) {
+    clearMemoryToken();
+    throw new Error('Your sign-in has expired. Sign in again, then delete the account.');
+  }
+
+  if (!res.ok) {
+    throw new Error(await responseMessage(res, `Couldn’t delete the account (${res.status}).`));
+  }
+
+  // 204: the account has ended, so this tab must not keep its token.
+  clearMemoryToken();
 }
 
 /** True when a load failure is an authentication problem with the live source. */

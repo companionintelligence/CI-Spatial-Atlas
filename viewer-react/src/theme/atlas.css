@@ -397,6 +397,7 @@ body { background: var(--atlas-bg); overflow: hidden; }
 .sb-actions .atlas-btn { flex: none; }
 .atlas-btn:disabled { opacity: .45; cursor: not-allowed; }
 .atlas-btn.ghost { background: transparent; border-color: var(--atlas-line); color: var(--atlas-fg-dim); }
+.atlas-btn.danger { border-color: var(--atlas-coral); color: var(--atlas-coral); }
 .atlas-btn.collected { border-color: var(--atlas-mint); color: var(--atlas-mint); background: rgba(88,235,191,.1); }
 .sb-status { margin: 0; font-size: 11.5px; line-height: 1.5; }
 .sb-status.ok { color: var(--atlas-mint); }
