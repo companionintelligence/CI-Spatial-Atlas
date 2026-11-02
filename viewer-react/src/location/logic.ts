@@ -142,14 +142,14 @@ export interface NearbyNotice {
 }
 
 /**
- * The words of a nearby alert. It names the memory and the radius, and gives no
- * exact distance, since a notification can show on a locked screen.
+ * The words of a nearby alert. It names neither the memory nor a place, and gives
+ * no exact distance, since a notification can show on a locked screen. The radius
+ * is the only number.
  */
-export function nearbyNotice(memory: { title: string }): NearbyNotice {
-  const name = String(memory.title ?? '').trim() || 'A memory';
+export function nearbyNotice(): NearbyNotice {
   return {
     title: 'Memory nearby',
-    body: `${name} is within ${NEARBY_RADIUS_METRES} m of you.`,
+    body: `A memory is within ${NEARBY_RADIUS_METRES} m of you.`,
   };
 }
 
