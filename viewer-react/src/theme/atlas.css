@@ -24,9 +24,12 @@
      app (Capacitor 8, viewer-react/mobile) runs this page edge-to-edge, because index.html
      asks for viewport-fit=cover, and Capacitor's SystemBars plugin publishes the bar sizes
      as --safe-area-inset-* on <html> (0 wherever it pads the web view itself). Nothing sets
-     them anywhere else, so in a browser, the installed PWA and the iOS app (which insets its
-     web view natively, ios.contentInset) this is 0px and nothing moves. */
-  --atlas-inset-top: var(--safe-area-inset-top, 0px);
+     them anywhere else, so in a browser and the installed PWA this is 0px and nothing moves.
+     The iOS app sets ios.contentInset, but that does not move position: fixed content, so
+     the top bar sat under the status bar and Dynamic Island. env(safe-area-inset-top) is
+     the iOS value; with viewport-fit=cover it reports the same bar on Android, so the larger
+     of the two is used. */
+  --atlas-inset-top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
 }
 
 /* ---- Stacking order -------------------------------------------------------
