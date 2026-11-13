@@ -32,7 +32,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "iwer": "^2.3.0",
     "typescript": "^5.9.3",
-    "vite": "^7.1.5",
+    "vite": "^7.3.7",
     "vite-plugin-cesium": "^1.2.23"
   }
 }
