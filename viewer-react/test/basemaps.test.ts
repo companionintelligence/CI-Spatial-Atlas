@@ -258,9 +258,19 @@ describe('terrain selection', () => {
   });
 
   it('gives a flat globe rather than no globe when nothing is configured', async () => {
-    const { provider, source } = await createTerrain({ env: {} });
-    expect(source).toBe('ellipsoid');
-    expect(provider).toBeTruthy();
+    // main.tsx replaces the shared ion token Cesium ships with the configured one
+    // (empty when unset), so "nothing configured" means an empty token. Left in
+    // place, the shipped token sends this test to Cesium ion over the network,
+    // and the answer depends on whether that release's token is still valid.
+    const shipped = Cesium.Ion.defaultAccessToken;
+    Cesium.Ion.defaultAccessToken = '';
+    try {
+      const { provider, source } = await createTerrain({ env: {} });
+      expect(source).toBe('ellipsoid');
+      expect(provider).toBeTruthy();
+    } finally {
+      Cesium.Ion.defaultAccessToken = shipped;
+    }
   });
 
   it('falls back loudly when a configured tileset cannot be loaded', async () => {

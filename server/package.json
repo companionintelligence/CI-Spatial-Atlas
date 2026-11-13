@@ -22,10 +22,10 @@
   "dependencies": {
     "@companion-atlas/story": "file:../packages/story-schema",
     "@fastify/cors": "^11.3.0",
-    "@modelcontextprotocol/sdk": "^1.12.0",
-    "exiftool-vendored": "^28.3.0",
-    "fastify": "^5.2.0",
-    "hono": "^4.13.9",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "exiftool-vendored": "^35.19.0",
+    "fastify": "^5.12.6",
+    "hono": "^4.13.16",
     "jose": "^5.9.6",
     "minio": "^8.0.7",
     "openid-client": "^6.1.0",
@@ -37,7 +37,7 @@
     "cross-env": "^10.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
+    "vitest": "^4.1.12",
     "wrangler": "^4.142.0"
   },
   "comments": {

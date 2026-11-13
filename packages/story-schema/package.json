@@ -27,7 +27,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.9.0",
-    "vitest": "^2.1.0",
+    "vitest": "^4.1.12",
     "zod-to-json-schema": "^3.24.0"
   }
 }

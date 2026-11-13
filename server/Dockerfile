@@ -1,37 +1,50 @@
 # Companion Atlas — 3D processing API + MCP server image.
 # Orchestration only: heavy reconstruction runs in the GPU worker image
 # (../docker/Dockerfile.worker). This container stays small and CPU-only.
+#
+# Build context must be the REPO ROOT (`docker build -f server/Dockerfile .`,
+# which is what docker-compose.yml does), with the third_party/ci-common
+# submodule checked out.
+#
+# Dependencies install from the root package-lock.json with `npm ci`: the same
+# lockfile that CI, the Cloudflare deploy and the viewer image install from, and
+# the one audits cover. This image used to run `deno install`, which does not
+# read package-lock.json, so each build resolved whatever server/package.json's
+# ranges allowed that day.
+#
+# npm ci checks the lockfile against every workspace manifest, so all of them
+# are copied (for the tokens workspace, that needs the submodule). Only the
+# server and story-schema workspaces are installed: the viewer's WebGL
+# dependencies never enter this image, and neither do the root's private
+# @companionintelligence dev tools, so no registry token is needed.
 
-FROM denoland/deno:debian-2.9.5 AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
+COPY package.json package-lock.json ./
+COPY packages/story-schema/package.json packages/story-schema/
+COPY server/package.json server/
+COPY viewer-react/package.json viewer-react/
+COPY third_party/ci-common/packages/tokens/package.json third_party/ci-common/packages/tokens/
+RUN npm ci --no-audit --no-fund --workspace server --workspace @companion-atlas/story
 
-# server/src depends on the shared Story schema package (packages/story-schema,
-# published as @companion-atlas/story). In local/CI dev this resolves via the
-# root npm workspace's hoisted node_modules symlink, which also silently
-# papered over the fact that server/package.json never actually declared the
-# dependency — this Dockerfile builds server/ in isolation (deliberately,
-# to avoid resolving the rest of the monorepo — see the `deno install`
-# comment below) and previously failed outright with "Cannot find module
-# '@companion-atlas/story'" on both `npm run build` and `deno task build`
-# (verified against the prior node:22-bookworm-slim image, same error).
-# Fixed by declaring the dependency explicitly (server/package.json) as a
-# relative `file:` link and building the schema package first, right here.
-COPY packages/story-schema/package.json packages/story-schema/deno.json packages/story-schema/tsconfig.json packages/story-schema/
+# server/src imports @companion-atlas/story (packages/story-schema), which ships
+# from its own dist/, so build the schema package first.
+COPY packages/story-schema/tsconfig.json packages/story-schema/
 COPY packages/story-schema/src packages/story-schema/src
-WORKDIR /app/packages/story-schema
-RUN deno install && deno task build
+RUN npm run build -w packages/story-schema
+COPY server/ server/
+RUN npm run build -w server
 
-WORKDIR /app/server
-# Only server's own manifests + the (now-built) story-schema sibling are in
-# the build context — the rest of the npm/Deno workspace (viewer-react, the
-# root viewer) is never copied in. That matters: Deno's npm-workspace
-# resolution re-validates every workspace member's package.json on each
-# `deno task` call. The browser viewer is deliberately not copied into this
-# image, keeping its WebGL dependencies out of the server build.
-COPY server/package.json server/package-lock.json server/deno.json ./
-RUN deno install
-COPY server/ ./
-RUN deno task build
+# Production dependencies only, from the same lockfile, for the runtime stage.
+FROM node:22-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY packages/story-schema/package.json packages/story-schema/
+COPY server/package.json server/
+COPY viewer-react/package.json viewer-react/
+COPY third_party/ci-common/packages/tokens/package.json third_party/ci-common/packages/tokens/
+RUN npm ci --no-audit --no-fund --omit=dev --workspace server \
+    && mkdir -p server/node_modules
 
 FROM denoland/deno:debian-2.9.5 AS runtime
 WORKDIR /app/server
@@ -45,8 +58,13 @@ ENV NODE_ENV=production
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build /app/packages/story-schema /app/packages/story-schema
-COPY --from=build /app/server/node_modules ./node_modules
+# Same layout as the npm workspace: hoisted packages in /app/node_modules, the
+# story-schema workspace at /app/packages/story-schema (linked from
+# /app/node_modules/@companion-atlas/story), the server in /app/server.
+COPY --from=deps /app/node_modules /app/node_modules
+COPY --from=deps /app/server/node_modules ./node_modules
+COPY --from=build /app/packages/story-schema/package.json /app/packages/story-schema/package.json
+COPY --from=build /app/packages/story-schema/dist /app/packages/story-schema/dist
 COPY --from=build /app/server/dist ./dist
 COPY server/package.json ./
 EXPOSE 8787

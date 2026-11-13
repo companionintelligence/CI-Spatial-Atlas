@@ -81,8 +81,10 @@ jobs:
         with:
           node-version: '22'
 
+      # `npm ci`, not `npm install`: deploy exactly what package-lock.json pins, and
+      # fail if the lockfile has drifted from package.json instead of re-resolving.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

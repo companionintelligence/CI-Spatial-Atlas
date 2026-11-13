@@ -48,16 +48,15 @@
  *   ATLAS_MAX_UPLOAD_BYTES        default 33554432 (32 MiB)
  *   ATLAS_UPLOAD_CONTENT_TYPES    comma-separated allowlist; default below
  *
- * Everything here is pure except `minioObjectStore()`: the config reader, the
- * key derivation, the allowlist and the streaming cap are all unit-testable
- * with no MinIO and no network, which is what lets `server/test/media-*.test.ts`
- * cover the authorisation and refusal paths on every machine.
+ * Everything here is pure; `minioObjectStore()` is in object-store-minio.ts.
+ * The config reader, the key derivation, the allowlist and the streaming cap
+ * are all unit-testable with no MinIO and no network, which is what lets
+ * `server/test/media-*.test.ts` cover the authorisation and refusal paths on
+ * every machine.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { Readable } from 'node:stream';
-
-import { Client as MinioClient } from 'minio';
 
 // ---------------------------------------------------------------------------
 // Limits
@@ -420,55 +419,5 @@ export interface ObjectStore {
   get(key: string): Promise<StoredObject | null>;
 }
 
-/** A MinIO-backed store, or null when the environment has not configured one. */
-export function objectStoreFromEnv(env: NodeJS.ProcessEnv = process.env): ObjectStore | null {
-  const result = objectStoreConfigFromEnv(env);
-  return result.configured ? minioObjectStore(result.config) : null;
-}
-
-export function minioObjectStore(config: ObjectStoreConfig): ObjectStore {
-  const { endPoint, port, useSSL } = parseEndpoint(config.endpoint);
-  const client = new MinioClient({
-    endPoint,
-    port,
-    useSSL,
-    accessKey: config.accessKey,
-    secretKey: config.secretKey,
-    ...(config.region ? { region: config.region } : {}),
-  });
-
-  return {
-    describe: () => `MinIO bucket "${config.bucket}" at ${config.endpoint}`,
-    async put(key, body, contentType) {
-      // The size is passed explicitly. With an unknown size the client starts a
-      // multipart upload, and a failure part-way through leaves an incomplete
-      // upload occupying the bucket until a lifecycle rule reaps it; a single
-      // sized PUT either lands or does not.
-      await client.putObject(config.bucket, key, body, body.length, { 'Content-Type': contentType });
-    },
-    async get(key) {
-      let stat;
-      try {
-        stat = await client.statObject(config.bucket, key);
-      } catch (err) {
-        if (isNotFound(err)) return null;
-        throw err;
-      }
-      const stream = await client.getObject(config.bucket, key);
-      return {
-        stream,
-        size: stat.size,
-        // Trust what we recorded at upload time; fall back to a type no browser
-        // will ever render as a document rather than guessing from the key.
-        contentType: normaliseContentType(stat.metaData?.['content-type']) ?? 'application/octet-stream',
-      };
-    },
-  };
-}
-
-/** MinIO reports a missing object as `NoSuchKey`/`NotFound` with a 404 code —
- *  a normal answer for a stale URL, not an outage, so it must not become a 500. */
-function isNotFound(err: unknown): boolean {
-  const e = err as { code?: string; statusCode?: number } | null;
-  return e?.code === 'NoSuchKey' || e?.code === 'NotFound' || e?.statusCode === 404;
-}
+// The MinIO-backed implementation lives in object-store-minio.ts, so that the
+// Worker can import this file without bundling the MinIO client.

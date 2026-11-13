@@ -18,7 +18,7 @@
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.17.10",
     "@react-three/xr": "^6.6.17",
-    "cesium": "^1.143.0",
+    "cesium": "^1.147.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "resium": "^1.19.0",
@@ -32,7 +32,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "iwer": "^2.3.0",
     "typescript": "^5.9.3",
-    "vite": "^7.1.5",
-    "vite-plugin-cesium": "^1.2.23"
+    "vite": "^7.3.7",
+    "vite-plugin-cesium": "^1.2.23",
+    "vitest": "^4.1.12"
   }
 }
