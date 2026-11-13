@@ -72,9 +72,26 @@ const UNAUTHENTICATED =
 
 const forbidden = (storyId: string) => err(`Forbidden: story ${storyId} does not belong to you.`);
 
+/**
+ * Most array elements plus object members one `tools/call` may carry.
+ *
+ * zod 3 records one issue per failing array element and keeps parsing, so a
+ * 1 MiB request of half a million numbers held hundreds of megabytes before
+ * any tool ran (GHSA-mrhx-c7xc-m3w5, GHSA-46jr-4wx8-v453). The SDK counts the
+ * elements before zod parses and refuses the call above this. The largest real
+ * input is a list of media sources: `atlas_query_memory` returns at most 500.
+ */
+export const MCP_MAX_TOOL_INPUT_ELEMENTS = 10_000;
+
+/** Request body limit for `POST /mcp` (Fastify's default, pinned so a larger global limit cannot reach it). */
+export const MCP_MAX_BODY_BYTES = 1024 * 1024;
+
 export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
   const { store, connectors, viewerBaseUrl, apiBaseUrl, auth } = deps;
-  const server = new McpServer({ name: 'companion-atlas', version: '0.1.0' });
+  const server = new McpServer(
+    { name: 'companion-atlas', version: '0.1.0' },
+    { maxToolInputElements: MCP_MAX_TOOL_INPUT_ELEMENTS },
+  );
 
   /**
    * Load a story this caller may modify, or the refusal to return in its place.

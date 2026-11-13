@@ -17,7 +17,7 @@ import { buildApi, type ApiDeps } from './api.js';
 import { assertAuthSafeToBoot } from './auth.js';
 import { corsPolicyFromEnv } from './cors.js';
 import { createConnectors } from './connectors.js';
-import { createAtlasMcpServer } from './mcp.js';
+import { createAtlasMcpServer, MCP_MAX_BODY_BYTES } from './mcp.js';
 import { objectStoreFromEnv } from './object-store.js';
 import { InMemoryStore } from './store.js';
 
@@ -52,7 +52,7 @@ const app = buildApi(deps);
 // Mount the MCP API over Streamable HTTP (stateless). The global auth
 // preHandler in buildApi() has already populated `req.auth`, so each
 // per-request MCP server is built scoped to the caller rather than unscoped.
-app.post('/mcp', async (req, reply) => {
+app.post('/mcp', { bodyLimit: MCP_MAX_BODY_BYTES }, async (req, reply) => {
   const server = createAtlasMcpServer({ ...deps, auth: req.auth });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   reply.hijack();
