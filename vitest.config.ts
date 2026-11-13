@@ -21,6 +21,18 @@ export default defineConfig({
     // default spec glob walks into them and runs a second, older copy of every
     // suite — locally that doubled the run and reported passes from code that
     // is not the working tree.
-    exclude: ['**/node_modules/**', '**/dist/**', 'viewer-react/tests/**', '**/.claude/**'],
+    // `viewer-react/desktop` and `viewer-react/mobile` are standalone native
+    // shell projects whose `node --test` suites run via `npm run test:native`.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'viewer-react/tests/**',
+      'viewer-react/desktop/**',
+      'viewer-react/mobile/**',
+      'desktop/**',
+      'mobile/**',
+      'tests/**',
+      '**/.claude/**',
+    ],
   },
 });
