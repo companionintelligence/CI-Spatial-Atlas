@@ -23,7 +23,7 @@
     "@companion-atlas/story": "file:../packages/story-schema",
     "@fastify/cors": "^11.3.0",
     "@modelcontextprotocol/sdk": "^1.32.0",
-    "exiftool-vendored": "^28.3.0",
+    "exiftool-vendored": "^35.19.0",
     "fastify": "^5.12.6",
     "hono": "^4.13.16",
     "jose": "^5.9.6",
