@@ -80,11 +80,12 @@ const forbidden = (storyId: string) => err(`Forbidden: story ${storyId} does not
  * any tool ran (GHSA-mrhx-c7xc-m3w5, GHSA-46jr-4wx8-v453). The SDK counts the
  * elements before zod parses and refuses the call above this. The largest real
  * input is a list of media sources: `atlas_query_memory` returns at most 500.
+ *
+ * This covers tool arguments only, on both transports. The SDK parses the rest
+ * of every request with its own schemas first, so over HTTP the whole body is
+ * bounded before the SDK sees it (see mcp-http.ts).
  */
 export const MCP_MAX_TOOL_INPUT_ELEMENTS = 10_000;
-
-/** Request body limit for `POST /mcp` (Fastify's default, pinned so a larger global limit cannot reach it). */
-export const MCP_MAX_BODY_BYTES = 1024 * 1024;
 
 export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
   const { store, connectors, viewerBaseUrl, apiBaseUrl, auth } = deps;

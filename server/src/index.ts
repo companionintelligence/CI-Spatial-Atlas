@@ -11,13 +11,11 @@
  * anything binds a port.
  */
 
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-
 import { buildApi, type ApiDeps } from './api.js';
 import { assertAuthSafeToBoot } from './auth.js';
 import { corsPolicyFromEnv } from './cors.js';
 import { createConnectors } from './connectors.js';
-import { createAtlasMcpServer, MCP_MAX_BODY_BYTES } from './mcp.js';
+import { registerMcpRoute } from './mcp-http.js';
 import { objectStoreFromEnv } from './object-store-minio.js';
 import { InMemoryStore } from './store.js';
 
@@ -52,17 +50,8 @@ const app = buildApi(deps);
 // Mount the MCP API over Streamable HTTP (stateless). The global auth
 // preHandler in buildApi() has already populated `req.auth`, so each
 // per-request MCP server is built scoped to the caller rather than unscoped.
-app.post('/mcp', { bodyLimit: MCP_MAX_BODY_BYTES }, async (req, reply) => {
-  const server = createAtlasMcpServer({ ...deps, auth: req.auth });
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  reply.hijack();
-  reply.raw.on('close', () => {
-    void transport.close();
-    void server.close();
-  });
-  await server.connect(transport);
-  await transport.handleRequest(req.raw, reply.raw, req.body);
-});
+// The route refuses an oversized body before the SDK parses it; see mcp-http.ts.
+registerMcpRoute(app, deps);
 
 // Said out loud at boot, because a closed CORS policy fails in the *browser* —
 // the server log for a refused upload is a clean 200 on the preflight's absence
