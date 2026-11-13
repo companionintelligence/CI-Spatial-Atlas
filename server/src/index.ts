@@ -18,7 +18,7 @@ import { assertAuthSafeToBoot } from './auth.js';
 import { corsPolicyFromEnv } from './cors.js';
 import { createConnectors } from './connectors.js';
 import { createAtlasMcpServer, MCP_MAX_BODY_BYTES } from './mcp.js';
-import { objectStoreFromEnv } from './object-store.js';
+import { objectStoreFromEnv } from './object-store-minio.js';
 import { InMemoryStore } from './store.js';
 
 // Fail fast, before the port is bound: an issuer-less deployment would serve
