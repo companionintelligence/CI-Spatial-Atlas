@@ -1,0 +1,49 @@
+name: Desktop Build
+
+# Unsigned developer artifacts only. This does not publish a GitHub release or
+# submit to a store.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: desktop-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Companion Atlas (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install workspace dependencies
+        run: npm install --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install desktop shell dependencies
+        run: npm install --prefix viewer-react/desktop --no-audit --no-fund
+      - name: Check shell config
+        run: npm run test:native --prefix viewer-react/desktop
+      - name: Build installer
+        run: npm run build --prefix viewer-react/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atlas-desktop-${{ matrix.os }}
+          path: viewer-react/desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error
+          retention-days: 14
