@@ -92,6 +92,10 @@ jobs:
         working-directory: viewer-react/mobile
         run: npm ci --no-audit --no-fund
 
+      - name: Check mobile shell config
+        working-directory: viewer-react/mobile
+        run: npm run test:native
+
       - name: Capacitor sync (Android)
         working-directory: viewer-react/mobile
         run: npx cap sync android
@@ -141,6 +145,10 @@ jobs:
       - name: Install mobile dependencies
         working-directory: viewer-react/mobile
         run: npm ci --no-audit --no-fund
+
+      - name: Check mobile shell config
+        working-directory: viewer-react/mobile
+        run: npm run test:native
 
       # The iOS project uses Swift Package Manager (Capacitor 8): no CocoaPods step, and
       # xcodebuild fetches capacitor-swift-pm itself.

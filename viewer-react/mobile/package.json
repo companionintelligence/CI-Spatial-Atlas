@@ -9,7 +9,8 @@
     "sync": "cap sync",
     "build": "npm run build:web && npm run sync",
     "open:ios": "cap open ios",
-    "open:android": "cap open android"
+    "open:android": "cap open android",
+    "test:native": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",

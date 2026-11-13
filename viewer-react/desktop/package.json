@@ -1,0 +1,17 @@
+{
+  "name": "companion-atlas-desktop-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Companion Atlas desktop shell (Tauri 2)",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "npm run icons && tauri build",
+    "build:debug": "npm run icons && tauri build --debug",
+    "test:native": "node --test tests/*.test.mjs",
+    "icons": "tauri icon \"../public/icons/icon-512.png\" --output src-tauri/icons"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}
