@@ -70,6 +70,19 @@ test('desktop Cargo pins match the lockfile', () => {
   }
 });
 
+// Each OS builds only its own formats from this list. No AppImage: it would bundle the LGPL
+// WebKitGTK and GTK libraries, while a .deb or .rpm only depends on the system's copies.
+test('desktop bundles Windows, macOS and Linux installers, without an AppImage', () => {
+  assert.deepEqual([...config.bundle.targets].sort(), ['app', 'deb', 'dmg', 'msi', 'nsis', 'rpm']);
+  assert.ok(!config.bundle.targets.includes('appimage'));
+});
+
+// Ad hoc: no certificate. A downloaded unsigned app on Apple silicon is reported as damaged;
+// an ad-hoc signed one can be allowed in Privacy & Security.
+test('desktop macOS app is ad-hoc signed', () => {
+  assert.equal(config.bundle.macOS.signingIdentity, '-');
+});
+
 test('desktop build generates all required platform icons', () => {
   assert.deepEqual(config.bundle.icon, ['icons/32x32.png', 'icons/128x128.png', 'icons/128x128@2x.png', 'icons/icon.icns', 'icons/icon.ico']);
   assert.match(pkg.scripts.icons, /^tauri icon /);

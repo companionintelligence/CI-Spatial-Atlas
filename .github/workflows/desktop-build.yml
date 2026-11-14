@@ -2,6 +2,11 @@ name: Desktop Build
 
 # Unsigned developer artifacts only. This does not publish a GitHub release or
 # submit to a store.
+#
+# macOS builds one universal app (Apple silicon and Intel), ad-hoc signed by
+# bundle.macOS.signingIdentity "-". Linux builds a .deb and an .rpm on Ubuntu
+# 22.04, so they run on that release and newer; there is no AppImage, which
+# would bundle the LGPL WebKitGTK and GTK libraries.
 on:
   workflow_dispatch:
 
@@ -21,7 +26,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            bundle-dir: viewer-react/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - os: windows-latest
+            bundle-dir: viewer-react/desktop/src-tauri/target/release/bundle
+          - os: ubuntu-22.04
+            bundle-dir: viewer-react/desktop/src-tauri/target/release/bundle
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,7 +43,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install WebKitGTK build packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
       - name: Install workspace dependencies
         run: npm install --no-audit --no-fund
         env:
@@ -40,10 +60,10 @@ jobs:
       - name: Check shell config
         run: npm run test:native --prefix viewer-react/desktop
       - name: Build installer
-        run: npm run build --prefix viewer-react/desktop
+        run: npm run build --prefix viewer-react/desktop -- ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: atlas-desktop-${{ matrix.os }}
-          path: viewer-react/desktop/src-tauri/target/release/bundle/**
+          path: ${{ matrix.bundle-dir }}/**
           if-no-files-found: error
           retention-days: 14
