@@ -7,6 +7,7 @@
   "scripts": {
     "build:web": "cd ../.. && npm run build",
     "sync": "cap sync",
+    "notices": "node ../../scripts/third-party-notices.mjs --scope web,android --gradle android --out android/app/src/main/assets/licenses",
     "build": "npm run build:web && npm run sync",
     "open:ios": "cap open ios",
     "open:android": "cap open android",

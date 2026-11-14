@@ -95,5 +95,19 @@ test('desktop macOS app is ad-hoc signed', () => {
 test('desktop build generates all required platform icons', () => {
   assert.deepEqual(config.bundle.icon, ['icons/32x32.png', 'icons/128x128.png', 'icons/128x128@2x.png', 'icons/icon.icns', 'icons/icon.ico']);
   assert.match(pkg.scripts.icons, /^tauri icon /);
-  assert.match(pkg.scripts.build, /npm run icons && tauri build/);
+  assert.match(pkg.scripts.build, /npm run icons && npm run notices && tauri build/);
+});
+
+// The licence of the app and the third-party notices go into every installer, in a licenses
+// folder next to the executable (Contents/Resources/licenses on macOS). `npm run notices`
+// writes them from the lockfiles before each build; Tauri fails the build if they are missing.
+test('desktop installers carry the licence and the third-party notices', () => {
+  assert.deepEqual(config.bundle.resources, {
+    'notices/LICENSE.md': 'licenses/LICENSE.md',
+    'notices/THIRD-PARTY-NOTICES.txt': 'licenses/THIRD-PARTY-NOTICES.txt',
+  });
+  assert.match(pkg.scripts.notices, /scripts\/third-party-notices\.mjs --scope web,desktop --out src-tauri\/notices$/);
+  for (const script of ['dev', 'build', 'build:debug']) {
+    assert.match(pkg.scripts[script], /npm run notices && tauri (dev|build)/, script);
+  }
 });

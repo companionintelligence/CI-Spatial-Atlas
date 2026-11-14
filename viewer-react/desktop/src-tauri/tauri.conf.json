@@ -45,6 +45,10 @@
     ],
     "category": "Education",
     "shortDescription": "Explore your memories on a 3D globe",
+    "resources": {
+      "notices/LICENSE.md": "licenses/LICENSE.md",
+      "notices/THIRD-PARTY-NOTICES.txt": "licenses/THIRD-PARTY-NOTICES.txt"
+    },
     "macOS": {
       "minimumSystemVersion": "12.0",
       "signingIdentity": "-"
