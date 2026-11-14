@@ -70,6 +70,15 @@ test('desktop Cargo pins match the lockfile', () => {
   }
 });
 
+// The release workflow names files after this version and checks the tag against it. The MSI
+// format needs it numeric (major.minor.patch).
+test('desktop version is the same in tauri.conf.json, Cargo and package.json', () => {
+  assert.match(config.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(/^version = "([^"]+)"/m.exec(cargoToml)?.[1], config.version);
+  assert.equal(lockedVersion('companion-atlas-desktop'), config.version);
+  assert.equal(pkg.version, config.version);
+});
+
 // Each OS builds only its own formats from this list. No AppImage: it would bundle the LGPL
 // WebKitGTK and GTK libraries, while a .deb or .rpm only depends on the system's copies.
 test('desktop bundles Windows, macOS and Linux installers, without an AppImage', () => {
