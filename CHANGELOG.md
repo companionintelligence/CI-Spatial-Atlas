@@ -21,10 +21,12 @@ pending a first tagged release).
   links to the system browser, keeps inline styles allowed under its CSP and skips the service
   worker. It is demo only for now: no Companion Memory connection and no sign-in.
   `scripts/third-party-notices.mjs` lists what the apps carry from the lockfiles (npm, Cargo,
-  Gradle), regenerates `THIRD_PARTY.md` and `NOTICE.md` (including the MPL-2.0 crates and
-  where their source is, and Microsoft's WebView2 loader, which the Windows app links in),
-  and writes the notices into each app. The bundled sample journey no longer points at the
-  placeholder host `tiles.example.com`.
+  Gradle; for the desktop app, the crates `cargo tree` resolves into each target's executable,
+  without the ones only build scripts and proc macros use), regenerates `THIRD_PARTY.md` and
+  `NOTICE.md` (including the MPL-2.0 crate `option-ext` and where its source is, and
+  Microsoft's WebView2 loader, which the Windows app links in), and writes the notices into
+  each app. The bundled sample journey no longer points at the placeholder host
+  `tiles.example.com`.
 - **Device location and nearby memories (foreground only).** Two toggles in the top bar.
   "Show my location" tracks the device position while the app is in the foreground and
   draws it on the globe. "Nearby memories" raises a local notification, once per memory per

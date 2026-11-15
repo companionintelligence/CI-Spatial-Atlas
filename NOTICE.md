@@ -19,10 +19,7 @@ unmodified, in executable form. Their source code is available here:
 
 | Component | Version | Source code |
 | --- | --- | --- |
-| `cssparser` | 0.37.0 | <https://crates.io/api/v1/crates/cssparser/0.37.0/download><br><https://github.com/servo/rust-cssparser> |
-| `dtoa-short` | 0.3.5 | <https://crates.io/api/v1/crates/dtoa-short/0.3.5/download><br><https://github.com/upsuper/dtoa-short> |
 | `option-ext` | 0.2.0 | <https://crates.io/api/v1/crates/option-ext/0.2.0/download><br><https://github.com/soc/option-ext.git> |
-| `selectors` | 0.38.0 | <https://crates.io/api/v1/crates/selectors/0.38.0/download><br><https://github.com/servo/stylo> |
 
 ## Components offered under a choice of licences
 

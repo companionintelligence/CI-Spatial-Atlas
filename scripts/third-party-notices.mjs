@@ -7,10 +7,12 @@
 //   web      The viewer bundle (viewer-react/dist), which every app carries: the runtime
 //            dependencies of @companion-atlas/viewer-react in package-lock.json, with those
 //            of the workspace packages it uses (@companion-atlas/story).
-//   desktop  The Rust crates linked into the Tauri executable, from
-//            viewer-react/desktop/src-tauri/Cargo.lock (`cargo metadata --locked`), for the
-//            Windows, macOS (Apple silicon and Intel) and Linux targets. Build-time crates
-//            (build scripts, proc macros) are left out: they are not in the executable.
+//   desktop  The Rust crates linked into the Tauri executable for the Windows, macOS (Apple
+//            silicon and Intel) and Linux targets, from viewer-react/desktop/src-tauri/Cargo.lock:
+//            `cargo tree --locked -e normal,no-proc-macro --target <triple>` for each target,
+//            with the features the build resolves for it, and `cargo metadata --locked` for
+//            each crate's licence and files. Build scripts, proc macros and the crates only
+//            they use are left out: they run during the build and are not in the executable.
 //            Code that a crate links in from elsewhere (LINKED_CODE: Microsoft's WebView2
 //            loader on Windows) comes with its own licence.
 //   android  The Capacitor shell's npm packages (viewer-react/mobile/package-lock.json) and
@@ -519,30 +521,45 @@ function cargoMetadata(target) {
   return JSON.parse(run.stdout);
 }
 
-/** Crates linked into the executable: normal dependencies, without proc macros. */
-function linkedCrates(metadata) {
-  const packages = new Map(metadata.packages.map((p) => [p.id, p]));
-  const nodes = new Map(metadata.resolve.nodes.map((n) => [n.id, n]));
-  const root = metadata.resolve.root;
-  const seen = new Set([root]);
-  const stack = [root];
-  while (stack.length) {
-    for (const dep of nodes.get(stack.pop()).deps) {
-      if (seen.has(dep.pkg) || !dep.dep_kinds.some((k) => k.kind === null)) continue;
-      const pkg = packages.get(dep.pkg);
-      if (pkg.targets.some((t) => t.kind.includes('proc-macro'))) continue;
-      seen.add(dep.pkg);
-      stack.push(dep.pkg);
-    }
+/**
+ * The crates built into the executable for one target, as "name version". `cargo tree` resolves
+ * features as the build does, where build scripts and proc macros get their own copy of a crate
+ * with their own features. The graph from `cargo metadata` merges the two. There, tauri-utils
+ * has the HTML handling (its build-2 feature) that only the build scripts (through tauri-build
+ * and tauri-plugin) and the tauri-macros proc macro ask for, so a walk of that graph also
+ * listed dom_query and what it brings in, among them the MPL-2.0 crates cssparser, selectors
+ * and dtoa-short.
+ */
+function cargoTree(target) {
+  const args = ['tree', '--locked', '--manifest-path', DESKTOP_MANIFEST, '--target', target, '-e', 'normal,no-proc-macro', '--prefix', 'none', '--format', '{p}'];
+  const run = spawnSync('cargo', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (run.error) throw new Error(`cargo tree could not start (${run.error.message}); install Rust or leave "desktop" out of --scope`);
+  if (run.status !== 0) throw new Error(`cargo ${args.join(' ')} failed:\n${run.stderr}`);
+  // One "name vX.Y.Z" per line, then a path or git source for such crates, and "(*)" for a
+  // crate printed before.
+  const crates = new Set();
+  for (const line of run.stdout.split(/\r?\n/)) {
+    const m = /^(\S+) v(\S+)/.exec(line.trim());
+    if (m) crates.add(`${m[1]} ${m[2]}`);
   }
-  seen.delete(root);
-  return [...seen].map((id) => packages.get(id)).filter((p) => p.source);
+  if (!crates.size) throw new Error(`cargo ${args.join(' ')} listed no crates`);
+  return crates;
+}
+
+/** Crates linked into the executable for one target, as cargo metadata describes them. */
+function linkedCrates(metadata, target) {
+  const packages = new Map(metadata.packages.map((p) => [`${p.name} ${p.version}`, p]));
+  const linked = [...cargoTree(target)];
+  const unknown = linked.filter((key) => !packages.has(key));
+  if (unknown.length) throw new Error(`cargo tree lists crates that cargo metadata does not have for ${target}: ${unknown.join(', ')}`);
+  // The shell itself is a path package, with no source.
+  return linked.map((key) => packages.get(key)).filter((p) => p.source);
 }
 
 function collectCargo(notices) {
   const crates = new Map();
   for (const [target, platform] of DESKTOP_TARGETS) {
-    for (const pkg of linkedCrates(cargoMetadata(target))) {
+    for (const pkg of linkedCrates(cargoMetadata(target), target)) {
       const entry = crates.get(pkg.id) ?? { pkg, platforms: new Set(), targets: new Set() };
       entry.platforms.add(platform);
       entry.targets.add(target);

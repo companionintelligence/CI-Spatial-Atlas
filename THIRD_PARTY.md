@@ -8,7 +8,7 @@ processing server's dependencies are not listed.
 | Part | Ships in | Components | Listed from |
 | --- | --- | ---: | --- |
 | Web viewer | the website, the viewer image, and inside every app | 157 npm packages | `package-lock.json`: the runtime dependencies of `viewer-react` and of the workspace packages it uses |
-| Desktop | the Windows, macOS and Linux installers | 287 Rust crates | `viewer-react/desktop/src-tauri/Cargo.lock`, for each target platform |
+| Desktop | the Windows, macOS and Linux installers | 236 Rust crates | `viewer-react/desktop/src-tauri/Cargo.lock`, for each target platform |
 | Android | the APK | 9 npm packages, 62 Android libraries | `viewer-react/mobile/package-lock.json`; Gradle's `releaseRuntimeClasspath` |
 
 The licence texts, with the upstream NOTICE files, are in `THIRD-PARTY-NOTICES.txt`. Each app
@@ -22,19 +22,17 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 
 | Licence | Web viewer | Desktop | Android |
 | --- | ---: | ---: | ---: |
-| MIT | 115 | 69 | 8 |
-| Apache-2.0 OR MIT |  | 164 |  |
+| MIT | 115 | 60 | 8 |
+| Apache-2.0 OR MIT |  | 135 |  |
 | Apache-2.0 | 18 | 1 | 57 |
 | Unicode-3.0 |  | 15 |  |
-| ISC | 11 | 1 | 1 |
-| Apache-2.0 OR MIT OR Zlib |  | 12 |  |
+| ISC | 11 |  | 1 |
+| Apache-2.0 OR MIT OR Zlib |  | 9 |  |
 | BSD-3-Clause | 7 | 2 |  |
-| MIT OR Unlicense |  | 9 |  |
+| MIT OR Unlicense |  | 5 |  |
 | Android SDK License |  |  | 4 |
-| MPL-2.0 |  | 4 |  |
 | 0BSD | 1 |  | 1 |
 | Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT |  | 2 |  |
-| Zlib |  | 2 |  |
 | (MIT OR Apache-2.0) AND Unicode-3.0 |  | 1 |  |
 | 0BSD OR Apache-2.0 OR MIT |  | 1 |  |
 | Apache-2.0 AND BSD-3-Clause | 1 |  |  |
@@ -45,6 +43,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | BSD-3-Clause OR MIT |  | 1 |  |
 | CC-BY-4.0 AND MIT | 1 |  |  |
 | MIT AND Zlib | 1 |  |  |
+| MPL-2.0 |  | 1 |  |
 | OFL-1.1 | 1 |  |  |
 
 ## Web viewer (npm)
@@ -213,7 +212,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 
 | Crate | Version | Licence | Platforms |
 | --- | --- | --- | --- |
-| [`adler2`](https://crates.io/crates/adler2/2.0.1) | 2.0.1 | 0BSD OR Apache-2.0 OR MIT | linux, macos |
+| [`adler2`](https://crates.io/crates/adler2/2.0.1) | 2.0.1 | 0BSD OR Apache-2.0 OR MIT | macos |
 | [`aho-corasick`](https://crates.io/crates/aho-corasick/1.1.5) | 1.1.5 | MIT OR Unlicense | all |
 | [`alloc-no-stdlib`](https://crates.io/crates/alloc-no-stdlib/3.0.0) | 3.0.0 | BSD-3-Clause | all |
 | [`alloc-stdlib`](https://crates.io/crates/alloc-stdlib/0.3.0) | 0.3.0 | BSD-3-Clause | all |
@@ -229,51 +228,36 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`atk`](https://crates.io/crates/atk/0.18.2) | 0.18.2 | MIT | linux |
 | [`atk-sys`](https://crates.io/crates/atk-sys/0.18.2) | 0.18.2 | MIT | linux |
 | [`atomic-waker`](https://crates.io/crates/atomic-waker/1.1.2) | 1.1.2 | Apache-2.0 OR MIT | linux |
-| [`base64`](https://crates.io/crates/base64/0.21.7) | 0.21.7 | Apache-2.0 OR MIT | macos |
 | [`base64`](https://crates.io/crates/base64/0.23.1) | 0.23.1 | Apache-2.0 OR MIT | all |
-| [`bit-set`](https://crates.io/crates/bit-set/0.8.0) | 0.8.0 | Apache-2.0 OR MIT | all |
-| [`bit-vec`](https://crates.io/crates/bit-vec/0.8.0) | 0.8.0 | Apache-2.0 OR MIT | all |
-| [`bitflags`](https://crates.io/crates/bitflags/1.3.2) | 1.3.2 | Apache-2.0 OR MIT | all |
+| [`bitflags`](https://crates.io/crates/bitflags/1.3.2) | 1.3.2 | Apache-2.0 OR MIT | linux |
 | [`bitflags`](https://crates.io/crates/bitflags/2.13.2) | 2.13.2 | Apache-2.0 OR MIT | all |
 | [`block2`](https://crates.io/crates/block2/0.6.2) | 0.6.2 | MIT | macos |
 | [`blocking`](https://crates.io/crates/blocking/1.7.0) | 1.7.0 | Apache-2.0 OR MIT | linux |
 | [`brotli`](https://crates.io/crates/brotli/9.1.1) | 9.1.1 | BSD-3-Clause AND MIT | all |
 | [`brotli-decompressor`](https://crates.io/crates/brotli-decompressor/6.2.0) | 6.2.0 | BSD-3-Clause OR MIT | all |
-| [`bs58`](https://crates.io/crates/bs58/0.5.1) | 0.5.1 | Apache-2.0 OR MIT | all |
 | [`bytes`](https://crates.io/crates/bytes/1.12.1) | 1.12.1 | MIT | all |
 | [`cairo-rs`](https://crates.io/crates/cairo-rs/0.18.5) | 0.18.5 | MIT | linux |
 | [`cairo-sys-rs`](https://crates.io/crates/cairo-sys-rs/0.18.2) | 0.18.2 | MIT | linux |
-| [`camino`](https://crates.io/crates/camino/1.2.6) | 1.2.6 | Apache-2.0 OR MIT | all |
-| [`cargo_metadata`](https://crates.io/crates/cargo_metadata/0.19.2) | 0.19.2 | MIT | all |
-| [`cargo-platform`](https://crates.io/crates/cargo-platform/0.1.9) | 0.1.9 | Apache-2.0 OR MIT | all |
 | [`cfb`](https://crates.io/crates/cfb/0.14.0) | 0.14.0 | MIT | all |
 | [`cfg-if`](https://crates.io/crates/cfg-if/1.0.5) | 1.0.5 | Apache-2.0 OR MIT | all |
-| [`chrono`](https://crates.io/crates/chrono/0.4.45) | 0.4.45 | Apache-2.0 OR MIT | all |
 | [`concurrent-queue`](https://crates.io/crates/concurrent-queue/2.5.0) | 2.5.0 | Apache-2.0 OR MIT | linux |
 | [`cookie`](https://crates.io/crates/cookie/0.18.2) | 0.18.2 | Apache-2.0 OR MIT | all |
 | [`core-foundation`](https://crates.io/crates/core-foundation/0.10.1) | 0.10.1 | Apache-2.0 OR MIT | macos |
 | [`core-foundation-sys`](https://crates.io/crates/core-foundation-sys/0.8.7) | 0.8.7 | Apache-2.0 OR MIT | macos |
 | [`core-graphics`](https://crates.io/crates/core-graphics/0.25.0) | 0.25.0 | Apache-2.0 OR MIT | macos |
 | [`core-graphics-types`](https://crates.io/crates/core-graphics-types/0.2.0) | 0.2.0 | Apache-2.0 OR MIT | macos |
-| [`crc32fast`](https://crates.io/crates/crc32fast/1.5.4) | 1.5.4 | Apache-2.0 OR MIT | linux, macos |
+| [`crc32fast`](https://crates.io/crates/crc32fast/1.5.4) | 1.5.4 | Apache-2.0 OR MIT | macos |
 | [`crossbeam-channel`](https://crates.io/crates/crossbeam-channel/0.5.17) | 0.5.17 | Apache-2.0 OR MIT | all |
 | [`crossbeam-utils`](https://crates.io/crates/crossbeam-utils/0.8.23) | 0.8.23 | Apache-2.0 OR MIT | all |
-| [`cssparser`](https://crates.io/crates/cssparser/0.37.0) | 0.37.0 | MPL-2.0 | all |
 | [`ctor`](https://crates.io/crates/ctor/1.0.13) | 1.0.13 | Apache-2.0 OR MIT | all |
 | [`dbus`](https://crates.io/crates/dbus/0.9.12) | 0.9.12 | Apache-2.0 OR MIT | linux |
-| [`defmt`](https://crates.io/crates/defmt/1.2.0) | 1.2.0 | Apache-2.0 OR MIT | all |
 | [`deranged`](https://crates.io/crates/deranged/0.5.9) | 0.5.9 | Apache-2.0 OR MIT | all |
-| [`derive_more`](https://crates.io/crates/derive_more/2.1.1) | 2.1.1 | MIT | all |
 | [`dirs`](https://crates.io/crates/dirs/7.0.0) | 7.0.0 | Apache-2.0 OR MIT | all |
 | [`dirs-sys`](https://crates.io/crates/dirs-sys/0.5.0) | 0.5.0 | Apache-2.0 OR MIT | all |
 | [`dispatch2`](https://crates.io/crates/dispatch2/0.3.1) | 0.3.1 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`dlopen2`](https://crates.io/crates/dlopen2/0.8.2) | 0.8.2 | MIT | linux |
-| [`dom_query`](https://crates.io/crates/dom_query/0.28.0) | 0.28.0 | MIT | all |
 | [`dpi`](https://crates.io/crates/dpi/0.1.2) | 0.1.2 | Apache-2.0 AND MIT | all |
-| [`dtoa`](https://crates.io/crates/dtoa/1.0.11) | 1.0.11 | Apache-2.0 OR MIT | all |
-| [`dtoa-short`](https://crates.io/crates/dtoa-short/0.3.5) | 0.3.5 | MPL-2.0 | all |
 | [`dunce`](https://crates.io/crates/dunce/1.0.5) | 1.0.5 | Apache-2.0 OR CC0-1.0 OR MIT-0 | all |
-| [`dyn-clone`](https://crates.io/crates/dyn-clone/1.0.20) | 1.0.20 | Apache-2.0 OR MIT | all |
 | [`embed_plist`](https://crates.io/crates/embed_plist/1.2.2) | 1.2.2 | Apache-2.0 OR MIT | macos |
 | [`endi`](https://crates.io/crates/endi/1.1.1) | 1.1.1 | MIT | linux |
 | [`enumflags2`](https://crates.io/crates/enumflags2/0.7.12) | 0.7.12 | Apache-2.0 OR MIT | linux |
@@ -283,11 +267,10 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`event-listener`](https://crates.io/crates/event-listener/5.4.2) | 5.4.2 | Apache-2.0 OR MIT | linux |
 | [`event-listener-strategy`](https://crates.io/crates/event-listener-strategy/0.5.4) | 0.5.4 | Apache-2.0 OR MIT | linux |
 | [`fastrand`](https://crates.io/crates/fastrand/2.5.0) | 2.5.0 | Apache-2.0 OR MIT | linux |
-| [`fdeflate`](https://crates.io/crates/fdeflate/0.3.7) | 0.3.7 | Apache-2.0 OR MIT | linux, macos |
+| [`fdeflate`](https://crates.io/crates/fdeflate/0.3.7) | 0.3.7 | Apache-2.0 OR MIT | macos |
 | [`field-offset`](https://crates.io/crates/field-offset/0.3.6) | 0.3.6 | Apache-2.0 OR MIT | linux |
-| [`flate2`](https://crates.io/crates/flate2/1.1.10) | 1.1.10 | Apache-2.0 OR MIT | linux, macos |
+| [`flate2`](https://crates.io/crates/flate2/1.1.10) | 1.1.10 | Apache-2.0 OR MIT | macos |
 | [`fnv`](https://crates.io/crates/fnv/1.0.7) | 1.0.7 | Apache-2.0 OR MIT | all |
-| [`foldhash`](https://crates.io/crates/foldhash/0.2.0) | 0.2.0 | Zlib | all |
 | [`foreign-types`](https://crates.io/crates/foreign-types/0.5.0) | 0.5.0 | Apache-2.0 OR MIT | macos |
 | [`foreign-types-shared`](https://crates.io/crates/foreign-types-shared/0.3.1) | 0.3.1 | Apache-2.0 OR MIT | macos |
 | [`form_urlencoded`](https://crates.io/crates/form_urlencoded/1.2.2) | 1.2.2 | Apache-2.0 OR MIT | all |
@@ -296,7 +279,6 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`futures-executor`](https://crates.io/crates/futures-executor/0.3.34) | 0.3.34 | Apache-2.0 OR MIT | linux |
 | [`futures-io`](https://crates.io/crates/futures-io/0.3.34) | 0.3.34 | Apache-2.0 OR MIT | linux |
 | [`futures-lite`](https://crates.io/crates/futures-lite/2.6.1) | 2.6.1 | Apache-2.0 OR MIT | linux |
-| [`futures-sink`](https://crates.io/crates/futures-sink/0.3.34) | 0.3.34 | Apache-2.0 OR MIT | linux |
 | [`futures-task`](https://crates.io/crates/futures-task/0.3.34) | 0.3.34 | Apache-2.0 OR MIT | linux |
 | [`futures-util`](https://crates.io/crates/futures-util/0.3.34) | 0.3.34 | Apache-2.0 OR MIT | linux |
 | [`gdk`](https://crates.io/crates/gdk/0.18.2) | 0.18.2 | MIT | linux |
@@ -307,7 +289,6 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`gdkx11`](https://crates.io/crates/gdkx11/0.18.2) | 0.18.2 | MIT | linux |
 | [`gdkx11-sys`](https://crates.io/crates/gdkx11-sys/0.18.2) | 0.18.2 | MIT | linux |
 | [`getrandom`](https://crates.io/crates/getrandom/0.3.4) | 0.3.4 | Apache-2.0 OR MIT | all |
-| [`getrandom`](https://crates.io/crates/getrandom/0.4.3) | 0.4.3 | Apache-2.0 OR MIT | all |
 | [`gio`](https://crates.io/crates/gio/0.18.4) | 0.18.4 | MIT | linux |
 | [`gio-sys`](https://crates.io/crates/gio-sys/0.18.1) | 0.18.1 | MIT | linux |
 | [`glib`](https://crates.io/crates/glib/0.18.5) | 0.18.5 | MIT | linux |
@@ -316,13 +297,10 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`gobject-sys`](https://crates.io/crates/gobject-sys/0.18.0) | 0.18.0 | MIT | linux |
 | [`gtk`](https://crates.io/crates/gtk/0.18.2) | 0.18.2 | MIT | linux |
 | [`gtk-sys`](https://crates.io/crates/gtk-sys/0.18.2) | 0.18.2 | MIT | linux |
-| [`hashbrown`](https://crates.io/crates/hashbrown/0.12.3) | 0.12.3 | Apache-2.0 OR MIT | all |
 | [`hashbrown`](https://crates.io/crates/hashbrown/0.17.1) | 0.17.1 | Apache-2.0 OR MIT | all |
 | [`heck`](https://crates.io/crates/heck/0.5.0) | 0.5.0 | Apache-2.0 OR MIT | all |
-| [`hex`](https://crates.io/crates/hex/0.4.3) | 0.4.3 | Apache-2.0 OR MIT | all |
-| [`html5ever`](https://crates.io/crates/html5ever/0.39.0) | 0.39.0 | Apache-2.0 OR MIT | all |
+| [`hex`](https://crates.io/crates/hex/0.4.3) | 0.4.3 | Apache-2.0 OR MIT | linux |
 | [`http`](https://crates.io/crates/http/1.5.0) | 1.5.0 | Apache-2.0 OR MIT | all |
-| [`iana-time-zone`](https://crates.io/crates/iana-time-zone/0.1.65) | 0.1.65 | Apache-2.0 OR MIT | linux, macos |
 | [`icu_collections`](https://crates.io/crates/icu_collections/2.4.0) | 2.4.0 | Unicode-3.0 | all |
 | [`icu_locale_core`](https://crates.io/crates/icu_locale_core/2.4.0) | 2.4.0 | Unicode-3.0 | all |
 | [`icu_normalizer`](https://crates.io/crates/icu_normalizer/2.4.0) | 2.4.0 | Unicode-3.0 | all |
@@ -332,7 +310,6 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`icu_provider`](https://crates.io/crates/icu_provider/2.4.0) | 2.4.0 | Unicode-3.0 | all |
 | [`idna`](https://crates.io/crates/idna/1.1.0) | 1.1.0 | Apache-2.0 OR MIT | all |
 | [`idna_adapter`](https://crates.io/crates/idna_adapter/1.2.2) | 1.2.2 | Apache-2.0 OR MIT | all |
-| [`indexmap`](https://crates.io/crates/indexmap/1.9.3) | 1.9.3 | Apache-2.0 OR MIT | all |
 | [`indexmap`](https://crates.io/crates/indexmap/2.14.2) | 2.14.2 | Apache-2.0 OR MIT | all |
 | [`infer`](https://crates.io/crates/infer/0.22.0) | 0.22.0 | MIT | all |
 | [`is-docker`](https://crates.io/crates/is-docker/0.2.0) | 0.2.0 | MIT | linux |
@@ -340,41 +317,28 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`itoa`](https://crates.io/crates/itoa/1.0.18) | 1.0.18 | Apache-2.0 OR MIT | all |
 | [`javascriptcore-rs`](https://crates.io/crates/javascriptcore-rs/1.1.2) | 1.1.2 | MIT | linux |
 | [`javascriptcore-rs-sys`](https://crates.io/crates/javascriptcore-rs-sys/1.1.1) | 1.1.1 | MIT | linux |
-| [`jiff`](https://crates.io/crates/jiff/0.2.38) | 0.2.38 | MIT OR Unlicense | all |
-| [`jiff-core`](https://crates.io/crates/jiff-core/0.1.1) | 0.1.1 | MIT OR Unlicense | all |
-| [`jiff-tzdb`](https://crates.io/crates/jiff-tzdb/0.1.9) | 0.1.9 | MIT OR Unlicense | windows |
-| [`jiff-tzdb-platform`](https://crates.io/crates/jiff-tzdb-platform/0.1.3) | 0.1.3 | MIT OR Unlicense | windows |
 | [`json-patch`](https://crates.io/crates/json-patch/4.2.0) | 4.2.0 | Apache-2.0 OR MIT | all |
 | [`jsonptr`](https://crates.io/crates/jsonptr/0.7.1) | 0.7.1 | Apache-2.0 OR MIT | all |
 | [`keyboard-types`](https://crates.io/crates/keyboard-types/0.8.3) | 0.8.3 | Apache-2.0 OR MIT | all |
-| [`libappindicator`](https://crates.io/crates/libappindicator/0.9.0) | 0.9.0 | Apache-2.0 OR MIT | linux |
-| [`libappindicator-sys`](https://crates.io/crates/libappindicator-sys/0.9.0) | 0.9.0 | Apache-2.0 OR MIT | linux |
 | [`libc`](https://crates.io/crates/libc/0.2.191) | 0.2.191 | Apache-2.0 OR MIT | all |
 | [`libdbus-sys`](https://crates.io/crates/libdbus-sys/0.2.7) | 0.2.7 | Apache-2.0 OR MIT | linux |
-| [`libloading`](https://crates.io/crates/libloading/0.7.4) | 0.7.4 | ISC | linux |
 | [`linux-raw-sys`](https://crates.io/crates/linux-raw-sys/0.12.1) | 0.12.1 | Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT | linux |
 | [`litemap`](https://crates.io/crates/litemap/0.8.3) | 0.8.3 | Unicode-3.0 | all |
-| [`lock_api`](https://crates.io/crates/lock_api/0.4.14) | 0.4.14 | Apache-2.0 OR MIT | all |
+| [`lock_api`](https://crates.io/crates/lock_api/0.4.14) | 0.4.14 | Apache-2.0 OR MIT | linux, windows |
 | [`log`](https://crates.io/crates/log/0.4.35) | 0.4.35 | Apache-2.0 OR MIT | all |
-| [`markup5ever`](https://crates.io/crates/markup5ever/0.39.0) | 0.39.0 | Apache-2.0 OR MIT | all |
 | [`memchr`](https://crates.io/crates/memchr/2.8.3) | 2.8.3 | MIT OR Unlicense | all |
 | [`memoffset`](https://crates.io/crates/memoffset/0.9.1) | 0.9.1 | MIT | linux |
 | [`mime`](https://crates.io/crates/mime/0.3.17) | 0.3.17 | Apache-2.0 OR MIT | all |
-| [`miniz_oxide`](https://crates.io/crates/miniz_oxide/0.8.9) | 0.8.9 | Apache-2.0 OR MIT OR Zlib | linux, macos |
-| [`miniz_oxide`](https://crates.io/crates/miniz_oxide/0.9.1) | 0.9.1 | Apache-2.0 OR MIT OR Zlib | linux, macos |
-| [`mio`](https://crates.io/crates/mio/1.2.4) | 1.2.4 | MIT | all |
+| [`miniz_oxide`](https://crates.io/crates/miniz_oxide/0.8.9) | 0.8.9 | Apache-2.0 OR MIT OR Zlib | macos |
+| [`miniz_oxide`](https://crates.io/crates/miniz_oxide/0.9.1) | 0.9.1 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`muda`](https://crates.io/crates/muda/0.20.0) | 0.20.0 | Apache-2.0 OR MIT | all |
-| [`new_debug_unreachable`](https://crates.io/crates/new_debug_unreachable/1.0.6) | 1.0.6 | MIT | all |
 | [`num-conv`](https://crates.io/crates/num-conv/0.2.2) | 0.2.2 | Apache-2.0 OR MIT | all |
-| [`num-traits`](https://crates.io/crates/num-traits/0.2.19) | 0.2.19 | Apache-2.0 OR MIT | all |
 | [`objc2`](https://crates.io/crates/objc2/0.6.5) | 0.6.5 | MIT | macos |
 | [`objc2-app-kit`](https://crates.io/crates/objc2-app-kit/0.3.2) | 0.3.2 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`objc2-core-foundation`](https://crates.io/crates/objc2-core-foundation/0.3.2) | 0.3.2 | Apache-2.0 OR MIT OR Zlib | macos |
-| [`objc2-core-graphics`](https://crates.io/crates/objc2-core-graphics/0.3.2) | 0.3.2 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`objc2-encode`](https://crates.io/crates/objc2-encode/4.1.0) | 4.1.0 | MIT | macos |
 | [`objc2-exception-helper`](https://crates.io/crates/objc2-exception-helper/0.1.1) | 0.1.1 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`objc2-foundation`](https://crates.io/crates/objc2-foundation/0.3.2) | 0.3.2 | MIT | macos |
-| [`objc2-io-surface`](https://crates.io/crates/objc2-io-surface/0.3.2) | 0.3.2 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`objc2-quartz-core`](https://crates.io/crates/objc2-quartz-core/0.3.2) | 0.3.2 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`objc2-web-kit`](https://crates.io/crates/objc2-web-kit/0.3.2) | 0.3.2 | Apache-2.0 OR MIT OR Zlib | macos |
 | [`once_cell`](https://crates.io/crates/once_cell/1.21.4) | 1.21.4 | Apache-2.0 OR MIT | all |
@@ -384,35 +348,28 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`pango`](https://crates.io/crates/pango/0.18.3) | 0.18.3 | MIT | linux |
 | [`pango-sys`](https://crates.io/crates/pango-sys/0.18.0) | 0.18.0 | MIT | linux |
 | [`parking`](https://crates.io/crates/parking/2.2.1) | 2.2.1 | Apache-2.0 OR MIT | linux |
-| [`parking_lot`](https://crates.io/crates/parking_lot/0.12.5) | 0.12.5 | Apache-2.0 OR MIT | all |
-| [`parking_lot_core`](https://crates.io/crates/parking_lot_core/0.9.12) | 0.9.12 | Apache-2.0 OR MIT | all |
+| [`parking_lot`](https://crates.io/crates/parking_lot/0.12.5) | 0.12.5 | Apache-2.0 OR MIT | linux, windows |
+| [`parking_lot_core`](https://crates.io/crates/parking_lot_core/0.9.12) | 0.9.12 | Apache-2.0 OR MIT | linux, windows |
 | [`percent-encoding`](https://crates.io/crates/percent-encoding/2.3.2) | 2.3.2 | Apache-2.0 OR MIT | all |
 | [`phf`](https://crates.io/crates/phf/0.13.1) | 0.13.1 | MIT | all |
 | [`phf_shared`](https://crates.io/crates/phf_shared/0.13.1) | 0.13.1 | MIT | all |
 | [`pin-project-lite`](https://crates.io/crates/pin-project-lite/0.2.17) | 0.2.17 | Apache-2.0 OR MIT | all |
 | [`piper`](https://crates.io/crates/piper/0.2.5) | 0.2.5 | Apache-2.0 OR MIT | linux |
 | [`plist`](https://crates.io/crates/plist/1.10.3) | 1.10.3 | MIT | all |
-| [`png`](https://crates.io/crates/png/0.18.1) | 0.18.1 | Apache-2.0 OR MIT | linux, macos |
+| [`png`](https://crates.io/crates/png/0.18.1) | 0.18.1 | Apache-2.0 OR MIT | macos |
 | [`polling`](https://crates.io/crates/polling/3.11.0) | 3.11.0 | Apache-2.0 OR MIT | linux |
 | [`potential_utf`](https://crates.io/crates/potential_utf/0.1.6) | 0.1.6 | Unicode-3.0 | all |
 | [`powerfmt`](https://crates.io/crates/powerfmt/0.2.1) | 0.2.1 | Apache-2.0 OR MIT | all |
-| [`precomputed-hash`](https://crates.io/crates/precomputed-hash/0.1.1) | 0.1.1 | MIT | all |
-| [`proc-macro2`](https://crates.io/crates/proc-macro2/1.0.107) | 1.0.107 | Apache-2.0 OR MIT | all |
+| [`proc-macro2`](https://crates.io/crates/proc-macro2/1.0.107) | 1.0.107 | Apache-2.0 OR MIT | linux |
 | [`quick-xml`](https://crates.io/crates/quick-xml/0.42.0) | 0.42.0 | MIT | all |
-| [`quote`](https://crates.io/crates/quote/1.0.47) | 1.0.47 | Apache-2.0 OR MIT | all |
+| [`quote`](https://crates.io/crates/quote/1.0.47) | 1.0.47 | Apache-2.0 OR MIT | linux |
 | [`raw-window-handle`](https://crates.io/crates/raw-window-handle/0.6.2) | 0.6.2 | Apache-2.0 OR MIT OR Zlib | all |
-| [`ref-cast`](https://crates.io/crates/ref-cast/1.0.27) | 1.0.27 | Apache-2.0 OR MIT | all |
 | [`regex`](https://crates.io/crates/regex/1.13.1) | 1.13.1 | Apache-2.0 OR MIT | all |
 | [`regex-automata`](https://crates.io/crates/regex-automata/0.4.18) | 0.4.18 | Apache-2.0 OR MIT | all |
 | [`regex-syntax`](https://crates.io/crates/regex-syntax/0.8.11) | 0.8.11 | Apache-2.0 OR MIT | all |
-| [`rustc-hash`](https://crates.io/crates/rustc-hash/2.1.3) | 2.1.3 | Apache-2.0 OR MIT | all |
 | [`rustix`](https://crates.io/crates/rustix/1.1.6) | 1.1.6 | Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT | linux |
 | [`same-file`](https://crates.io/crates/same-file/1.0.6) | 1.0.6 | MIT OR Unlicense | all |
-| [`schemars`](https://crates.io/crates/schemars/0.8.22) | 0.8.22 | MIT | all |
-| [`schemars`](https://crates.io/crates/schemars/0.9.0) | 0.9.0 | MIT | all |
-| [`schemars`](https://crates.io/crates/schemars/1.2.3) | 1.2.3 | MIT | all |
-| [`scopeguard`](https://crates.io/crates/scopeguard/1.2.0) | 1.2.0 | Apache-2.0 OR MIT | all |
-| [`selectors`](https://crates.io/crates/selectors/0.38.0) | 0.38.0 | MPL-2.0 | all |
+| [`scopeguard`](https://crates.io/crates/scopeguard/1.2.0) | 1.2.0 | Apache-2.0 OR MIT | linux, windows |
 | [`semver`](https://crates.io/crates/semver/1.0.28) | 1.0.28 | Apache-2.0 OR MIT | all |
 | [`serde`](https://crates.io/crates/serde/1.0.229) | 1.0.229 | Apache-2.0 OR MIT | all |
 | [`serde_core`](https://crates.io/crates/serde_core/1.0.229) | 1.0.229 | Apache-2.0 OR MIT | all |
@@ -421,19 +378,15 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`serde_with`](https://crates.io/crates/serde_with/3.24.0) | 3.24.0 | Apache-2.0 OR MIT | all |
 | [`serde-untagged`](https://crates.io/crates/serde-untagged/0.1.9) | 0.1.9 | Apache-2.0 OR MIT | all |
 | [`serialize-to-javascript`](https://crates.io/crates/serialize-to-javascript/0.1.2) | 0.1.2 | Apache-2.0 OR MIT | all |
-| [`servo_arc`](https://crates.io/crates/servo_arc/0.4.3) | 0.4.3 | Apache-2.0 OR MIT | all |
 | [`signal-hook-registry`](https://crates.io/crates/signal-hook-registry/1.4.8) | 1.4.8 | Apache-2.0 OR MIT | linux |
-| [`simd-adler32`](https://crates.io/crates/simd-adler32/0.3.10) | 0.3.10 | MIT | linux, macos |
+| [`simd-adler32`](https://crates.io/crates/simd-adler32/0.3.10) | 0.3.10 | MIT | macos |
 | [`siphasher`](https://crates.io/crates/siphasher/1.0.4) | 1.0.4 | Apache-2.0 OR MIT | all |
 | [`slab`](https://crates.io/crates/slab/0.4.12) | 0.4.12 | MIT | linux |
 | [`smallvec`](https://crates.io/crates/smallvec/1.16.4) | 1.16.4 | Apache-2.0 OR MIT | all |
-| [`socket2`](https://crates.io/crates/socket2/0.6.5) | 0.6.5 | Apache-2.0 OR MIT | all |
 | [`softbuffer`](https://crates.io/crates/softbuffer/0.4.8) | 0.4.8 | Apache-2.0 OR MIT | windows |
 | [`soup3`](https://crates.io/crates/soup3/0.5.0) | 0.5.0 | MIT | linux |
 | [`soup3-sys`](https://crates.io/crates/soup3-sys/0.5.0) | 0.5.0 | MIT | linux |
 | [`stable_deref_trait`](https://crates.io/crates/stable_deref_trait/1.2.1) | 1.2.1 | Apache-2.0 OR MIT | all |
-| [`string_cache`](https://crates.io/crates/string_cache/0.9.0) | 0.9.0 | Apache-2.0 OR MIT | all |
-| [`swift-rs`](https://crates.io/crates/swift-rs/1.0.9) | 1.0.9 | Apache-2.0 OR MIT | macos |
 | [`syn`](https://crates.io/crates/syn/3.0.9) | 3.0.9 | Apache-2.0 OR MIT | linux |
 | [`tao`](https://crates.io/crates/tao/0.37.2) | 0.37.2 | Apache-2.0 | all |
 | [`tauri`](https://crates.io/crates/tauri/2.12.5) | 2.12.5 | Apache-2.0 OR MIT | all |
@@ -441,13 +394,11 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`tauri-runtime`](https://crates.io/crates/tauri-runtime/2.12.2) | 2.12.2 | Apache-2.0 OR MIT | all |
 | [`tauri-runtime-wry`](https://crates.io/crates/tauri-runtime-wry/2.12.3) | 2.12.3 | Apache-2.0 OR MIT | all |
 | [`tauri-utils`](https://crates.io/crates/tauri-utils/2.10.2) | 2.10.2 | Apache-2.0 OR MIT | all |
-| [`tendril`](https://crates.io/crates/tendril/0.5.1) | 0.5.1 | Apache-2.0 OR MIT | all |
 | [`thiserror`](https://crates.io/crates/thiserror/1.0.69) | 1.0.69 | Apache-2.0 OR MIT | linux |
 | [`thiserror`](https://crates.io/crates/thiserror/2.0.21) | 2.0.21 | Apache-2.0 OR MIT | all |
 | [`time`](https://crates.io/crates/time/0.3.55) | 0.3.55 | Apache-2.0 OR MIT | all |
 | [`time-core`](https://crates.io/crates/time-core/0.1.9) | 0.1.9 | Apache-2.0 OR MIT | all |
 | [`tinystr`](https://crates.io/crates/tinystr/0.8.5) | 0.8.5 | Unicode-3.0 | all |
-| [`tinyvec`](https://crates.io/crates/tinyvec/1.13.3) | 1.13.3 | Apache-2.0 OR MIT OR Zlib | all |
 | [`tokio`](https://crates.io/crates/tokio/1.54.1) | 1.54.1 | MIT | all |
 | [`toml`](https://crates.io/crates/toml/1.1.8+spec-1.1.0) | 1.1.8+spec-1.1.0 | Apache-2.0 OR MIT | all |
 | [`toml_datetime`](https://crates.io/crates/toml_datetime/1.1.2+spec-1.1.0) | 1.1.2+spec-1.1.0 | Apache-2.0 OR MIT | all |
@@ -455,9 +406,8 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`toml_writer`](https://crates.io/crates/toml_writer/1.1.3+spec-1.1.0) | 1.1.3+spec-1.1.0 | Apache-2.0 OR MIT | all |
 | [`tracing`](https://crates.io/crates/tracing/0.1.44) | 0.1.44 | MIT | linux, windows |
 | [`tracing-core`](https://crates.io/crates/tracing-core/0.1.36) | 0.1.36 | MIT | linux, windows |
-| [`tray-icon`](https://crates.io/crates/tray-icon/0.25.1) | 0.25.1 | Apache-2.0 OR MIT | all |
 | [`typeid`](https://crates.io/crates/typeid/1.0.3) | 1.0.3 | Apache-2.0 OR MIT | all |
-| [`unicode-ident`](https://crates.io/crates/unicode-ident/1.0.27) | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | all |
+| [`unicode-ident`](https://crates.io/crates/unicode-ident/1.0.27) | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | linux |
 | [`unicode-segmentation`](https://crates.io/crates/unicode-segmentation/1.13.3) | 1.13.3 | Apache-2.0 OR MIT | windows |
 | [`url`](https://crates.io/crates/url/2.5.8) | 2.5.8 | Apache-2.0 OR MIT | all |
 | [`urlpattern`](https://crates.io/crates/urlpattern/0.6.0) | 0.6.0 | MIT | all |
@@ -465,7 +415,6 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`utf8_iter`](https://crates.io/crates/utf8_iter/1.1.0) | 1.1.0 | Apache-2.0 OR MIT | all |
 | [`uuid`](https://crates.io/crates/uuid/1.29.0) | 1.29.0 | Apache-2.0 OR MIT | all |
 | [`walkdir`](https://crates.io/crates/walkdir/2.5.0) | 2.5.0 | MIT OR Unlicense | all |
-| [`web_atoms`](https://crates.io/crates/web_atoms/0.2.6) | 0.2.6 | Apache-2.0 OR MIT | all |
 | [`web-time`](https://crates.io/crates/web-time/1.1.0) | 1.1.0 | Apache-2.0 OR MIT | all |
 | [`webkit2gtk`](https://crates.io/crates/webkit2gtk/2.0.2) | 2.0.2 | MIT | linux |
 | [`webkit2gtk-sys`](https://crates.io/crates/webkit2gtk-sys/2.0.2) | 2.0.2 | MIT | linux |
@@ -496,7 +445,6 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`zerofrom`](https://crates.io/crates/zerofrom/0.1.8) | 0.1.8 | Unicode-3.0 | all |
 | [`zerotrie`](https://crates.io/crates/zerotrie/0.2.5) | 0.2.5 | Unicode-3.0 | all |
 | [`zerovec`](https://crates.io/crates/zerovec/0.11.9) | 0.11.9 | Unicode-3.0 | all |
-| [`zlib-rs`](https://crates.io/crates/zlib-rs/0.6.8) | 0.6.8 | Zlib | linux, macos |
 | [`zmij`](https://crates.io/crates/zmij/1.0.23) | 1.0.23 | MIT | all |
 | [`zvariant`](https://crates.io/crates/zvariant/5.15.1) | 5.15.1 | MIT | linux |
 | [`zvariant_utils`](https://crates.io/crates/zvariant_utils/4.2.0) | 4.2.0 | MIT | linux |
@@ -586,4 +534,4 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 
 ---
 
-_Generated by [`scripts/third-party-notices.mjs`](scripts/third-party-notices.mjs) (web: 157 npm packages, desktop: 287 crates, android: 9 npm packages, android: 62 Android libraries). Regenerate it rather than editing it: after `npm install` at the root and in viewer-react/mobile and `npx cap sync android`, run `node scripts/third-party-notices.mjs --scope web,desktop,android --gradle viewer-react/mobile/android --docs`._
+_Generated by [`scripts/third-party-notices.mjs`](scripts/third-party-notices.mjs) (web: 157 npm packages, desktop: 236 crates, android: 9 npm packages, android: 62 Android libraries). Regenerate it rather than editing it: after `npm install` at the root and in viewer-react/mobile and `npx cap sync android`, run `node scripts/third-party-notices.mjs --scope web,desktop,android --gradle viewer-react/mobile/android --docs`._

@@ -39,15 +39,43 @@ test('the notices list the npm packages the viewer gets through its workspace pa
   assert.deepEqual(ids.filter((id) => /^npm:@(companion-atlas|companionintelligence)\//.test(id)), [], 'our own packages are not listed');
 });
 
+const noCargo = Boolean(spawnSync('cargo', ['--version']).error);
+let desktopData;
+/** The desktop scope, collected once: it runs cargo metadata and cargo tree for each target. */
+function desktop() {
+  desktopData ??= collect('desktop');
+  return desktopData;
+}
+
+// The executable has only the crates the build compiles for it. Build scripts and proc macros
+// get their own copies of a crate, with their own features: the build scripts (through
+// tauri-build and tauri-plugin) and the tauri-macros proc macro turn on the HTML handling of
+// tauri-utils (dom_query, html5ever and the MPL-2.0 crates cssparser, selectors and
+// dtoa-short), which the executable's tauri-utils does not have. The notices once listed
+// those, from cargo metadata's merged graph.
+test('the desktop notices list only the crates built into the executable', (t) => {
+  if (noCargo) {
+    t.skip('cargo is not installed');
+    return;
+  }
+  const crates = new Map(desktop().components.map((c) => [c.name, c]));
+  for (const name of ['tauri', 'tauri-utils', 'tauri-runtime-wry', 'wry', 'option-ext']) {
+    assert.deepEqual(crates.get(name)?.platforms, ['linux', 'macos', 'windows'], `${name} is in every desktop app`);
+  }
+  for (const name of ['tauri-build', 'tauri-codegen', 'tauri-macros', 'dom_query', 'html5ever', 'cssparser', 'selectors', 'dtoa-short']) {
+    assert.ok(!crates.has(name), `${name} is not in the executable`);
+  }
+});
+
 // webview2-com-sys links Microsoft's WebView2 loader (WebView2LoaderStatic.lib) into the
 // Windows executable, and the loader's licence asks for Microsoft's notice in every binary
 // redistribution.
 test('the desktop notices carry the licence of the WebView2 loader in the Windows app', (t) => {
-  if (spawnSync('cargo', ['--version']).error) {
+  if (noCargo) {
     t.skip('cargo is not installed');
     return;
   }
-  const data = collect('desktop');
+  const data = desktop();
   const crate = data.components.find((c) => c.name === 'webview2-com-sys');
   assert.ok(crate, 'webview2-com-sys is in the desktop scope');
   assert.deepEqual(crate.platforms, ['windows']);
