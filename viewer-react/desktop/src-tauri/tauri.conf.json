@@ -28,7 +28,7 @@
       "capabilities": [
         "default"
       ],
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' blob: data: https:; worker-src 'self' blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* blob:",
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' blob: data: https:; worker-src 'self' blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* blob:",
       "dangerousDisableAssetCspModification": [
         "style-src"
       ]

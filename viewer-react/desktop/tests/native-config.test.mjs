@@ -40,6 +40,10 @@ test('Atlas desktop CSP supports Cesium WebAssembly, workers, and HTTPS services
   const csp = config.app.security.csp;
   assert.match(csp, /connect-src[^;]*https:/);
   assert.match(csp, /script-src[^;]*wasm-unsafe-eval/);
+  // The prebuilt CesiumJS bundle (public/cesium/Cesium.js) evaluates a string as code while it
+  // loads. Without 'unsafe-eval' it throws an EvalError, window.Cesium never exists, and the
+  // window stays on "Loading Companion Atlas…" (seen on Windows with the 0.2.0 CI build).
+  assert.match(csp, /script-src[^;]*'unsafe-eval'/);
   assert.match(csp, /worker-src[^;]*blob:/);
 });
 
