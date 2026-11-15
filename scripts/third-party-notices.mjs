@@ -5,7 +5,8 @@
 // writes the licence texts that ship inside each app and with each release.
 //
 //   web      The viewer bundle (viewer-react/dist), which every app carries: the runtime
-//            dependencies of @companion-atlas/viewer-react in package-lock.json.
+//            dependencies of @companion-atlas/viewer-react in package-lock.json, with those
+//            of the workspace packages it uses (@companion-atlas/story).
 //   desktop  The Rust crates linked into the Tauri executable, from
 //            viewer-react/desktop/src-tauri/Cargo.lock (`cargo metadata --locked`), for the
 //            Windows, macOS (Apple silicon and Intel) and Linux targets. Build-time crates
@@ -388,6 +389,9 @@ function lookup(packages, from, name) {
 /**
  * The packages an npm project needs at run time: its `dependencies`, then theirs (including
  * peer and optional dependencies that are installed), resolved the way Node resolves them.
+ * Our own packages (FIRST_PARTY, and the workspace packages the lockfile links to) are not
+ * listed, but the walk goes through them, because what they depend on is bundled with them:
+ * the viewer's @companion-atlas/story brings zod and fast-xml-parser, for one.
  */
 function npmClosure(lockPath, rootKey, { exclude = [] } = {}) {
   const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
@@ -396,21 +400,26 @@ function npmClosure(lockPath, rootKey, { exclude = [] } = {}) {
   const root = packages[rootKey];
   if (!root) throw new Error(`${lockPath}: no package "${rootKey}"`);
   const found = new Map();
-  const skip = (name) => FIRST_PARTY.test(name) || exclude.includes(name);
+  /** The first-party packages already walked, by folder, so that a cycle among them ends. */
+  const ours = new Set([rootKey]);
 
   const visit = (from, deps, optional) => {
     for (const name of Object.keys(deps ?? {})) {
-      if (skip(name)) continue;
+      if (exclude.includes(name)) continue;
       let key = lookup(packages, from, name);
       if (!key) {
         if (!optional.has(name)) throw new Error(`${lockPath}: ${name} (needed by ${from || 'the root'}) is not in the lockfile`);
         continue;
       }
+      // A workspace dependency is a link to the package's folder, where its own dependencies
+      // resolve from.
       if (packages[key].link) key = packages[key].resolved;
-      if (found.has(key)) continue;
       const pkg = packages[key];
-      if (!key.includes('node_modules/')) continue; // a workspace package: first-party
-      found.set(key, pkg);
+      if (!pkg) throw new Error(`${lockPath}: ${name} links to "${key}", which is not in the lockfile`);
+      if (found.has(key) || ours.has(key)) continue;
+      // A workspace package is not under node_modules.
+      if (FIRST_PARTY.test(name) || !key.includes('node_modules/')) ours.add(key);
+      else found.set(key, pkg);
       const optionalNames = new Set([
         ...Object.keys(pkg.optionalDependencies ?? {}),
         ...Object.entries(pkg.peerDependenciesMeta ?? {}).filter(([, m]) => m.optional).map(([n]) => n),
@@ -757,7 +766,7 @@ function renderThirdPartyMd(notices, counts) {
     '',
     '| Part | Ships in | Components | Listed from |',
     '| --- | --- | ---: | --- |',
-    `| Web viewer | the website, the viewer image, and inside every app | ${web.length} npm packages | \`package-lock.json\`: the runtime dependencies of \`viewer-react\` |`,
+    `| Web viewer | the website, the viewer image, and inside every app | ${web.length} npm packages | \`package-lock.json\`: the runtime dependencies of \`viewer-react\` and of the workspace packages it uses |`,
     `| Desktop | the Windows, macOS and Linux installers | ${crates.length} Rust crates | \`viewer-react/desktop/src-tauri/Cargo.lock\`, for each target platform |`,
     `| Android | the APK | ${shell.length} npm packages, ${maven.length} Android libraries | \`viewer-react/mobile/package-lock.json\`; Gradle's \`releaseRuntimeClasspath\` |`,
     '',
