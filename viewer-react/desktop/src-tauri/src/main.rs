@@ -13,7 +13,8 @@ use tauri::{AppHandle, Manager, Runtime, Url};
 use tauri_plugin_opener::OpenerExt;
 
 /// The window in tauri.conf.json. It has `create: false`, so it is built here, where the
-/// link handlers can be attached to it.
+/// link handlers can be attached to it. It is built from that config entry, so the entry's
+/// other settings still apply, `dragDropEnabled: false` among them.
 const MAIN_WINDOW: &str = "main";
 
 /// Links the system may open: in the browser, the mail client or the phone app.

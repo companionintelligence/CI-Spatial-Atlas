@@ -77,6 +77,14 @@ the system browser (`src-tauri/src/main.rs`, through `tauri-plugin-opener`).
 Only `http`, `https`, `mailto` and `tel` links leave the app. The page has no
 opener permission of its own: its capability is still `core:default`.
 
+## Dropping files
+
+The viewer imports KML, KMZ, GeoJSON and story files dropped on the globe
+through HTML5 drag and drop. Tauri's own file-drop handler would take those
+drops away from the page on Windows, so the main window sets
+`dragDropEnabled: false` in `tauri.conf.json`. `main.rs` builds the window from
+that entry, which is what applies the setting.
+
 ## Content Security Policy
 
 `tauri.conf.json` sets the CSP. Tauri adds nonces and hashes to it at build

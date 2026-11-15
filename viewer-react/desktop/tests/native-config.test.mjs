@@ -64,6 +64,17 @@ test('Atlas desktop opens new-tab and off-site links in the system browser', () 
   assert.deepEqual(capability.permissions, ['core:default']);
 });
 
+// The viewer imports KML, KMZ, GeoJSON and story files dropped on the globe through HTML5 drag
+// and drop (viewer-react/src/interop/useFileDrop.ts). Tauri's own drop handler takes file drops
+// away from the page on Windows (WebView2), so the main window turns it off. main.rs builds the
+// window from this config entry, which is what applies the setting.
+test('Atlas desktop leaves file drops to the viewer', () => {
+  const main = config.app.windows.find((window) => window.label === 'main');
+  assert.equal(main.dragDropEnabled, false);
+  assert.match(mainRs, /WebviewWindowBuilder::from_config\(app\.handle\(\), &config\)/);
+  assert.doesNotMatch(mainRs, /WebviewWindowBuilder::new\(/);
+});
+
 // Cargo.toml once pinned tauri-build to a version that does not exist, and nothing noticed
 // because the shell had never been built. Each exact pin must be the version Cargo.lock has.
 test('desktop Cargo pins match the lockfile', () => {
