@@ -59,8 +59,8 @@ the same file.
 |---|---|---|
 | Bundle ID (iOS) and application ID (Android) | `com.companionintelligence.atlas` | `PRODUCT_BUNDLE_IDENTIFIER` in `ios/App/App.xcodeproj/project.pbxproj` (both configurations); `applicationId` in `android/app/build.gradle` |
 | Display name | Companion Atlas | `CFBundleDisplayName` in `ios/App/App/Info.plist`; `app_name` in `android/app/src/main/res/values/strings.xml` |
-| Version name | 1.0 | `MARKETING_VERSION` in `ios/version.xcconfig`, which becomes `CFBundleShortVersionString` and Android `versionName` |
-| Build number | 1 | `CURRENT_PROJECT_VERSION` in `ios/version.xcconfig`, which becomes `CFBundleVersion` and Android `versionCode` |
+| Version name | 0.2.0 | `MARKETING_VERSION` in `ios/version.xcconfig`, which becomes `CFBundleShortVersionString` and Android `versionName` |
+| Build number | 2 | `CURRENT_PROJECT_VERSION` in `ios/version.xcconfig`, which becomes `CFBundleVersion` and Android `versionCode` |
 | iOS minimum | 15.0 | `IPHONEOS_DEPLOYMENT_TARGET` in the project; `platforms: [.iOS(.v15)]` in `ios/App/CapApp-SPM/Package.swift` |
 | iOS devices | iPhone and iPad | `TARGETED_DEVICE_FAMILY = "1,2"` |
 | Android minimum | API 24 | `minSdk` in `android/variables.gradle` |
@@ -130,7 +130,7 @@ JDK 21 (OpenJDK 21.0.13), `ANDROID_HOME` with platform 36 and build-tools 36.1.0
 | Item | Result |
 |---|---|
 | `applicationId` | `com.companionintelligence.atlas`, in `android/app/build.gradle`. It is final once published. |
-| `versionCode` and `versionName` | 1 and 1.0, from `ios/version.xcconfig`. Raise the build number for every upload. |
+| `versionCode` and `versionName` | 2 and 0.2.0, from `ios/version.xcconfig`. Raise the build number for every upload. |
 | `targetSdkVersion` | 36, which already complies (section 2). Not changed. |
 | `minSdkVersion` | 24, kept. It is Capacitor 8's floor. Lowering it would break the runtime; raising it would drop devices that run the app today. |
 | Release build | `minifyEnabled true`, `shrinkResources true`, `proguard-android-optimize.txt` plus `proguard-rules.pro`. Capacitor's rules arrive through the consumer ProGuard file of `@capacitor/android`. The app adds the `@JavascriptInterface` keep rule and `-keepattributes *Annotation*`. |
