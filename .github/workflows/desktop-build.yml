@@ -1,7 +1,7 @@
 name: Desktop Build
 
 # Unsigned developer artifacts only. This does not publish a GitHub release or
-# submit to a store.
+# submit to a store; native-release.yml publishes the pre-release builds.
 #
 # macOS builds one universal app (Apple silicon and Intel), ad-hoc signed by
 # bundle.macOS.signingIdentity "-". Linux builds a .deb and an .rpm on Ubuntu

@@ -13,7 +13,8 @@ name: Mobile Build
 #   • Android — a debug APK (sideload-installable; not for store distribution)
 #   • iOS     — a Simulator .app, zipped (runs in the iOS Simulator; not device-installable)
 # Signed, store-ready artifacts (release AAB, signed .ipa) are deliberately not built
-# here; see viewer-react/mobile/README.md → "Before a store submission".
+# here; see viewer-react/mobile/README.md → "Before a store submission". The release APK
+# for GitHub pre-releases comes from native-release.yml.
 #
 # This repository is PUBLIC, so the artifacts below are downloadable by any signed-in
 # GitHub user. The web bundle is therefore built with NO VITE_* tokens or keys

@@ -1,0 +1,616 @@
+name: Native Release
+
+# Builds the Companion Atlas desktop installers and the Android APK from one commit and
+# publishes them, with the licence files and checksums, as a GitHub pre-release.
+#
+# Manual dispatch only (org CI policy: no push, pull_request or schedule triggers):
+#   gh workflow run native-release.yml --ref main -f tag=v0.2.0
+#   gh workflow run native-release.yml --ref main -f tag=v0.2.0 -f android_signing=keystore
+#
+# What a release contains:
+#   Windows  NSIS installer (.exe) and .msi, not code-signed.
+#   macOS    one universal .dmg (Apple silicon and Intel), ad-hoc signed by
+#            bundle.macOS.signingIdentity "-" and not notarized.
+#   Linux    .deb and .rpm, built on Ubuntu 22.04. No AppImage: it would bundle the LGPL
+#            WebKitGTK and GTK libraries.
+#   Android  a release APK (not debuggable; R8-minified). android_signing picks its key:
+#              auto       the upload keystore when ATLAS_UPLOAD_STORE_FILE is set, else a throwaway key
+#              keystore   the upload keystore; the run fails if a secret is missing
+#              throwaway  a key generated in the job with keytool and never stored
+#              skip       no Android build in this release
+#            The file name says which key signed it, and the notes give its certificate.
+#   Always   LICENSE.md, THIRD-PARTY-NOTICES.txt (merged from the builds) and SHA256SUMS.txt.
+#
+# The tag must not exist yet: the release creates it on the commit that was built. Its
+# X.Y.Z must equal the desktop version (tauri.conf.json) and the Android versionName
+# (viewer-react/mobile/ios/version.xcconfig).
+#
+# The repository is public and anyone can unpack these binaries, so the builds are keyless:
+# no VITE_* value at all (no Cesium ion token, no Google Maps key, no Memory URL or token,
+# no VITE_OIDC_*). The apps open the bundled sample journey on maps that need no key.
+#
+# Secrets: CI_COMMON_ACCESS_TOKEN for the private CI-Common submodule (see build.yml).
+# For Android keystore signing: ATLAS_UPLOAD_STORE_FILE (the upload keystore, base64),
+# ATLAS_UPLOAD_STORE_PASSWORD, ATLAS_UPLOAD_KEY_ALIAS and ATLAS_UPLOAD_KEY_PASSWORD.
+# android/app/build.gradle reads the ATLAS_UPLOAD_* names from the environment; the job
+# decodes the keystore to a temporary file and passes that file's path as
+# ATLAS_UPLOAD_STORE_FILE.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to create for the release, e.g. v0.2.0
+        required: true
+        type: string
+      android_signing:
+        description: Android signing key
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - keystore
+          - throwaway
+          - skip
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  preflight:
+    name: Check the tag and the app versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag
+        id: check
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::The tag must look like v0.2.0 or v0.2.0-rc.1, not '$TAG'."
+            exit 1
+          fi
+          version="${TAG#v}"
+          core="${version%%-*}"
+
+          desktop="$(node -p "require('./viewer-react/desktop/src-tauri/tauri.conf.json').version")"
+          android="$(sed -nE 's/^MARKETING_VERSION[[:space:]]*=[[:space:]]*([^[:space:]]+).*$/\1/p' viewer-react/mobile/ios/version.xcconfig)"
+          echo "tag $TAG, desktop $desktop, Android $android"
+          if [ "$desktop" != "$core" ]; then
+            echo "::error::$TAG does not match the desktop version $desktop (viewer-react/desktop/src-tauri/tauri.conf.json)."
+            exit 1
+          fi
+          if [ "$android" != "$core" ]; then
+            echo "::error::$TAG does not match the Android versionName $android (viewer-react/mobile/ios/version.xcconfig)."
+            exit 1
+          fi
+
+          # The release creates the tag on the commit built here; an existing tag could point anywhere.
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG")" ]; then
+            echo "::error::The tag $TAG already exists. Pick a new tag."
+            exit 1
+          fi
+          releases="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
+          if grep -Fxq -- "$TAG" <<< "$releases"; then
+            echo "::error::A release for $TAG already exists."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop (${{ matrix.platform }})
+    needs: preflight
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # @companionintelligence/* packages come from GitHub Packages.
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            bundle-dir: viewer-react/desktop/src-tauri/target/release/bundle
+          - platform: macos
+            os: macos-latest
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
+            bundle-dir: viewer-react/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - platform: linux
+            os: ubuntu-22.04
+            bundle-dir: viewer-react/desktop/src-tauri/target/release/bundle
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      BUNDLE: ${{ matrix.bundle-dir }}
+      # `npm run notices` (part of the desktop build) fails on any licence it cannot account for.
+      ATLAS_NOTICES_STRICT: '1'
+    steps:
+      # `token:` for the private CI-Common submodule; see the `viewer` job in build.yml.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Keyless build
+        run: |
+          if [ -n "$(env | grep '^VITE_' || true)" ]; then
+            echo "::error::A VITE_ variable is set. Release builds must not carry keys or tokens."
+            exit 1
+          fi
+
+      - name: Install WebKitGTK build packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      # rustup is on every hosted runner image.
+      - name: Rust toolchain
+        env:
+          RUST_TARGETS: ${{ matrix.rust-targets }}
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          if [ -n "$RUST_TARGETS" ]; then rustup target add $RUST_TARGETS; fi
+          rustc --version
+
+      - name: Install workspace dependencies
+        run: npm install --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install desktop shell dependencies
+        run: npm install --prefix viewer-react/desktop --no-audit --no-fund
+
+      - name: Check shell config
+        run: npm run test:native --prefix viewer-react/desktop
+
+      # icons, then the notices, then tauri build (which builds the web bundle first).
+      - name: Build installers
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TARGET" ]; then
+            npm run build --prefix viewer-react/desktop -- --target "$TARGET"
+          else
+            npm run build --prefix viewer-react/desktop
+          fi
+
+      - name: Check the macOS app
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          app="$BUNDLE/macos/Companion Atlas.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
+          grep -q 'Signature=adhoc' "$RUNNER_TEMP/codesign.txt"
+          exe="$(find "$app/Contents/MacOS" -type f -perm -u+x -print -quit)"
+          archs="$(lipo -archs "$exe")"
+          echo "$exe: $archs"
+          case " $archs " in *" x86_64 "*) ;; *) echo "::error::no x86_64 slice"; exit 1 ;; esac
+          case " $archs " in *" arm64 "*) ;; *) echo "::error::no arm64 slice"; exit 1 ;; esac
+          test -f "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
+          test -f "$app/Contents/Resources/licenses/LICENSE.md"
+
+      - name: Check the Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          deb="$(ls "$BUNDLE"/deb/*.deb)"
+          dpkg-deb --field "$deb" Package Version Depends
+          contents="$(dpkg-deb --contents "$deb")"
+          grep -q 'licenses/THIRD-PARTY-NOTICES.txt' <<< "$contents"
+          grep -q 'licenses/LICENSE.md' <<< "$contents"
+
+      - name: Check the Windows installers' inputs
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          test -f viewer-react/desktop/src-tauri/target/release/licenses/THIRD-PARTY-NOTICES.txt
+          test -f viewer-react/desktop/src-tauri/target/release/licenses/LICENSE.md
+
+      - name: Collect the release files
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          # copy_one <release file name> <matches>: exactly one built file must match.
+          copy_one() {
+            local name="$1"
+            shift
+            if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+              echo "::error::Expected one file for $name, found: $*"
+              exit 1
+            fi
+            cp "$1" "release/$name"
+          }
+          base="Companion-Atlas_${VERSION}"
+          case "$PLATFORM" in
+            windows)
+              copy_one "${base}_windows_x64-setup.exe" "$BUNDLE"/nsis/*-setup.exe
+              copy_one "${base}_windows_x64.msi" "$BUNDLE"/msi/*.msi
+              ;;
+            macos)
+              copy_one "${base}_macos_universal.dmg" "$BUNDLE"/dmg/*.dmg
+              ;;
+            linux)
+              copy_one "${base}_linux_amd64.deb" "$BUNDLE"/deb/*.deb
+              copy_one "${base}_linux_x86_64.rpm" "$BUNDLE"/rpm/*.rpm
+              ;;
+          esac
+          # The licence data the publish job merges into the release's THIRD-PARTY-NOTICES.txt.
+          node scripts/third-party-notices.mjs --scope web,desktop --strict --json "release/third-party-$PLATFORM.json"
+          ls -la release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-desktop-${{ matrix.platform }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    name: Android (release APK)
+    needs: preflight
+    if: inputs.android_signing != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      ATLAS_NOTICES_STRICT: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Keyless build
+        run: |
+          if [ -n "$(env | grep '^VITE_' || true)" ]; then
+            echo "::error::A VITE_ variable is set. Release builds must not carry keys or tokens."
+            exit 1
+          fi
+
+      - name: Install root dependencies
+        run: npm install --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Verify web bundle
+        run: |
+          set -euo pipefail
+          test -f viewer-react/dist/index.html
+          test -f viewer-react/dist/cesium/Assets/approximateTerrainHeights.json
+
+      - name: JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Same action, pin and SDK packages as mobile-build.yml.
+      - name: Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: ''
+
+      - name: Install SDK components
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Install mobile dependencies
+        working-directory: viewer-react/mobile
+        run: npm ci --no-audit --no-fund
+
+      - name: Check mobile shell config
+        working-directory: viewer-react/mobile
+        run: npm run test:native
+
+      - name: Capacitor sync (Android)
+        working-directory: viewer-react/mobile
+        run: npx cap sync android
+
+      # Into the APK's assets, and the data the publish job merges into the release's notices.
+      - name: Third-party notices
+        run: >-
+          node scripts/third-party-notices.mjs --scope web,android --strict
+          --gradle viewer-react/mobile/android
+          --out viewer-react/mobile/android/app/src/main/assets/licenses
+          --json "$RUNNER_TEMP/third-party-android.json"
+
+      - name: Build the signed release APK
+        id: apk
+        working-directory: viewer-react/mobile/android
+        env:
+          SIGNING: ${{ inputs.android_signing }}
+          SECRET_ATLAS_UPLOAD_STORE_FILE: ${{ secrets.ATLAS_UPLOAD_STORE_FILE }}
+          SECRET_ATLAS_UPLOAD_STORE_PASSWORD: ${{ secrets.ATLAS_UPLOAD_STORE_PASSWORD }}
+          SECRET_ATLAS_UPLOAD_KEY_ALIAS: ${{ secrets.ATLAS_UPLOAD_KEY_ALIAS }}
+          SECRET_ATLAS_UPLOAD_KEY_PASSWORD: ${{ secrets.ATLAS_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mode="$SIGNING"
+          if [ "$mode" = auto ]; then
+            if [ -n "$SECRET_ATLAS_UPLOAD_STORE_FILE" ]; then mode=keystore; else mode=throwaway; fi
+          fi
+          echo "Android signing: $mode"
+
+          # Key material lives only in this step, outside the checkout, and is deleted after it.
+          keys="$RUNNER_TEMP/atlas-signing"
+          rm -rf "$keys"
+          mkdir -m 700 "$keys"
+          trap 'rm -rf "$keys"' EXIT
+
+          case "$mode" in
+            keystore)
+              missing=""
+              for name in ATLAS_UPLOAD_STORE_FILE ATLAS_UPLOAD_STORE_PASSWORD ATLAS_UPLOAD_KEY_ALIAS ATLAS_UPLOAD_KEY_PASSWORD; do
+                secret="SECRET_$name"
+                if [ -z "${!secret}" ]; then missing="$missing $name"; fi
+              done
+              if [ -n "$missing" ]; then
+                echo "::error::Keystore signing needs all four upload-key secrets. Missing:$missing"
+                exit 1
+              fi
+              # The secret holds the keystore in base64; Gradle wants a file.
+              printf '%s' "$SECRET_ATLAS_UPLOAD_STORE_FILE" | tr -d ' \r\n' | base64 --decode > "$keys/upload.keystore"
+              export ATLAS_UPLOAD_STORE_FILE="$keys/upload.keystore"
+              export ATLAS_UPLOAD_STORE_PASSWORD="$SECRET_ATLAS_UPLOAD_STORE_PASSWORD"
+              export ATLAS_UPLOAD_KEY_ALIAS="$SECRET_ATLAS_UPLOAD_KEY_ALIAS"
+              export ATLAS_UPLOAD_KEY_PASSWORD="$SECRET_ATLAS_UPLOAD_KEY_PASSWORD"
+              ;;
+            throwaway)
+              ATLAS_THROWAWAY_PASSWORD="$(openssl rand -hex 32)"
+              echo "::add-mask::$ATLAS_THROWAWAY_PASSWORD"
+              export ATLAS_THROWAWAY_PASSWORD
+              keytool -genkeypair -noprompt -keystore "$keys/throwaway.p12" -storetype PKCS12 \
+                -alias atlas-throwaway -keyalg RSA -keysize 3072 -validity 9125 \
+                -dname "CN=Companion Atlas throwaway build key" \
+                -storepass:env ATLAS_THROWAWAY_PASSWORD -keypass:env ATLAS_THROWAWAY_PASSWORD
+              export ATLAS_UPLOAD_STORE_FILE="$keys/throwaway.p12"
+              export ATLAS_UPLOAD_STORE_PASSWORD="$ATLAS_THROWAWAY_PASSWORD"
+              export ATLAS_UPLOAD_KEY_ALIAS=atlas-throwaway
+              export ATLAS_UPLOAD_KEY_PASSWORD="$ATLAS_THROWAWAY_PASSWORD"
+              ;;
+            *)
+              echo "::error::Unknown android_signing '$SIGNING'."
+              exit 1
+              ;;
+          esac
+
+          ./gradlew assembleRelease --no-daemon
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Check the APK
+        run: |
+          set -euo pipefail
+          apk=viewer-react/mobile/android/app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$apk" ]; then
+            ls -la "$(dirname "$apk")" || true
+            echo "::error::No signed app-release.apk was built."
+            exit 1
+          fi
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --verbose --print-certs "$apk" | tee "$RUNNER_TEMP/apksigner.txt"
+          "$tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep '^package:' "$RUNNER_TEMP/badging.txt"
+          if grep -q 'application-debuggable' "$RUNNER_TEMP/badging.txt"; then
+            echo "::error::The APK is debuggable."
+            exit 1
+          fi
+          grep -q "versionName='${VERSION%%-*}'" "$RUNNER_TEMP/badging.txt"
+          listing="$(unzip -l "$apk")"
+          grep -q 'assets/licenses/THIRD-PARTY-NOTICES.txt' <<< "$listing"
+          grep -q 'assets/licenses/LICENSE.md' <<< "$listing"
+
+      - name: Collect the release files
+        env:
+          MODE: ${{ steps.apk.outputs.mode }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            keystore) label=upload-key ;;
+            throwaway) label=throwaway-key ;;
+            *) echo "::error::Unknown signing mode '$MODE'."; exit 1 ;;
+          esac
+          mkdir -p release
+          apk="Companion-Atlas_${VERSION}_android_${label}.apk"
+          cp viewer-react/mobile/android/app/build/outputs/apk/release/app-release.apk "release/$apk"
+          cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apksigner.txt")"
+          test -n "$cert"
+          # Read by the publish job for the release notes; not a release file.
+          printf 'mode=%s\napk=%s\ncert=%s\n' "$MODE" "$apk" "$cert" > release/android-signing.txt
+          cp "$RUNNER_TEMP/third-party-android.json" release/third-party-android.json
+          ls -la release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish the pre-release
+    needs: [preflight, desktop, android]
+    # Runs when every requested build succeeded; android is skipped with android_signing=skip.
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.desktop.result == 'success' && (needs.android.result == 'success' || needs.android.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Creates the tag and the release.
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ inputs.tag }}
+      VERSION: ${{ needs.preflight.outputs.version }}
+    steps:
+      # For scripts/third-party-notices.mjs and LICENSE.md; no submodule needed.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: artifacts
+
+      - name: Assemble the release files
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find artifacts -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \
+            -o -name '*.deb' -o -name '*.rpm' -o -name '*.apk' \) -exec cp {} dist/ \;
+          from=()
+          for data in artifacts/*/third-party-*.json; do from+=(--from "$data"); done
+          node scripts/third-party-notices.mjs "${from[@]}" --out notices
+          cp notices/THIRD-PARTY-NOTICES.txt dist/
+          cp LICENSE.md dist/LICENSE.md
+          (cd dist && sha256sum -- * > ../SHA256SUMS.txt)
+          mv SHA256SUMS.txt dist/
+          ls -la dist
+          cat dist/SHA256SUMS.txt
+
+      - name: Write the release notes
+        run: |
+          set -euo pipefail
+          # file <pattern>: the name of the release file that matches, or nothing.
+          file() {
+            local f
+            for f in dist/$1; do
+              if [ -f "$f" ]; then basename "$f"; return 0; fi
+            done
+          }
+          short="${GITHUB_SHA:0:7}"
+          exe="$(file '*_windows_x64-setup.exe')"
+          msi="$(file '*_windows_x64.msi')"
+          dmg="$(file '*_macos_universal.dmg')"
+          deb="$(file '*_linux_amd64.deb')"
+          rpm="$(file '*_linux_x86_64.rpm')"
+          apk="$(file '*_android_*.apk')"
+
+          apps="desktop and Android apps"
+          if [ -z "$apk" ]; then apps="desktop apps"; fi
+
+          {
+            echo "Companion Atlas $VERSION is a **pre-release** of the $apps, built from [\`$short\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) by the Native Release workflow. These are not store builds: nothing here went through the App Store, Google Play or the Microsoft Store, and the installers are not code-signed or notarized."
+            echo
+            echo "## Downloads"
+            echo
+            echo "| Platform | File |"
+            echo "| --- | --- |"
+            echo "| Windows 10 and 11 (x64) | \`$exe\` (installer) or \`$msi\` |"
+            echo "| macOS 12 or later (Apple silicon and Intel) | \`$dmg\` |"
+            echo "| Debian or Ubuntu (x86_64) | \`$deb\` |"
+            echo "| Fedora, openSUSE or RHEL (x86_64) | \`$rpm\` |"
+            if [ -n "$apk" ]; then echo "| Android 7.0 or later | \`$apk\` |"; fi
+            echo
+            echo "To check a download, compare its SHA-256 with \`SHA256SUMS.txt\`: \`sha256sum -c SHA256SUMS.txt --ignore-missing\` on Linux, \`shasum -a 256 -c SHA256SUMS.txt --ignore-missing\` on macOS, or \`Get-FileHash <file>\` in PowerShell on Windows."
+            echo
+            echo "## What the apps do, and what they don't do yet"
+            echo
+            echo "- They need no server and no account. They open the bundled sample journey, labelled Demo data, on maps that need no key: Esri World Imagery, offline Natural Earth, EOX Sentinel-2, NASA GIBS and OpenStreetMap."
+            echo "- Timeline playback, place search, weather, KML and GeoJSON import and export, and scrapbook and scene authoring work without a backend. What you author is kept on the device."
+            echo "- No map keys are built in, so there is no Cesium World Terrain, no photoreal 3D buildings and no Street View."
+            echo "- **Desktop: demo only for now.** It shows the sample journey and the files you open. It cannot connect to Companion Memory, it has no sign-in, and WebXR is not available in it."
+            if [ -n "$apk" ]; then
+              echo "- **Android:** Connect to Companion Memory takes the address of a Memory server you run, over HTTPS. It is experimental and has not been tested against a live server. Show my location and Nearby memories work while the app is open."
+            fi
+            echo "- Links in stories and map credits open in your browser."
+            echo
+            echo "## Installing"
+            echo
+            echo "### Windows"
+            echo
+            echo "The installers are not code-signed, so Microsoft Defender SmartScreen may say \"Windows protected your PC\". Click **More info**, then **Run anyway**. The installer downloads Microsoft Edge WebView2 if Windows does not have it."
+            echo
+            echo "### macOS"
+            echo
+            echo "The app is ad-hoc signed and not notarized, so macOS will not open it with a double-click the first time. Open the .dmg and drag Companion Atlas to Applications. Then right-click (or Control-click) Companion Atlas in Applications, choose **Open**, and click **Open** again. If macOS still refuses, open **System Settings > Privacy & Security**, scroll to the message about Companion Atlas and click **Open Anyway**."
+            echo
+            echo "### Linux"
+            echo
+            echo "- Debian or Ubuntu: \`sudo apt install ./$deb\`"
+            echo "- Fedora: \`sudo dnf install ./$rpm\`"
+            echo
+            echo "The package manager also installs WebKitGTK 4.1, which the app needs. The packages were built on Ubuntu 22.04, so they need that release or a newer one (glibc 2.35 or later). The globe needs WebGL, and the app has not yet been tested under WebKitGTK."
+            if [ -n "$apk" ]; then
+              signing="$(cat artifacts/release-android/android-signing.txt)"
+              mode="$(printf '%s\n' "$signing" | sed -n 's/^mode=//p')"
+              cert="$(printf '%s\n' "$signing" | sed -n 's/^cert=//p')"
+              echo
+              echo "### Android (sideloading)"
+              echo
+              echo "Download the APK on the phone and open it. Android asks you to allow your browser or file manager to install unknown apps: allow it for this install. Google Play Protect may warn about an app it does not know; choose to install anyway."
+              echo
+              if [ "$mode" = keystore ]; then
+                echo "This APK is signed with the Companion Atlas upload key (\`upload-key\` in the file name). Later releases signed with the same key install over it and keep its data."
+              else
+                echo "This APK is signed with a throwaway key made for this build only (\`throwaway-key\` in the file name). No later build will be signed with that key."
+              fi
+              echo
+              echo "Signing certificate SHA-256: \`$cert\`"
+              echo
+              echo "Android installs an update only when it is signed with the same key as the installed app. A later build signed with a different key will not install over this one: you would have to uninstall this version first, which deletes the app's data on the phone, such as drafts, the scrapbook and a saved Memory connection."
+            fi
+            echo
+            echo "## Licences"
+            echo
+            echo "Companion Atlas is licensed under the PolyForm Noncommercial License 1.0.0 (\`LICENSE.md\`). \`THIRD-PARTY-NOTICES.txt\` lists the third-party software in these apps with its licence texts, and where to get the source of the MPL-2.0 components. Each app carries both files too."
+          } > notes.md
+          cat notes.md
+
+      - name: Create the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Companion Atlas $VERSION (pre-release)" \
+            --notes-file notes.md
