@@ -45,6 +45,9 @@
     ],
     "category": "Education",
     "shortDescription": "Explore your memories on a 3D globe",
+    "publisher": "Companion Intelligence",
+    "copyright": "Copyright LifeScope INC, DBA Companion Intelligence",
+    "license": "PolyForm-Noncommercial-1.0.0",
     "resources": {
       "notices/LICENSE.md": "licenses/LICENSE.md",
       "notices/THIRD-PARTY-NOTICES.txt": "licenses/THIRD-PARTY-NOTICES.txt"

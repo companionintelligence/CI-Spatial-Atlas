@@ -12,6 +12,9 @@ const capability = JSON.parse(await readFile(path.join(tauriDir, 'capabilities/d
 const cargoToml = await readFile(path.join(tauriDir, 'Cargo.toml'), 'utf8');
 const cargoLock = await readFile(path.join(tauriDir, 'Cargo.lock'), 'utf8');
 const mainRs = await readFile(path.join(tauriDir, 'src/main.rs'), 'utf8');
+const repoRoot = path.join(here, '../../..');
+const licenseMd = await readFile(path.join(repoRoot, 'LICENSE.md'), 'utf8');
+const rootPkg = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
 
 /** The version Cargo.lock records for a crate (the lock has one entry per crate here). */
 function lockedVersion(name) {
@@ -90,6 +93,20 @@ test('desktop bundles Windows, macOS and Linux installers, without an AppImage',
 // an ad-hoc signed one can be allowed in Privacy & Security.
 test('desktop macOS app is ad-hoc signed', () => {
   assert.equal(config.bundle.macOS.signingIdentity, '-');
+});
+
+// Without a publisher, Tauri names the second part of the identifier ("ci") as the company in
+// the Windows executable and as the installers' manufacturer. The copyright holder is the one
+// in LICENSE.md's Required Notice, and the licence is the repository's.
+test('desktop installers name the publisher, the copyright holder and the licence', () => {
+  const holder = /^> Required Notice: (Copyright .+?) \(https?:\/\/[^)]+\)\r?$/m.exec(licenseMd)?.[1];
+  assert.ok(holder, 'LICENSE.md has a Required Notice line');
+  assert.equal(config.bundle.publisher, 'Companion Intelligence');
+  assert.equal(config.bundle.copyright, holder);
+  assert.equal(config.bundle.license, 'PolyForm-Noncommercial-1.0.0');
+  assert.equal(config.bundle.license, rootPkg.license);
+  assert.match(cargoToml, /^authors = \["Companion Intelligence"\]\r?$/m);
+  assert.match(cargoToml, /^license = "PolyForm-Noncommercial-1\.0\.0"\r?$/m);
 });
 
 test('desktop build generates all required platform icons', () => {
