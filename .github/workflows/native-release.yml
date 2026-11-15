@@ -602,6 +602,7 @@ jobs:
               echo "- **Android:** Connect to Companion Memory takes the address of a Memory server you run, over HTTPS. It is experimental and has not been tested against a live server. Show my location and Nearby memories work while the app is open."
             fi
             echo "- Links in stories and map credits open in your browser."
+            echo "- **Tried before release:** the Windows app, on a Windows 11 PC. The macOS and Linux apps and the Android APK were built and checked by CI but not tried on a device."
             echo
             echo "## Installing"
             echo
