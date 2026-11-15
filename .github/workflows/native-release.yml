@@ -21,9 +21,10 @@ name: Native Release
 #            The file name says which key signed it, and the notes give its certificate.
 #   Always   LICENSE.md, THIRD-PARTY-NOTICES.txt (merged from the builds) and SHA256SUMS.txt.
 #
-# The tag must not exist yet: the release creates it on the commit that was built. Its
-# X.Y.Z must equal the desktop version (tauri.conf.json) and the Android versionName
-# (viewer-react/mobile/ios/version.xcconfig).
+# Run it on main; preflight fails on any other branch or tag. The tag must not exist yet:
+# the release creates it on the commit that was built, and the publish job checks again
+# right before it does. Its X.Y.Z must equal the desktop version (tauri.conf.json) and the
+# Android versionName (viewer-react/mobile/ios/version.xcconfig).
 #
 # The repository is public and anyone can unpack these binaries, so the builds are keyless:
 # no VITE_* value at all (no Cesium ion token, no Google Maps key, no Memory URL or token,
@@ -67,12 +68,22 @@ env:
 
 jobs:
   preflight:
-    name: Check the tag and the app versions
+    name: Check the branch, the tag and the app versions
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       version: ${{ steps.check.outputs.version }}
     steps:
+      # A release is built from main, and its tag is created on the commit built.
+      - name: Check the branch
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != refs/heads/main ]; then
+            echo "::error::Run this workflow on main (gh workflow run native-release.yml --ref main), not on $REF."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Check the tag
@@ -102,10 +113,15 @@ jobs:
           fi
 
           # The release creates the tag on the commit built here; an existing tag could point anywhere.
-          if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG")" ]; then
-            echo "::error::The tag $TAG already exists. Pick a new tag."
-            exit 1
-          fi
+          # With --exit-code, 0 means the tag exists and 2 means it does not. Any other code is a
+          # failed lookup, which must not pass for "no such tag".
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null || status=$?
+          case "$status" in
+            0) echo "::error::The tag $TAG already exists. Pick a new tag."; exit 1 ;;
+            2) ;;
+            *) echo "::error::git ls-remote exited with $status, so it is not known whether $TAG exists."; exit 1 ;;
+          esac
           releases="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
           if grep -Fxq -- "$TAG" <<< "$releases"; then
             echo "::error::A release for $TAG already exists."
@@ -634,6 +650,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Again, right before the release: the builds take a while, and gh release create would
+          # attach the release to a tag made meanwhile, whatever commit it points at (--target
+          # applies only to a tag it creates).
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null || status=$?
+          case "$status" in
+            0) echo "::error::The tag $TAG was created while the apps were building. Nothing was published."; exit 1 ;;
+            2) ;;
+            *) echo "::error::git ls-remote exited with $status, so it is not known whether $TAG exists. Nothing was published."; exit 1 ;;
+          esac
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
