@@ -34,6 +34,19 @@ requires a browser or headset runtime and is not provided by this shell. Confirm
 Cesium, memory connection, auth, external-link behavior, and GPU rendering on
 physical macOS and Windows devices before release.
 
+Where that check stands for the 0.2.0 pre-release:
+
+- **Windows, checked** on a Windows 11 PC (Intel UHD Graphics, Direct3D 11
+  through ANGLE) with the CI-built MSI. The globe draws with its imagery, the
+  demo story's markers and journey arc show, the console stays clean, and a
+  click on a new-tab link (the Cesium credit) opens it in the default browser
+  while the app stays put. The check found and fixed two bugs first: the CSP
+  stopped CesiumJS from loading, and then stopped its workers.
+- **macOS, not checked.** The owner waived the Mac check for GitHub
+  pre-releases; the release notes say macOS is untested.
+- **Memory connection and sign-in** are not part of this desktop app yet: it
+  ships the demo story only.
+
 The identifier `computer.ci.atlas` is provisional. Before store submission,
 reserve the permanent bundle ID and complete privacy declarations, artwork,
 code signing and macOS notarization. This shell is not a submitted or
