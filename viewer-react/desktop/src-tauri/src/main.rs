@@ -48,7 +48,10 @@ fn open_externally<R: Runtime>(app: &AppHandle<R>, url: &Url) {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+        // The Rust handlers below open every off-app link. The plugin's own click script would
+        // instead send target="_blank" links to the page-facing `open_url` command, which this
+        // app doesn't grant, so those links would do nothing.
+        .plugin(tauri_plugin_opener::Builder::new().open_js_links_on_click(false).build())
         .setup(|app| {
             let config = app
                 .config()

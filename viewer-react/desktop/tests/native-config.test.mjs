@@ -44,6 +44,9 @@ test('Atlas desktop CSP supports Cesium WebAssembly, workers, and HTTPS services
   // loads. Without 'unsafe-eval' it throws an EvalError, window.Cesium never exists, and the
   // window stays on "Loading Companion Atlas…" (seen on Windows with the 0.2.0 CI build).
   assert.match(csp, /script-src[^;]*'unsafe-eval'/);
+  // Cesium's workers start from blob: URLs and importScripts() more blob: code, which
+  // script-src governs (worker-src covers only starting the worker).
+  assert.match(csp, /script-src[^;]*blob:/);
   assert.match(csp, /worker-src[^;]*blob:/);
 });
 
@@ -60,7 +63,9 @@ test('Atlas desktop opens new-tab and off-site links in the system browser', () 
   // Built in main.rs instead, where the new-window and navigation handlers are attached.
   assert.equal(main.create, false);
   assert.match(mainRs, /const MAIN_WINDOW: &str = "main";/);
-  assert.match(mainRs, /\.plugin\(tauri_plugin_opener::init\(\)\)/);
+  // The plugin's click script would take target="_blank" links away from on_new_window
+  // and send them to an IPC command the page isn't granted (and its CSP blocks).
+  assert.match(mainRs, /tauri_plugin_opener::Builder::new\(\)\.open_js_links_on_click\(false\)\.build\(\)/);
   assert.match(mainRs, /\.on_new_window\(/);
   assert.match(mainRs, /\.on_navigation\(/);
   assert.match(mainRs, /NewWindowResponse::Deny/);

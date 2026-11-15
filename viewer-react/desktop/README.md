@@ -96,8 +96,10 @@ time; `dangerousDisableAssetCspModification` keeps it from doing so for
 `script-src` allows `'unsafe-eval'`: the prebuilt CesiumJS bundle
 (`public/cesium/Cesium.js`) evaluates a string as code while it loads. Without it
 the bundle throws an `EvalError`, `window.Cesium` is never defined, and the
-window stays on "Loading Companion Atlas…". Scripts still come only from the
-app itself (`'self'`).
+window stays on "Loading Companion Atlas…". It also allows `blob:`: Cesium's
+workers start from `blob:` URLs and load more `blob:` code with `importScripts`,
+which `script-src` governs, and without them the globe's surface never draws.
+Scripts still come only from the app itself (`'self'`) or the blobs it makes.
 
 ## Releases
 
