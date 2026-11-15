@@ -22,8 +22,9 @@ pending a first tagged release).
   worker. It is demo only for now: no Companion Memory connection and no sign-in.
   `scripts/third-party-notices.mjs` lists what the apps carry from the lockfiles (npm, Cargo,
   Gradle), regenerates `THIRD_PARTY.md` and `NOTICE.md` (including the MPL-2.0 crates and
-  where their source is), and writes the notices into each app. The bundled sample journey no
-  longer points at the placeholder host `tiles.example.com`.
+  where their source is, and Microsoft's WebView2 loader, which the Windows app links in),
+  and writes the notices into each app. The bundled sample journey no longer points at the
+  placeholder host `tiles.example.com`.
 - **Device location and nearby memories (foreground only).** Two toggles in the top bar.
   "Show my location" tracks the device position while the app is in the foreground and
   draws it on the globe. "Nearby memories" raises a local notification, once per memory per

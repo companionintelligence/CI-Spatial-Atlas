@@ -38,3 +38,20 @@ test('the notices list the npm packages the viewer gets through its workspace pa
   }
   assert.deepEqual(ids.filter((id) => /^npm:@(companion-atlas|companionintelligence)\//.test(id)), [], 'our own packages are not listed');
 });
+
+// webview2-com-sys links Microsoft's WebView2 loader (WebView2LoaderStatic.lib) into the
+// Windows executable, and the loader's licence asks for Microsoft's notice in every binary
+// redistribution.
+test('the desktop notices carry the licence of the WebView2 loader in the Windows app', (t) => {
+  if (spawnSync('cargo', ['--version']).error) {
+    t.skip('cargo is not installed');
+    return;
+  }
+  const data = collect('desktop');
+  const crate = data.components.find((c) => c.name === 'webview2-com-sys');
+  assert.ok(crate, 'webview2-com-sys is in the desktop scope');
+  assert.deepEqual(crate.platforms, ['windows']);
+  const text = data.texts.find((x) => x.id === crate.linked?.[0]?.text);
+  assert.match(text?.body ?? '', /^Copyright \(C\) Microsoft Corporation\. All rights reserved\./);
+  assert.match(text.body, /Redistributions in binary form must reproduce the above\s+copyright notice/);
+});

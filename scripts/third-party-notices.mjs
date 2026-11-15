@@ -11,6 +11,8 @@
 //            viewer-react/desktop/src-tauri/Cargo.lock (`cargo metadata --locked`), for the
 //            Windows, macOS (Apple silicon and Intel) and Linux targets. Build-time crates
 //            (build scripts, proc macros) are left out: they are not in the executable.
+//            Code that a crate links in from elsewhere (LINKED_CODE: Microsoft's WebView2
+//            loader on Windows) comes with its own licence.
 //   android  The Capacitor shell's npm packages (viewer-react/mobile/package-lock.json) and
 //            the Android libraries Gradle resolves for the release build.
 //
@@ -89,6 +91,27 @@ const CLARIFICATIONS = {
   'npm:@pmndrs/pointer-events@6.6.30': { license: 'MIT', why: '"SEE LICENSE IN LICENSE"; LICENSE is the MIT licence' },
   'npm:@pmndrs/xr@6.6.30': { license: 'MIT', why: '"SEE LICENSE IN LICENSE"; LICENSE is the MIT licence' },
   'npm:@react-three/xr@6.6.30': { license: 'MIT', why: '"SEE LICENSE IN LICENSE"; LICENSE is the MIT licence' },
+};
+
+/**
+ * Code that a crate links into the executable without it being the crate's own, under a
+ * licence of its own, for the targets that match. webview2-com-sys (MIT, no licence file)
+ * links Microsoft's WebView2 loader statically on Windows (MSVC): WebView2LoaderStatic.lib
+ * from the Microsoft.Web.WebView2 NuGet package, whose licence asks binary redistributions to
+ * reproduce Microsoft's notice, conditions and disclaimer. scripts/licenses/<file> is that
+ * package's LICENSE.txt. Its text is the same in SDK 1.0.3650.58, 1.0.3800.47 (the SDK that
+ * webview2-com-sys 0.39.1 was generated from) and 1.0.3967.48.
+ */
+const LINKED_CODE = {
+  'webview2-com-sys': {
+    targets: /-windows-msvc$/,
+    name: 'Microsoft WebView2 loader',
+    part: 'WebView2LoaderStatic.lib',
+    source: "Microsoft's WebView2 SDK (the Microsoft.Web.WebView2 package)",
+    holder: 'Copyright (C) Microsoft Corporation. All rights reserved.',
+    license: 'WebView2 SDK licence (BSD-3-Clause style)',
+    file: 'Microsoft.Web.WebView2.txt',
+  },
 };
 
 /**
@@ -291,6 +314,10 @@ class Notices {
       if (!existing.platforms.includes(platform)) existing.platforms.push(platform);
     }
     for (const t of component.texts) if (!existing.texts.includes(t)) existing.texts.push(t);
+    for (const code of component.linked ?? []) {
+      existing.linked ??= [];
+      if (!existing.linked.some((l) => l.text === code.text)) existing.linked.push(code);
+    }
     existing.scopes.sort();
     existing.platforms?.sort();
   }
@@ -516,12 +543,13 @@ function collectCargo(notices) {
   const crates = new Map();
   for (const [target, platform] of DESKTOP_TARGETS) {
     for (const pkg of linkedCrates(cargoMetadata(target))) {
-      const entry = crates.get(pkg.id) ?? { pkg, platforms: new Set() };
+      const entry = crates.get(pkg.id) ?? { pkg, platforms: new Set(), targets: new Set() };
       entry.platforms.add(platform);
+      entry.targets.add(target);
       crates.set(pkg.id, entry);
     }
   }
-  for (const { pkg, platforms } of crates.values()) {
+  for (const { pkg, platforms, targets } of crates.values()) {
     const dir = path.dirname(pkg.manifest_path);
     let files = licenseFiles(dir) ?? [];
     if (pkg.license_file) {
@@ -547,6 +575,12 @@ function collectCargo(notices) {
     checkLicense(notices, component);
     const authors = (pkg.authors ?? []).map((a) => a.replace(/\s*<[^>]*>/, '').trim()).filter(Boolean);
     attachTexts(notices, component, files, authors.length ? `Copyright (c) ${authors.join(', ')}` : null);
+    const code = LINKED_CODE[pkg.name];
+    const linkedOn = [...new Set(DESKTOP_TARGETS.filter(([t]) => code?.targets.test(t) && targets.has(t)).map(([, p]) => p))];
+    if (linkedOn.length) {
+      const text = notices.addText(code.license, clean(readFileSync(path.join(LICENSE_DIR, code.file), 'utf8')));
+      component.linked = [{ name: code.name, part: code.part, source: code.source, holder: code.holder, license: code.license, platforms: linkedOn, text }];
+    }
     notices.add(component);
   }
   return { count: crates.size };
@@ -661,7 +695,9 @@ function renderText(notices) {
   const scopes = [...new Set(components.flatMap((c) => c.scopes))].sort((a, b) => Object.keys(SCOPES).indexOf(a) - Object.keys(SCOPES).indexOf(b));
   const texts = [...notices.texts.values()];
   const order = new Map();
-  for (const c of components) for (const t of c.texts) if (!order.has(t)) order.set(t, order.size + 1);
+  for (const c of components) {
+    for (const t of [...c.texts, ...(c.linked ?? []).map((code) => code.text)]) if (!order.has(t)) order.set(t, order.size + 1);
+  }
   const sortedTexts = texts.filter((t) => order.has(t.id)).sort((a, b) => order.get(a.id) - order.get(b.id));
 
   const out = [];
@@ -714,15 +750,19 @@ function renderText(notices) {
       const platforms = c.platforms && c.platforms.length < 3 ? ` [${c.platforms.join(', ')}]` : '';
       const note = c.standardText ? ' (standard text: the package ships none)' : '';
       out.push(`  ${c.name} ${c.version}${platforms} - ${displayLicense(c)}${refs ? ` - text ${refs}${note}` : ' - TEXT MISSING'}`);
+      for (const code of c.linked ?? []) out.push(`    + ${code.name} (${code.part}), linked in - ${code.license} - text [${order.get(code.text)}]`);
     }
     out.push('');
   }
 
   rule('Licence texts', '-');
   for (const t of sortedTexts) {
-    const users = components.filter((c) => c.texts.includes(t.id));
+    const users = [
+      ...components.filter((c) => c.texts.includes(t.id)).map((c) => `${c.name} ${c.version}`),
+      ...components.flatMap((c) => (c.linked ?? []).filter((code) => code.text === t.id).map((code) => `the ${code.name} in ${c.name} ${c.version}`)),
+    ];
     out.push(`[${order.get(t.id)}] ${t.title}`);
-    out.push(...wrap(`Applies to: ${users.map((c) => `${c.name} ${c.version}`).join(', ')}`, 78, '  '));
+    out.push(...wrap(`Applies to: ${users.join(', ')}`, 78, '  '));
     out.push('', t.body, '', '-'.repeat(78), '');
   }
   return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
@@ -793,7 +833,9 @@ function renderThirdPartyMd(notices, counts) {
     L.push('');
   };
   const link = (c) => `[\`${c.name}\`](${c.url})`;
-  const licenseCell = (c) => `${displayLicense(c)}${c.declared ? ` (declared: ${c.declared})` : ''}`;
+  const licenseCell = (c) =>
+    `${displayLicense(c)}${c.declared ? ` (declared: ${c.declared})` : ''}` +
+    (c.linked ?? []).map((code) => `; links the ${code.name} (${code.part}): ${code.license}`).join('');
   table('## Web viewer (npm)', web, [['Package', link], ['Version', (c) => c.version], ['Licence', licenseCell]]);
   table('## Desktop (Rust crates)', crates, [
     ['Crate', link],
@@ -886,6 +928,16 @@ function renderNoticeMd(notices) {
   if (fontawesome.length) L.push(`- **Font Awesome Free** icons (${versions(fontawesome)}), by Fonticons, Inc.: icons CC BY 4.0, code MIT (https://fontawesome.com/license/free).`);
   const unicode = components.filter((c) => /Unicode/.test(c.license ?? ''));
   if (unicode.length) L.push(`- **Unicode data and code** under the Unicode License v3 in the desktop app: ${unicode.map((c) => `\`${c.name}\``).join(', ')}.`);
+  const PLATFORM_NAME = { windows: 'Windows', macos: 'macOS', linux: 'Linux' };
+  for (const c of components) {
+    for (const code of c.linked ?? []) {
+      L.push(
+        `- **${code.name}** in the ${code.platforms.map((p) => PLATFORM_NAME[p]).join(', ')} desktop app: \`${c.name}\` ${c.version} links ` +
+          `\`${code.part}\` from ${code.source} into the executable. ${code.holder} Licensed under the ${code.license}, ` +
+          'whose text the notices file reproduces.',
+      );
+    }
+  }
   const gms = components.filter((c) => c.license === 'LicenseRef-Android-SDK');
   if (gms.length) L.push(`- **Google Play services** (${versions(gms)}) in the Android app, under the [Android Software Development Kit License](https://developer.android.com/studio/terms).`);
   const cordova = named(/^org\.apache\.cordova:/);

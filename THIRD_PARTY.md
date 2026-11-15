@@ -470,7 +470,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`webkit2gtk`](https://crates.io/crates/webkit2gtk/2.0.2) | 2.0.2 | MIT | linux |
 | [`webkit2gtk-sys`](https://crates.io/crates/webkit2gtk-sys/2.0.2) | 2.0.2 | MIT | linux |
 | [`webview2-com`](https://crates.io/crates/webview2-com/0.39.1) | 0.39.1 | MIT | windows |
-| [`webview2-com-sys`](https://crates.io/crates/webview2-com-sys/0.39.1) | 0.39.1 | MIT | windows |
+| [`webview2-com-sys`](https://crates.io/crates/webview2-com-sys/0.39.1) | 0.39.1 | MIT; links the Microsoft WebView2 loader (WebView2LoaderStatic.lib): WebView2 SDK licence (BSD-3-Clause style) | windows |
 | [`winapi-util`](https://crates.io/crates/winapi-util/0.1.11) | 0.1.11 | MIT OR Unlicense | windows |
 | [`window-vibrancy`](https://crates.io/crates/window-vibrancy/0.8.1) | 0.8.1 | Apache-2.0 OR MIT | macos, windows |
 | [`windows`](https://crates.io/crates/windows/0.62.2) | 0.62.2 | Apache-2.0 OR MIT | windows |
