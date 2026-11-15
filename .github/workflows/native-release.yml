@@ -145,11 +145,13 @@ jobs:
       # `npm run notices` (part of the desktop build) fails on any licence it cannot account for.
       ATLAS_NOTICES_STRICT: '1'
     steps:
-      # `token:` for the private CI-Common submodule; see the `viewer` job in build.yml.
+      # `token:` for the private CI-Common submodule; see the `viewer` job in build.yml. The
+      # checkout fetches the submodule itself, so the token is not kept in .git/config.
       - uses: actions/checkout@v4
         with:
           submodules: true
           token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -292,10 +294,12 @@ jobs:
       VERSION: ${{ needs.preflight.outputs.version }}
       ATLAS_NOTICES_STRICT: '1'
     steps:
+      # As in the desktop job: the token fetches the submodule and is not kept.
       - uses: actions/checkout@v4
         with:
           submodules: true
           token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:

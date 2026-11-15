@@ -65,10 +65,16 @@ jobs:
       # It needs Contents:Read on both this repo and CI-Common (a
       # fine-grained PAT scoped to just those two repos is enough); falls
       # back to GITHUB_TOKEN, unchanged, when unset.
+      #
+      # `persist-credentials: false`: the checkout fetches the submodule
+      # itself and no later step talks to a git remote, so the token is
+      # removed from .git/config when the checkout ends instead of staying
+      # readable by every install and build script that runs after it.
       - uses: actions/checkout@v4
         with:
           submodules: true
           token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -200,11 +206,13 @@ jobs:
       # for that COPY to have real content.
       #
       # See the "viewer" job above for why `token:` is required for a
-      # private-submodule checkout, and what CI_COMMON_ACCESS_TOKEN needs.
+      # private-submodule checkout, what CI_COMMON_ACCESS_TOKEN needs, and
+      # why the token is not persisted.
       - uses: actions/checkout@v4
         with:
           submodules: true
           token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Build image
         run: docker build -f viewer-react/Dockerfile -t companion-atlas-viewer:ci .
