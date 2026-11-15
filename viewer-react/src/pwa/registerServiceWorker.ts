@@ -18,6 +18,8 @@ export interface PwaWindow {
   top: unknown;
   /** Injected by the Capacitor runtime in the native shells (viewer-react/mobile). */
   Capacitor?: { isNativePlatform?: () => boolean };
+  /** `true` in the Tauri desktop shell (viewer-react/desktop), which defines it on every page. */
+  isTauri?: unknown;
 }
 
 export interface RegisterOptions {
@@ -44,9 +46,11 @@ const warn = (err: unknown): void => {
  *     worker's idea of the page;
  *   - without `navigator.serviceWorker`, which browsers expose only on https or
  *     localhost, so a plain-http LAN address quietly stays an ordinary web page;
- *   - inside the iOS and Android shells (viewer-react/mobile). They load this same bundle
- *     from the app itself, and a worker there would sit between the WebView and its
- *     bundled files for no gain;
+ *   - inside the iOS and Android shells (viewer-react/mobile) and the desktop shell
+ *     (viewer-react/desktop). They load this same bundle from the app itself, and a worker
+ *     there would sit between the WebView and its bundled files for no gain. The desktop
+ *     shell needs its own check: on Windows its origin, http://tauri.localhost, counts as
+ *     secure, so `navigator.serviceWorker` is there and the WebView would register one;
  *   - when the viewer is embedded in another page (src/embed): a frame on someone else's
  *     site is not somewhere to install an app from.
  *
@@ -63,6 +67,7 @@ export function registerServiceWorker(options: RegisterOptions = {}): boolean {
     const container = win.navigator.serviceWorker;
     if (!container) return false;
     if (win.Capacitor?.isNativePlatform?.()) return false;
+    if (win.isTauri === true) return false;
     if (win.self !== win.top) return false;
 
     // Also guarded on its own: when the page is still loading this runs later, from the

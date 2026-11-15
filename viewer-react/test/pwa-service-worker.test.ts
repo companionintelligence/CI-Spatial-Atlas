@@ -37,6 +37,8 @@ interface WindowOptions {
   /** `null` is a browser with no service workers (plain http, old WebViews). */
   serviceWorker?: { register: ReturnType<typeof vi.fn> } | null;
   capacitor?: { isNativePlatform?: () => boolean };
+  /** What the Tauri desktop shell defines as `window.isTauri` (true on every page it shows). */
+  isTauri?: unknown;
   /** True when this page is inside someone else's <iframe>. */
   embedded?: boolean;
 }
@@ -45,12 +47,14 @@ function fakeWindow({
   readyState = 'complete',
   serviceWorker = { register: vi.fn(() => Promise.resolve()) },
   capacitor,
+  isTauri,
   embedded = false,
 }: WindowOptions = {}) {
   const win = {
     navigator: serviceWorker ? { serviceWorker } : {},
     document: { readyState },
     Capacitor: capacitor,
+    isTauri,
     addEventListener: vi.fn((type: string, handler: () => void) => {
       if (type === 'load') handler();
     }),
@@ -105,6 +109,19 @@ describe('registerServiceWorker', () => {
 
   it('still registers in a browser that happens to define window.Capacitor', () => {
     const win = fakeWindow({ capacitor: { isNativePlatform: () => false } });
+    expect(registerServiceWorker({ production: true, win: asWindow(win) })).toBe(true);
+  });
+
+  // On Windows the desktop shell serves the bundle from http://tauri.localhost, a secure
+  // origin, so navigator.serviceWorker exists there and only this check keeps the worker out.
+  it('does nothing inside the Tauri desktop shell, which also loads this bundle from the app', () => {
+    const win = fakeWindow({ isTauri: true });
+    expect(registerServiceWorker({ production: true, win: asWindow(win) })).toBe(false);
+    expect(win.navigator.serviceWorker!.register).not.toHaveBeenCalled();
+  });
+
+  it('still registers when a page merely has an isTauri property that is not true', () => {
+    const win = fakeWindow({ isTauri: 'yes' });
     expect(registerServiceWorker({ production: true, win: asWindow(win) })).toBe(true);
   });
 

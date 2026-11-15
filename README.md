@@ -169,6 +169,35 @@ docker compose up viewer atlas-api minio postgres redis
 docker compose --profile gpu up worker
 ```
 
+## Desktop and Android apps
+
+Pre-release apps for Windows, macOS, Linux and Android are published on the
+[Releases](https://github.com/companionintelligence/CI-Spatial-Atlas/releases) page by the
+manual [`native-release.yml`](.github/workflows/native-release.yml) workflow. They bundle the
+viewer and need no server, account or map key: they open the sample journey, labelled Demo
+data, and the files you import.
+
+| Platform | Download | Before it opens |
+| --- | --- | --- |
+| Windows 10 and 11 (x64) | `.exe` installer or `.msi` | Not code-signed: in SmartScreen, click More info, then Run anyway. |
+| macOS 12 or later | universal `.dmg` (Apple silicon and Intel) | Ad-hoc signed, not notarized: right-click the app and choose Open, or allow it in Privacy & Security. |
+| Linux x86_64 | `.deb` or `.rpm` | Built on Ubuntu 22.04; installs WebKitGTK 4.1 as a dependency. |
+| Android 7.0 or later | `.apk` | Sideloaded. The file name says which key signed it; an APK signed with another key will not install over it. |
+
+**The desktop app is demo only for now:** the sample journey and local files, with no
+Companion Memory connection and no sign-in. On Android, Connect to Companion Memory reaches a
+Memory server you run, over HTTPS; it is experimental. These are pre-releases, not store
+builds. Each release includes `LICENSE.md`, `THIRD-PARTY-NOTICES.txt` and `SHA256SUMS.txt`,
+and each app carries the two licence files. To publish one, from `main`:
+
+```sh
+gh workflow run native-release.yml --ref main -f tag=v0.2.0
+```
+
+The tag must be new and match the app versions. Building and signing details:
+[`viewer-react/desktop/README.md`](viewer-react/desktop/README.md) and
+[`viewer-react/mobile/README.md`](viewer-react/mobile/README.md).
+
 ## Quickstart — iOS and Android apps
 
 [`viewer-react/mobile/`](viewer-react/mobile) wraps the viewer's production build in a

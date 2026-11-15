@@ -8,6 +8,25 @@ pending a first tagged release).
 ## Unreleased
 
 ### Added
+- **Desktop and Android pre-releases.** `.github/workflows/native-release.yml` (manual
+  dispatch, tag input) builds the desktop installers and a release APK from one commit and
+  publishes them as a GitHub pre-release with `LICENSE.md`, `THIRD-PARTY-NOTICES.txt` and
+  `SHA256SUMS.txt`: Windows NSIS and MSI (unsigned), one universal macOS DMG (ad-hoc signed,
+  not notarized), and Linux `.deb` and `.rpm` built on Ubuntu 22.04 (no AppImage, which would
+  bundle LGPL libraries). The APK is not debuggable and is signed with the upload keystore when
+  the `ATLAS_UPLOAD_*` secrets are set, otherwise with a throwaway key (`android_signing`).
+  No build carries a `VITE_*` key. Desktop Build gains the Linux job and the universal macOS
+  build. Versions: desktop 0.2.0, Android 0.2.0 (build 2). The desktop shell now resolves at
+  all (its tauri-build pin named a release that does not exist), sends new-tab and off-site
+  links to the system browser, keeps inline styles allowed under its CSP and skips the service
+  worker. It is demo only for now: no Companion Memory connection and no sign-in.
+  `scripts/third-party-notices.mjs` lists what the apps carry from the lockfiles (npm, Cargo,
+  Gradle; for the desktop app, the crates `cargo tree` resolves into each target's executable,
+  without the ones only build scripts and proc macros use), regenerates `THIRD_PARTY.md` and
+  `NOTICE.md` (including the MPL-2.0 crate `option-ext` and where its source is, and
+  Microsoft's WebView2 loader, which the Windows app links in), and writes the notices into
+  each app. The bundled sample journey no longer points at the placeholder host
+  `tiles.example.com`.
 - **Device location and nearby memories (foreground only).** Two toggles in the top bar.
   "Show my location" tracks the device position while the app is in the foreground and
   draws it on the globe. "Nearby memories" raises a local notification, once per memory per

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Companion Atlas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "computer.ci.atlas",
   "build": {
     "beforeDevCommand": "cd ../.. && npm run dev -w @companion-atlas/viewer-react",
@@ -19,23 +19,43 @@
         "minWidth": 960,
         "minHeight": 640,
         "resizable": true,
-        "center": true
+        "center": true,
+        "dragDropEnabled": false,
+        "create": false
       }
     ],
     "security": {
       "capabilities": [
         "default"
       ],
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' blob: data: https:; worker-src 'self' blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* blob:"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' blob: data: https:; worker-src 'self' blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* blob:",
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ]
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis",
+      "msi",
+      "app",
+      "dmg",
+      "deb",
+      "rpm"
+    ],
     "category": "Education",
     "shortDescription": "Explore your memories on a 3D globe",
+    "publisher": "Companion Intelligence",
+    "copyright": "Copyright LifeScope INC, DBA Companion Intelligence",
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "resources": {
+      "notices/LICENSE.md": "licenses/LICENSE.md",
+      "notices/THIRD-PARTY-NOTICES.txt": "licenses/THIRD-PARTY-NOTICES.txt"
+    },
     "macOS": {
-      "minimumSystemVersion": "12.0"
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
     },
     "icon": [
       "icons/32x32.png",
