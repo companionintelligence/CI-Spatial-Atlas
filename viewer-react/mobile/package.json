@@ -1,6 +1,6 @@
 {
   "name": "@companion-atlas/mobile-shell",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Native iOS + Android shell (Capacitor) around the viewer-react build. Standalone npm project, deliberately NOT a root workspace: it ships the Vite bundle via webDir and never imports it.",

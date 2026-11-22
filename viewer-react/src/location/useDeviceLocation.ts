@@ -158,7 +158,7 @@ export function useDeviceLocation({
     if (!nearby || !position || !inForeground()) return;
     const fresh = takeUnannounced(announced.current, nearbyMemories(position, memories));
     for (const memory of fresh) {
-      showNearbyAlert(notificationIdFor(memory.id), nearbyNotice(memory)).catch((error: unknown) => {
+      showNearbyAlert(notificationIdFor(memory.id), nearbyNotice()).catch((error: unknown) => {
         console.warn('[atlas] could not show a nearby alert', error);
       });
     }

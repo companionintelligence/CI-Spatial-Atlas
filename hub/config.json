@@ -5,7 +5,7 @@
   "name": "Companion Atlas",
   "short_desc": "Turn your located memories into a shareable 4D (3D + time) scrapbook map.",
   "description": "Companion Atlas is a CesiumJS + WebXR globe viewer and MCP processing server that turns geotagged photos and videos from Companion Memory into shareable 4D storytelling maps — created by hand or automatically by an agent.",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "author": "Companion Intelligence",
   "source": "https://github.com/companionintelligence/CI-Spatial-Atlas",
   "license": "PolyForm-Noncommercial-1.0.0",

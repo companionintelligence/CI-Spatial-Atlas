@@ -175,15 +175,11 @@ describe('notificationIdFor', () => {
 });
 
 describe('nearbyNotice', () => {
-  it('names the memory and the radius, and gives no exact distance', () => {
-    expect(nearbyNotice({ title: 'Harbour walk' })).toEqual({
+  it('names neither the memory nor a distance, so a locked screen shows nothing private', () => {
+    expect(nearbyNotice()).toEqual({
       title: 'Memory nearby',
-      body: 'Harbour walk is within 300 m of you.',
+      body: 'A memory is within 300 m of you.',
     });
-  });
-
-  it('falls back to a generic name for a blank title', () => {
-    expect(nearbyNotice({ title: '   ' }).body).toBe('A memory is within 300 m of you.');
   });
 });
 
