@@ -24,6 +24,9 @@ version in every `package.json`, in `viewer-react/desktop` and in
   `@companionintelligence/*` packages. The step now passes `GITHUB_TOKEN` through `--secret`
   (`.github/workflows/build.yml`).
 
+### Known issues
+- The production dependency audit (`npm audit --omit=dev`) reports six advisories with no fix inside their current version ranges: `zod`, `minio`, `query-string`, `decode-uri-component`, `stream-json` and `fast-xml-parser`. They are accepted for this release and tracked for the next one.
+
 ## 0.2.0 — 2026-11-15
 
 ### Added
