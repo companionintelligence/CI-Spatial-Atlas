@@ -2,10 +2,29 @@
 
 Notable changes to Companion Atlas. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); dates are UTC. This project
-does not yet follow semantic versioning (`package.json` remains `0.1.0`
-pending a first tagged release).
+follows [Semantic Versioning](https://semver.org/) from 0.2.0 on. Each release is a
+git tag `vX.Y.Z` (`v0.1.0` and `v0.1.1` predate this policy) and sets the same
+version in every `package.json`, in `viewer-react/desktop` and in
+`viewer-react/mobile/ios/version.xcconfig`.
 
-## Unreleased
+## 0.2.1 — 2026-11-22
+
+### Changed
+- **Version 0.2.1** in every package manifest (`package.json`, `viewer-react`, `server`,
+  `packages/story-schema`, `viewer-react/mobile`, `viewer-react/desktop`), the desktop app
+  (`tauri.conf.json`, `Cargo.toml`), the iOS and Android builds (`MARKETING_VERSION` 0.2.1,
+  build 3), the Hub manifest (`hub/config.json`) and the server's `/healthz` and MCP version strings.
+
+### Fixed
+- **Nearby alerts keep memory names off the screen.** A nearby alert can show on a locked
+  screen, so its text named the memory. The body now says only that a memory is within the
+  radius, and the title no longer reaches the notification (`viewer-react/src/location/logic.ts`).
+- **The viewer image build passes the npm token.** The image job ran `docker build` without the
+  token that `viewer-react/Dockerfile` reads as a BuildKit secret, so `npm ci` got a 401 for the
+  `@companionintelligence/*` packages. The step now passes `GITHUB_TOKEN` through `--secret`
+  (`.github/workflows/build.yml`).
+
+## 0.2.0 — 2026-11-15
 
 ### Added
 - **Desktop and Android pre-releases.** `.github/workflows/native-release.yml` (manual

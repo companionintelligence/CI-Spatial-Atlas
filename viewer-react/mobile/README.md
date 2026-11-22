@@ -117,7 +117,7 @@ The same two builds run in CI from
 to the desktop installers on the repository's Releases page, for sideloading. It is not a store
 build. The APK is not debuggable, is minified with R8, and carries `LICENSE.md` and
 `THIRD-PARTY-NOTICES.txt` in `assets/licenses`. Its version comes from `ios/version.xcconfig`
-(0.2.0, build 2 for the first one), and the release tag must match it.
+(0.2.1, build 3; 0.2.0 was build 2), and the release tag must match it.
 
 Android installs an update only over an app signed with the same key, so the workflow's
 `android_signing` input chooses the key, and the file name says which one was used:

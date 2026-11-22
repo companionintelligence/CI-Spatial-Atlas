@@ -1,7 +1,7 @@
 {
   "name": "@companion/atlas-server",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Companion Atlas — containerized 3D processing server + MCP API that turns geodata, images, and video into shareable 4D scrapbook stories.",
   "license": "PolyForm-Noncommercial-1.0.0",

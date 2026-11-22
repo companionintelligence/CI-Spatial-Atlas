@@ -123,4 +123,4 @@ come from
 the same installers and the Android APK from one commit and publishes them on
 the repository's Releases page with the licence files and `SHA256SUMS.txt`. The
 version is in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and
-`package.json` (0.2.0); keep the three equal, as `npm run test:native` checks.
+`package.json` (0.2.1); keep the three equal, as `npm run test:native` checks.

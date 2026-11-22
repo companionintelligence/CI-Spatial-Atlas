@@ -137,7 +137,7 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     return story;
   }
 
-  app.get('/healthz', async () => ({ ok: true, service: 'companion-atlas', version: '0.1.0' }));
+  app.get('/healthz', async () => ({ ok: true, service: 'companion-atlas', version: '0.2.1' }));
 
   // ── Browser sign-in: the Portal's code is redeemed here, not in the page ──
   // The same exchange the Worker runs (oidc-exchange.ts), for the local Fastify server.

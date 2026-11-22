@@ -191,7 +191,7 @@ builds. Each release includes `LICENSE.md`, `THIRD-PARTY-NOTICES.txt` and `SHA25
 and each app carries the two licence files. To publish one, from `main`:
 
 ```sh
-gh workflow run native-release.yml --ref main -f tag=v0.2.0
+gh workflow run native-release.yml --ref main -f tag=v0.2.1
 ```
 
 The tag must be new and match the app versions. Building and signing details:
