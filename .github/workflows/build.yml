@@ -251,3 +251,30 @@ jobs:
           curl -fsS http://127.0.0.1:18080/some/deep/link | grep -q '<title>'
 
           docker rm -f atlas-ci
+
+  api-image:
+    name: API image (build and boot, no push)
+    runs-on: ubuntu-latest
+    steps:
+      # The server Dockerfile COPYs the tokens workspace from the submodule, so the checkout
+      # needs it. See the "viewer" job above for why `token:` is required.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_COMMON_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build -f server/Dockerfile -t companion-atlas-api:ci .
+
+      # The process refuses to start without an issuer, so set one as the Hub would. Proves the
+      # container boots under Deno and answers on the port hub/docker-compose.json advertises (8787).
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          docker run -d --name atlas-api-ci -p 18787:8787 \
+            -e COMPANION_OIDC_ISSUER=https://hub.ci.computer/api/auth companion-atlas-api:ci
+          body="$(curl -fsS --retry 30 --retry-delay 1 --retry-connrefused --max-time 5 http://127.0.0.1:18787/healthz)"
+          echo "$body"
+          printf '%s' "$body" | grep -q '"ok":true'
+          docker rm -f atlas-api-ci

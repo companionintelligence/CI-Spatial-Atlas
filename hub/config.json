@@ -2,10 +2,11 @@
   "$comment": "CI-Hub app manifest (AppInfo). Validate against CI-Hub/packages/common/src/schemas/app-info.ts + agent-config.ts before publishing. Install fastest via the Hub custom-app (_user) path; publish to the ci-marketplace store for distribution.",
   "id": "companion-atlas",
   "urn": "companion-atlas:ci-marketplace",
+  "available": true,
   "name": "Companion Atlas",
   "short_desc": "Turn your located memories into a shareable 4D (3D + time) scrapbook map.",
   "description": "Companion Atlas is a CesiumJS + WebXR globe viewer and MCP processing server that turns geotagged photos and videos from Companion Memory into shareable 4D storytelling maps — created by hand or automatically by an agent.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "Companion Intelligence",
   "source": "https://github.com/companionintelligence/CI-Spatial-Atlas",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -22,7 +23,7 @@
     "mcp": { "transport": "sse", "url": "http://companion-atlas-api:8787/mcp", "container": "companion-atlas-api" },
     "intents": [
       {
-        "name": "atlas.create-story",
+        "name": "atlas.createStory",
         "domain": "atlas",
         "title": "Create a 4D story",
         "description": "Build a shareable 4D scrapbook map from the user's located memories in a time/area.",
@@ -40,7 +41,7 @@
         "binding": { "kind": "mcp", "tool": "atlas_auto_compose" }
       },
       {
-        "name": "atlas.publish-story",
+        "name": "atlas.publishStory",
         "domain": "atlas",
         "title": "Publish a story",
         "description": "Publish a story and return a shareable viewer link, saving it back to memory.",
