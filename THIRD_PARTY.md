@@ -7,7 +7,7 @@ processing server's dependencies are not listed.
 
 | Part | Ships in | Components | Listed from |
 | --- | --- | ---: | --- |
-| Web viewer | the website, the viewer image, and inside every app | 157 npm packages | `package-lock.json`: the runtime dependencies of `viewer-react` and of the workspace packages it uses |
+| Web viewer | the website, the viewer image, and inside every app | 163 npm packages | `package-lock.json`: the runtime dependencies of `viewer-react` and of the workspace packages it uses |
 | Desktop | the Windows, macOS and Linux installers | 236 Rust crates | `viewer-react/desktop/src-tauri/Cargo.lock`, for each target platform |
 | Android | the APK | 9 npm packages, 62 Android libraries | `viewer-react/mobile/package-lock.json`; Gradle's `releaseRuntimeClasspath` |
 
@@ -22,7 +22,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 
 | Licence | Web viewer | Desktop | Android |
 | --- | ---: | ---: | ---: |
-| MIT | 115 | 60 | 8 |
+| MIT | 121 | 60 | 8 |
 | Apache-2.0 OR MIT |  | 135 |  |
 | Apache-2.0 | 18 | 1 | 57 |
 | Unicode-3.0 |  | 15 |  |
@@ -71,6 +71,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`@mapbox/vector-tile`](https://www.npmjs.com/package/@mapbox/vector-tile/v/2.0.5) | 2.0.5 | BSD-3-Clause |
 | [`@mediapipe/tasks-vision`](https://www.npmjs.com/package/@mediapipe/tasks-vision/v/0.10.17) | 0.10.17 | Apache-2.0 |
 | [`@monogrid/gainmap-js`](https://www.npmjs.com/package/@monogrid/gainmap-js/v/3.4.0) | 3.4.0 | MIT |
+| [`@nodable/entities`](https://www.npmjs.com/package/@nodable/entities/v/3.1.0) | 3.1.0 | MIT |
 | [`@pmndrs/handle`](https://www.npmjs.com/package/@pmndrs/handle/v/6.6.30) | 6.6.30 | MIT (declared: SEE LICENSE IN LICENSE) |
 | [`@pmndrs/pointer-events`](https://www.npmjs.com/package/@pmndrs/pointer-events/v/6.6.30) | 6.6.30 | MIT (declared: SEE LICENSE IN LICENSE) |
 | [`@pmndrs/xr`](https://www.npmjs.com/package/@pmndrs/xr/v/6.6.30) | 6.6.30 | MIT (declared: SEE LICENSE IN LICENSE) |
@@ -102,6 +103,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`@webgpu/types`](https://www.npmjs.com/package/@webgpu/types/v/0.1.69) | 0.1.69 | BSD-3-Clause |
 | [`@zip.js/zip.js`](https://www.npmjs.com/package/@zip.js/zip.js/v/2.25.0) | 2.25.0 | BSD-3-Clause |
 | [`3d-tiles-renderer`](https://www.npmjs.com/package/3d-tiles-renderer/v/0.4.28) | 0.4.28 | Apache-2.0 |
+| [`anynum`](https://www.npmjs.com/package/anynum/v/1.0.1) | 1.0.1 | MIT |
 | [`autolinker`](https://www.npmjs.com/package/autolinker/v/4.1.5) | 4.1.5 | MIT |
 | [`base64-js`](https://www.npmjs.com/package/base64-js/v/1.5.1) | 1.5.1 | MIT |
 | [`bidi-js`](https://www.npmjs.com/package/bidi-js/v/1.0.3) | 1.0.3 | MIT |
@@ -123,9 +125,10 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`dprint-node`](https://www.npmjs.com/package/dprint-node/v/1.0.8) | 1.0.8 | MIT |
 | [`draco3d`](https://www.npmjs.com/package/draco3d/v/1.5.7) | 1.5.7 | Apache-2.0 |
 | [`earcut`](https://www.npmjs.com/package/earcut/v/3.0.2) | 3.0.2 | ISC |
-| [`fast-xml-parser`](https://www.npmjs.com/package/fast-xml-parser/v/4.5.7) | 4.5.7 | MIT |
-| [`fflate`](https://www.npmjs.com/package/fflate/v/0.6.10) | 0.6.10 | MIT |
-| [`fflate`](https://www.npmjs.com/package/fflate/v/0.8.2) | 0.8.2 | MIT |
+| [`fast-xml-builder`](https://www.npmjs.com/package/fast-xml-builder/v/1.3.2) | 1.3.2 | MIT |
+| [`fast-xml-parser`](https://www.npmjs.com/package/fast-xml-parser/v/5.12.1) | 5.12.1 | MIT |
+| [`fflate`](https://www.npmjs.com/package/fflate/v/0.6.11) | 0.6.11 | MIT |
+| [`fflate`](https://www.npmjs.com/package/fflate/v/0.8.3) | 0.8.3 | MIT |
 | [`gl-matrix`](https://www.npmjs.com/package/gl-matrix/v/3.4.4) | 3.4.4 | MIT |
 | [`glsl-noise`](https://www.npmjs.com/package/glsl-noise/v/0.0.0) | 0.0.0 | MIT |
 | [`grapheme-splitter`](https://www.npmjs.com/package/grapheme-splitter/v/1.0.4) | 1.0.4 | MIT |
@@ -133,6 +136,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`ieee754`](https://www.npmjs.com/package/ieee754/v/1.2.1) | 1.2.1 | BSD-3-Clause |
 | [`immediate`](https://www.npmjs.com/package/immediate/v/3.0.6) | 3.0.6 | MIT |
 | [`is-promise`](https://www.npmjs.com/package/is-promise/v/2.2.2) | 2.2.2 | MIT |
+| [`is-unsafe`](https://www.npmjs.com/package/is-unsafe/v/2.0.3) | 2.0.3 | MIT |
 | [`isexe`](https://www.npmjs.com/package/isexe/v/2.0.0) | 2.0.0 | ISC |
 | [`its-fine`](https://www.npmjs.com/package/its-fine/v/1.2.5) | 1.2.5 | MIT |
 | [`iwer`](https://www.npmjs.com/package/iwer/v/2.3.0) | 2.3.0 | MIT |
@@ -152,6 +156,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`nosleep.js`](https://www.npmjs.com/package/nosleep.js/v/0.12.0) | 0.12.0 | MIT |
 | [`object-assign`](https://www.npmjs.com/package/object-assign/v/4.1.1) | 4.1.1 | MIT |
 | [`pako`](https://www.npmjs.com/package/pako/v/3.0.3) | 3.0.3 | MIT AND Zlib |
+| [`path-expression-matcher`](https://www.npmjs.com/package/path-expression-matcher/v/1.6.2) | 1.6.2 | MIT |
 | [`path-key`](https://www.npmjs.com/package/path-key/v/3.1.1) | 3.1.1 | MIT |
 | [`pbf`](https://www.npmjs.com/package/pbf/v/4.0.2) | 4.0.2 | BSD-3-Clause |
 | [`pmtiles`](https://www.npmjs.com/package/pmtiles/v/4.5.0) | 4.5.0 | BSD-3-Clause |
@@ -178,7 +183,7 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`shebang-regex`](https://www.npmjs.com/package/shebang-regex/v/3.0.0) | 3.0.0 | MIT |
 | [`stats-gl`](https://www.npmjs.com/package/stats-gl/v/2.4.2) | 2.4.2 | MIT |
 | [`stats.js`](https://www.npmjs.com/package/stats.js/v/0.17.0) | 0.17.0 | MIT |
-| [`strnum`](https://www.npmjs.com/package/strnum/v/1.1.2) | 1.1.2 | MIT |
+| [`strnum`](https://www.npmjs.com/package/strnum/v/2.5.1) | 2.5.1 | MIT |
 | [`styled-components`](https://www.npmjs.com/package/styled-components/v/6.4.4) | 6.4.4 | MIT |
 | [`stylis`](https://www.npmjs.com/package/stylis/v/4.3.6) | 4.3.6 | MIT |
 | [`suspend-react`](https://www.npmjs.com/package/suspend-react/v/0.1.3) | 0.1.3 | MIT |
@@ -203,7 +208,8 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 | [`webgl-sdf-generator`](https://www.npmjs.com/package/webgl-sdf-generator/v/1.1.1) | 1.1.1 | MIT |
 | [`webxr-layers-polyfill`](https://www.npmjs.com/package/webxr-layers-polyfill/v/1.1.0) | 1.1.0 | Apache-2.0 |
 | [`which`](https://www.npmjs.com/package/which/v/2.0.2) | 2.0.2 | ISC |
-| [`zod`](https://www.npmjs.com/package/zod/v/3.25.76) | 3.25.76 | MIT |
+| [`xml-naming`](https://www.npmjs.com/package/xml-naming/v/0.3.0) | 0.3.0 | MIT |
+| [`zod`](https://www.npmjs.com/package/zod/v/4.6.7) | 4.6.7 | MIT |
 | [`zustand`](https://www.npmjs.com/package/zustand/v/3.7.2) | 3.7.2 | MIT |
 | [`zustand`](https://www.npmjs.com/package/zustand/v/4.5.7) | 4.5.7 | MIT |
 | [`zustand`](https://www.npmjs.com/package/zustand/v/5.0.14) | 5.0.14 | MIT |
@@ -534,4 +540,4 @@ Counts per part. The desktop and Android apps also carry the web viewer.
 
 ---
 
-_Generated by [`scripts/third-party-notices.mjs`](scripts/third-party-notices.mjs) (web: 157 npm packages, desktop: 236 crates, android: 9 npm packages, android: 62 Android libraries). Regenerate it rather than editing it: after `npm install` at the root and in viewer-react/mobile and `npx cap sync android`, run `node scripts/third-party-notices.mjs --scope web,desktop,android --gradle viewer-react/mobile/android --docs`._
+_Generated by [`scripts/third-party-notices.mjs`](scripts/third-party-notices.mjs) (web: 163 npm packages, desktop: 236 crates, android: 9 npm packages, android: 62 Android libraries). Regenerate it rather than editing it: after `npm install` at the root and in viewer-react/mobile and `npx cap sync android`, run `node scripts/third-party-notices.mjs --scope web,desktop,android --gradle viewer-react/mobile/android --docs`._

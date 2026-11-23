@@ -246,7 +246,7 @@ export const MediaItem = z.object({
   capturedAt: Iso8601.optional(),
   location: GeoPoint.optional(),
   heading: z.number().optional(),
-  exif: z.record(z.unknown()).optional(),
+  exif: z.record(z.string(), z.unknown()).optional(),
   derived3d: Derived3d.optional(),
   sourceMemoryId: z.string().optional(),
 });
@@ -313,7 +313,7 @@ export const Layer = z.object({
   format: LayerFormat.optional(),
   /** Required credit for the layer's source. See `LayerAttribution`. */
   attribution: LayerAttribution.optional(),
-  style: z.record(z.unknown()).optional(),
+  style: z.record(z.string(), z.unknown()).optional(),
   availability: z.object({ start: Iso8601, stop: Iso8601.optional(), end: Iso8601.optional() }).optional(),
   opacity: z.number().optional(),
   /** Drawn state. Absent means visible — a layer in the document is shown. */

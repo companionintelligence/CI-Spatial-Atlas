@@ -236,7 +236,7 @@ async function requireAuth(c: AppContext, next: Next) {
   await next();
 }
 
-app.get('/healthz', (c) => c.json({ ok: true, service: 'companion-atlas', version: '0.2.1' }));
+app.get('/healthz', (c) => c.json({ ok: true, service: 'companion-atlas', version: '0.2.2' }));
 
 // ── Browser sign-in: the Portal's code is redeemed here, not in the page ──
 // The viewer posts the code it was given with its PKCE verifier. The Portal is called

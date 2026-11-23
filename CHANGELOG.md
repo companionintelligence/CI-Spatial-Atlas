@@ -7,6 +7,50 @@ git tag `vX.Y.Z` (`v0.1.0` and `v0.1.1` predate this policy) and sets the same
 version in every `package.json`, in `viewer-react/desktop` and in
 `viewer-react/mobile/ios/version.xcconfig`.
 
+## 0.2.2 — 2026-11-22
+
+Supersedes 0.2.1, which was merged to `main` but never tagged, built or deployed. Its six
+accepted production advisories are fixed here, so nothing is accepted for this release.
+
+### Changed
+- **Version 0.2.2** in every package manifest, the desktop app (`tauri.conf.json`, `Cargo.toml`),
+  the iOS and Android builds (`MARKETING_VERSION` 0.2.2, build 4), the Hub manifest
+  (`hub/config.json`) and the server's `/healthz` and MCP version strings.
+- **The Node API's object store uses the AWS S3 SDK** (`@aws-sdk/client-s3`, path-style) in place
+  of the MinIO JavaScript client. The `S3_*` variables are unchanged. The store has a unit test
+  against an S3-shaped endpoint (`server/test/object-store-s3.test.ts`), and was checked against an
+  S3 emulator during release QA.
+- **zod 4.6.7** in `packages/story-schema` and `server` (was zod 3). `z.record` now takes its key schema.
+- **fast-xml-parser 5.12.1** in `packages/story-schema`, for KML parsing (was 4.x).
+- **The Hub manifests match CI-Hub's schemas.** The app declares `available`. The agent intents are
+  named `atlas.createStory` and `atlas.publishStory`, because CI-Hub's action names take no hyphen.
+  The compose file is `schemaVersion` 2 with environment as a list, and no longer sets
+  `VITE_ATLAS_API`: the viewer reads it only at build time.
+- **`publish-image.yml` publishes the API image as well as the viewer.** `companion-atlas-api` is the
+  image `hub/docker-compose.json` names, and no workflow published it before. Both images are built,
+  smoke-tested and pushed.
+
+### Fixed
+- **The production dependency audit is clean.** `npm audit --omit=dev` reports no advisories. The
+  six accepted in 0.2.1 (`zod`, `minio`, `query-string`, `decode-uri-component`, `stream-json` and
+  `fast-xml-parser`) are gone: the MinIO client, with its query-string 7 and stream-json 1 tree, is
+  no longer in the server.
+- **The production build refuses Companion Memory credentials.** `VITE_MEMORY_TOKEN` and
+  `VITE_MEMORY_API_KEY` are inlined into the public bundle, so the build now fails if either is set,
+  unless `ATLAS_BUNDLE_MEMORY_CREDENTIALS=1` says so on purpose (`viewer-react/vite.config.ts`).
+- **The root `npm test` runs the story-schema tests**, which it did not before.
+- **Stale status in the docs.** `docs/INTEGRATION.md` said nothing calls the SPA sign-in (the load
+  screen does) and that `vite build` cannot run from a checkout (the CI-Common submodule resolves
+  it). The store checklist now records the avatar as removed and the camera, microphone and
+  location strings as present.
+
+### Known issues
+- Companion Memory connected mode has not been run against a live CI-Portal and CI-Server.
+- The Hub install has not been run. The manifests validate, and the API image boots and answers
+  `/healthz`. Uploads are off in a Hub install, because the viewer image is built without `VITE_ATLAS_API`.
+- Store submission still needs the owner's privacy policy and support URLs, the permanent bundle
+  identifier, signing and notarization, and the iPad decision (`viewer-react/mobile/STORE_SUBMISSION.md`).
+
 ## 0.2.1 — 2026-11-22
 
 ### Changed

@@ -1,27 +1,25 @@
 {
-  "$comment": "CI-Hub dynamic compose (dynamicComposeSchema). The viewer is the user-facing app (port 8080), built from viewer-react/Dockerfile; companion-atlas-api hosts the REST + MCP surface the Hub wires to via agents.mcp. NOTE: the image builds from a clean checkout now that @companionintelligence/tokens is a pinned submodule (third_party/ci-common); publishing it to GHCR is a separate, reviewed step not yet taken.md \u00a78). NOTE: the viewer is a static nginx bundle, so its VITE_* values are inlined at BUILD time; per-install memory wiring reaches it as ?memory=/?token= URL params, not as service env. Validate against CI-Hub/packages/common/src/schemas/dynamic-compose.ts before publishing.",
+  "$comment": "CI-Hub dynamic compose (dynamicComposeSchema). The viewer is the user-facing app (port 8080): a static nginx bundle from viewer-react/Dockerfile, whose VITE_* values are inlined at build time, so per-install Memory wiring reaches it as ?memory=/?token= URL params instead of service env. companion-atlas-api (port 8787) hosts the REST and MCP surface the Hub wires to via agents.mcp; its image is built from server/Dockerfile. publish-image.yml publishes both images to GHCR. Validated against CI-Hub/packages/common/src/schemas/dynamic-compose.ts.",
+  "schemaVersion": 2,
   "services": [
     {
       "name": "companion-atlas",
       "image": "ghcr.io/companionintelligence/companion-atlas-viewer:latest",
       "internalPort": 8080,
       "isMain": true,
-      "environment": {
-        "VITE_ATLAS_API": "http://companion-atlas-api:8787/api"
-      },
       "dependsOn": ["companion-atlas-api"]
     },
     {
       "name": "companion-atlas-api",
       "image": "ghcr.io/companionintelligence/companion-atlas-api:latest",
       "internalPort": 8787,
-      "environment": {
-        "PORT": "8787",
-        "COMPANION_OIDC_ISSUER": "${COMPANION_OIDC_ISSUER}",
-        "COMPANION_OIDC_AUDIENCE": "companion-atlas",
-        "CI_MEMORY_URL": "${CI_MEMORY_URL}",
-        "CI_MEMORY_TOKEN": "${CI_MEMORY_TOKEN}"
-      }
+      "environment": [
+        { "key": "PORT", "value": "8787" },
+        { "key": "COMPANION_OIDC_ISSUER", "value": "${COMPANION_OIDC_ISSUER}" },
+        { "key": "COMPANION_OIDC_AUDIENCE", "value": "companion-atlas" },
+        { "key": "CI_MEMORY_URL", "value": "${CI_MEMORY_URL}" },
+        { "key": "CI_MEMORY_TOKEN", "value": "${CI_MEMORY_TOKEN}" }
+      ]
     }
   ]
 }

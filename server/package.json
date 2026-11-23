@@ -1,7 +1,7 @@
 {
   "name": "@companion/atlas-server",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Companion Atlas — containerized 3D processing server + MCP API that turns geodata, images, and video into shareable 4D scrapbook stories.",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -24,6 +24,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1175.0",
     "@companion-atlas/story": "file:../packages/story-schema",
     "@fastify/cors": "^11.3.0",
     "@modelcontextprotocol/sdk": "^1.32.0",
@@ -31,9 +32,8 @@
     "fastify": "^5.12.6",
     "hono": "^4.13.16",
     "jose": "^5.9.6",
-    "minio": "^8.0.7",
     "openid-client": "^6.1.0",
-    "zod": "^3.24.0"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260927.1",

@@ -25,6 +25,7 @@ The frameworks and libraries that define how this repository is built.
 
 | | Project | Licence | What it does |
 | :-: | --- | --- | --- |
+| <img src="https://github.com/aws.png?size=40" width="20" height="20" alt=""> | [`@aws-sdk/client-s3`](https://github.com/aws/aws-sdk-js-v3) | Apache-2.0 | AWS SDK for JavaScript S3 Client for Node.js, Browser and React Native |
 |  | [`@companion-atlas/story`](https://github.com/companionintelligence/CI-Spatial-Atlas) | first-party (internal) |  |
 |  | [`@companionintelligence/tokens`](https://github.com/companionintelligence/CI-Spatial-Atlas) | first-party (internal) |  |
 | <img src="https://github.com/fastify.png?size=40" width="20" height="20" alt=""> | [`@fastify/cors`](https://github.com/fastify/fastify-cors#readme) | MIT | Fastify CORS |
@@ -36,7 +37,6 @@ The frameworks and libraries that define how this repository is built.
 | <img src="https://github.com/photostructure.png?size=40" width="20" height="20" alt=""> | [`exiftool-vendored`](https://photostructure.github.io/exiftool-vendored.js/) | MIT | Efficient, cross-platform access to ExifTool |
 | <img src="https://github.com/NaturalIntelligence.png?size=40" width="20" height="20" alt=""> | [`fast-xml-parser`](https://github.com/NaturalIntelligence/fast-xml-parser#readme) | MIT | Validate XML, Parse XML, Build XML without C/C++ based libraries |
 | <img src="https://github.com/panva.png?size=40" width="20" height="20" alt=""> | [`jose`](https://github.com/panva/jose) | MIT | JWA, JWS, JWE, JWT, JWK, JWKS for Node.js, Browser, Cloudflare Workers, Deno, Bun, and other |
-| <img src="https://github.com/minio.png?size=40" width="20" height="20" alt=""> | [`minio`](https://github.com/minio/minio-js#readme) | Apache-2.0 | S3 Compatible Cloud Storage client |
 | <img src="https://github.com/panva.png?size=40" width="20" height="20" alt=""> | [`openid-client`](https://github.com/panva/openid-client) | MIT | OAuth 2 / OpenID Connect Client API for JavaScript Runtimes |
 
 ## 3. Build and tooling

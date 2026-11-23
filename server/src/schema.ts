@@ -45,7 +45,7 @@ export const MediaItem = z.object({
   capturedAt: Iso8601.optional(),
   location: GeoPoint.optional(),
   heading: z.number().optional(),
-  exif: z.record(z.unknown()).optional(),
+  exif: z.record(z.string(), z.unknown()).optional(),
   derived3d: Derived3d.optional(),
   sourceMemoryId: z.string().optional()
 });
@@ -89,7 +89,7 @@ export const Layer = z.object({
   uri: z.string().optional(),
   format: LayerFormat.optional(),
   attribution: LayerAttribution.optional(),
-  style: z.record(z.unknown()).optional(),
+  style: z.record(z.string(), z.unknown()).optional(),
   availability: TimeInterval.optional(),
   opacity: z.number().min(0).max(1).optional(),
   visible: z.boolean().optional().describe('drawn state; absent means visible'),

@@ -1,6 +1,6 @@
 /**
  * R2 object storage for the Cloudflare Worker deployment — the equivalent of
- * `minioObjectStore` (object-store-minio.ts), reached through a Worker binding
+ * `s3ObjectStore` (object-store-s3.ts), reached through a Worker binding
  * instead of an S3 client over the network.
  *
  * Deliberately not an implementation of the `ObjectStore` interface in

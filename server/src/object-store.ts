@@ -48,7 +48,7 @@
  *   ATLAS_MAX_UPLOAD_BYTES        default 33554432 (32 MiB)
  *   ATLAS_UPLOAD_CONTENT_TYPES    comma-separated allowlist; default below
  *
- * Everything here is pure; `minioObjectStore()` is in object-store-minio.ts.
+ * Everything here is pure; `s3ObjectStore()` is in object-store-s3.ts.
  * The config reader, the key derivation, the allowlist and the streaming cap
  * are all unit-testable with no MinIO and no network, which is what lets
  * `server/test/media-*.test.ts` cover the authorisation and refusal paths on
@@ -419,5 +419,5 @@ export interface ObjectStore {
   get(key: string): Promise<StoredObject | null>;
 }
 
-// The MinIO-backed implementation lives in object-store-minio.ts, so that the
-// Worker can import this file without bundling the MinIO client.
+// The S3-backed implementation lives in object-store-s3.ts, so that the
+// Worker can import this file without bundling the S3 client.

@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import cesium from 'vite-plugin-cesium';
 import { createRequire } from 'node:module';
@@ -38,6 +38,29 @@ const devAllowedHosts = (process.env.VITE_DEV_ALLOWED_HOSTS ?? '')
   .filter(Boolean);
 
 /**
+ * The build inlines every `VITE_*` value into the JavaScript it writes, and that file is public:
+ * anyone who loads the page can read it. A Memory token or API key set at build time is therefore
+ * handed to every visitor. Refuse that for a build unless the owner names it on purpose with
+ * ATLAS_BUNDLE_MEMORY_CREDENTIALS=1 (the demo and private-server builds in DISCOVERY.md). The
+ * supported way to give a visitor a Memory credential is their own sign-in, and the store builds
+ * leave both variables unset.
+ */
+const BUNDLED_MEMORY_CREDENTIALS = ['VITE_MEMORY_TOKEN', 'VITE_MEMORY_API_KEY'] as const;
+
+function refuseBundledMemoryCredentials(mode: string): void {
+  const fromFiles = loadEnv(mode, process.cwd(), 'VITE_');
+  const bundled = BUNDLED_MEMORY_CREDENTIALS.filter((name) => {
+    const value = process.env[name] ?? fromFiles[name] ?? '';
+    return value.trim() !== '';
+  });
+  if (bundled.length === 0 || process.env.ATLAS_BUNDLE_MEMORY_CREDENTIALS === '1') return;
+  throw new Error(
+    `Refusing to build: ${bundled.join(' and ')} would be written into the public bundle. ` +
+      'Remove them, or set ATLAS_BUNDLE_MEMORY_CREDENTIALS=1 if this build is meant to carry them.',
+  );
+}
+
+/**
  * Fail the production build when the installable-app files disagree: public/sw.js against the
  * files it precaches, and the worker, those files and the registration in the built output
  * (scripts/check-pwa.mjs, which says what is checked and what the kill switch is excused from).
@@ -65,26 +88,30 @@ function pwaCheck(): Plugin {
   };
 }
 
-export default defineConfig({
-  // pwaCheck() stays last so it checks the output after every other plugin has had its say.
-  plugins: [react(), cesium({ cesiumBuildRootPath, cesiumBuildPath }), pwaCheck()],
-  server: {
-    host: '127.0.0.1',
-    port: Number(process.env.PORT) || 4174,
-    allowedHosts: devAllowedHosts.length > 0 ? devAllowedHosts : undefined,
-    proxy: memoryProxyTarget
-      ? {
-          '/memory': {
-            target: memoryProxyTarget,
-            changeOrigin: true,
-            // Keep the browser's address visible through a nested dev proxy.
-            // CI-Server binds sessions to IP + user-agent; without forwarding
-            // this hop, a login on the Companion UI and a read from Atlas look
-            // like two different clients and the viewer reports Unauthorized.
-            xfwd: true,
-            rewrite: (p) => p.replace(/^\/memory/, ''),
-          },
-        }
-      : undefined,
-  },
+export default defineConfig(({ command, mode }) => {
+  if (command === 'build') refuseBundledMemoryCredentials(mode);
+
+  return {
+    // pwaCheck() stays last so it checks the output after every other plugin has had its say.
+    plugins: [react(), cesium({ cesiumBuildRootPath, cesiumBuildPath }), pwaCheck()],
+    server: {
+      host: '127.0.0.1',
+      port: Number(process.env.PORT) || 4174,
+      allowedHosts: devAllowedHosts.length > 0 ? devAllowedHosts : undefined,
+      proxy: memoryProxyTarget
+        ? {
+            '/memory': {
+              target: memoryProxyTarget,
+              changeOrigin: true,
+              // Keep the browser's address visible through a nested dev proxy.
+              // CI-Server binds sessions to IP + user-agent; without forwarding
+              // this hop, a login on the Companion UI and a read from Atlas look
+              // like two different clients and the viewer reports Unauthorized.
+              xfwd: true,
+              rewrite: (p) => p.replace(/^\/memory/, ''),
+            },
+          }
+        : undefined,
+    },
+  };
 });
