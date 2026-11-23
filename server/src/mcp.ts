@@ -90,7 +90,7 @@ export const MCP_MAX_TOOL_INPUT_ELEMENTS = 10_000;
 export function createAtlasMcpServer(deps: AtlasDeps): McpServer {
   const { store, connectors, viewerBaseUrl, apiBaseUrl, auth } = deps;
   const server = new McpServer(
-    { name: 'companion-atlas', version: '0.2.1' },
+    { name: 'companion-atlas', version: '0.2.2' },
     { maxToolInputElements: MCP_MAX_TOOL_INPUT_ELEMENTS },
   );
 
