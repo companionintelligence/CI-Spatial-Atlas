@@ -53,7 +53,7 @@ The first match wins:
 3. Neither, and `VITE_COMPANION_HUB_URL` is set. The viewer asks the Hub and uses the Memory server it names.
 4. Otherwise the bundled sample story opens, labelled as demo data.
 
-A Memory server found through the Hub gets only the access token this tab holds for that exact server. It never gets the build's `VITE_MEMORY_TOKEN` or `VITE_MEMORY_API_KEY`. A Memory server named in the build keeps those build credentials, as before.
+A Memory server found through the Hub gets only the access token this tab holds for that exact server. It never gets the build's `VITE_MEMORY_TOKEN` or `VITE_MEMORY_API_KEY`. A Memory server named in the build keeps those build credentials, as before. A production build refuses `VITE_MEMORY_TOKEN` and `VITE_MEMORY_API_KEY` unless `ATLAS_BUNDLE_MEMORY_CREDENTIALS=1` is set, because the bundle is public (`viewer-react/vite.config.ts`).
 
 `useStory()` returns the discovery result as `companion`: the Hub, whether it named a Memory server, and the LLM it named. **The LLM is recorded only. Nothing calls it.** "Curate" in the scrapbook is a local template (`curateJourney` in `packages/story-schema`), not an LLM.
 
