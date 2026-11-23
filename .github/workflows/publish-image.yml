@@ -189,7 +189,13 @@ jobs:
       - name: "Gate: API answers /healthz"
         run: |
           set -euo pipefail
-          body="$(curl -fsS --retry 30 --retry-delay 1 --retry-connrefused --max-time 5 http://127.0.0.1:18787/healthz)"
+          # The port accepts connections before the process listens, so wait for an answer. A reset
+          # connection is not a refusal, and --retry-connrefused alone does not retry it.
+          body=""
+          for i in $(seq 1 60); do
+            if body="$(curl -fsS --max-time 5 http://127.0.0.1:18787/healthz)"; then break; fi
+            sleep 1
+          done
           echo "$body"
           printf '%s' "$body" | grep -q '"ok":true'
 
