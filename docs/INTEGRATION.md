@@ -54,7 +54,7 @@ The Memory API verifies Portal JWTs, but the Portal issues `companion-atlas` opa
 
 ---
 
-## 2. CI-Portal OIDC ✅ (backend) / 🟡 (SPA — written, nothing calls it)
+## 2. CI-Portal OIDC ✅ (backend) / 🟡 (SPA — wired into the load screen, not yet proven live)
 
 CI-Portal is **better-auth `oidcProvider`**. Issuer = `<portal-origin>/api/auth`;
 endpoints hang off it (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`,
@@ -115,7 +115,7 @@ CI-Server exposes **GraphQL** at `/graphql` (`:3030` direct, `/api/graphql` via 
   header for a scoped CI-Server key. Needs `PORTAL_OIDC_ENABLED=true` +
   `companion-atlas` in CI-Server `PORTAL_OIDC_AUDIENCE` when using Portal tokens.
 
-## 4. CI-Hub / Marketplace 🟡 *(manifests written; never installed into a Hub)*
+## 4. CI-Hub / Marketplace 🟡 *(manifests validated against CI-Hub's schemas; never installed into a Hub)*
 
 Register Atlas as a Hub app: [`hub/config.json`](../hub/config.json) (`AppInfo`) +
 [`hub/docker-compose.json`](../hub/docker-compose.json). Key blocks:
@@ -144,23 +144,19 @@ tokens itself (§6). No runtime CSS injection.
    `PORTAL_OIDC_AUDIENCE` (default allowlist omits it), or mint tokens with an
    allowed `aud` / use a scoped API key.
 
-## 6. Theming (CI-Common) 🟡 — adopted in CSS, unresolvable in a single-repo build
+## 6. Theming (CI-Common) ✅ — adopted in CSS, from a pinned submodule
 
 CI canonical tokens are `@companionintelligence/tokens` **v0.3** — phthalo
 `--primary` **#0a6358** (light) / **#c5e8dc** (dark), **Manrope** typography.
 
-They are **not vendored.** [`viewer-react/src/theme/theme.css`](../viewer-react/src/theme/theme.css)
-line 12 `@import`s the bare specifier `@companionintelligence/tokens/tokens.css`,
-which `package-lock.json` resolves to a `link:` on a sibling `../ci-common`
-checkout — the only such entry in the lockfile. Earlier editions of this section
-said the files had been copied into `viewer-react/src/theme/` and carried a ✅;
-they never were (that directory holds only `README.md`, `atlas.css`,
-`authoring.css`, `presenter.css`, `theme.css`), and the ✅ concealed what the
-missing copy costs: `vite build` and the viewer's Docker image cannot complete in
-a checkout with no sibling CI-Common. `npm install` / `npm ci`, `npm test` and
-`tsc --noEmit` are *not* affected — none of them reads that `@import`. See
-[`docs/architecture.md` §8](architecture.md) for the two ways to close it
-(publish to GitHub Packages, or vendor for real) and why they are not equivalent.
+They come from the pinned CI-Common submodule at `third_party/ci-common` (see
+[`docs/architecture.md` §8](architecture.md)). The root workspaces include
+`third_party/ci-common/packages/tokens`, and `package-lock.json` links
+`@companionintelligence/tokens` to it. [`viewer-react/src/theme/theme.css`](../viewer-react/src/theme/theme.css)
+line 12 `@import`s the bare specifier `@companionintelligence/tokens/tokens.css`. A
+checkout needs `git submodule update --init --recursive` first: without the submodule
+the import does not resolve, and `vite build` and the viewer's Docker image fail. The CI
+jobs check the submodule out with `submodules: true`.
 
 Consumption is **CSS only**. There is no programmatic tokens import:
 `viewer-react/src/theme/index.ts` exported `primaryHex()`/`fontStack()` for the
@@ -194,8 +190,6 @@ verifier ourselves per §2.
   return handling are wired (§2). Building the viewer is *not* part of this; it has been built
   and run since the Resium spike landed. The embedded CI-Server Memory sign-in (§2,
   `memory/auth.ts`) is wired too and does not depend on this.
-- Make `vite build` work in a single-repo checkout (§6) — the last thing between
-  this repo and a green Docker/CI image.
 - ~~Drive the Cesium `Viewer` clock from the CZML doc packet.~~ Done — `AtlasApp`
   applies the story clock and `ui/TimeMachine.tsx` scrubs it; this line survived
   here for as long as it did because "wire the SPA login + Cesium clock" was one

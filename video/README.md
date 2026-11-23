@@ -17,7 +17,7 @@ are not honest enough to ship:
    ("Pacific Crossing, Spring 2026"). Without `?story=` the viewer prints "Demo data - not connected". The
    storyboard says "bundled sample story" in captions; a real run needs a real Memory connection or a
    fixture story whose places resolve.
-3. **Hard-coded identity.** The rail avatar is `LB` with the title "Liam Broza" (`viewer-react/src/ui/Shell.tsx`).
+3. **Hard-coded identity.** Fixed in 0.2.2: the rail avatar that showed `LB` to every visitor is gone (`viewer-react/src/ui/Shell.tsx`).
 4. **Live imagery.** Basemap tiles are fetched at capture time, so byte-stable shots are not expected.
 5. **The flat-map shot barely differs** from the globe shot at this zoom; reframe it before capturing.
 6. **SwiftShader fails.** The kit's default rasteriser times out on `page.screenshot` (30 s) for the Cesium
